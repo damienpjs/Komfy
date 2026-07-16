@@ -6,6 +6,7 @@
 
 import type {
   HistoryResponse,
+  NodeInfoResponse,
   PromptErrorResponse,
   PromptGraph,
   PromptResponse,
@@ -61,6 +62,13 @@ export interface ComfyClient {
   baseUrl: string;
   getQueue(): Promise<QueueResponse>;
   getSystemStats(): Promise<SystemStats>;
+  /**
+   * Schema of a single node type — `{}` when the type is unknown to the
+   * server (missing custom node). The full /object_info (all ~3400 types)
+   * weighs several MB: never fetch it on mobile, per-node responses are
+   * 0.5–4 KB (cf. api-notes).
+   */
+  getNodeInfo(classType: string): Promise<NodeInfoResponse>;
   getHistory(maxItems?: number): Promise<HistoryResponse>;
   /** History entry of a specific job ({} until it is finished). */
   getHistoryItem(promptId: string): Promise<HistoryResponse>;
@@ -142,6 +150,13 @@ export function createClient(baseUrl: string): ComfyClient {
     getQueue: () => request<QueueResponse>(base, '/queue'),
 
     getSystemStats: () => request<SystemStats>(base, '/system_stats'),
+
+    // encodeURIComponent: some class_types contain '|' (ShowText|pysssss).
+    getNodeInfo: (classType) =>
+      request<NodeInfoResponse>(
+        base,
+        `/object_info/${encodeURIComponent(classType)}`,
+      ),
 
     getHistory: (maxItems) =>
       request<HistoryResponse>(

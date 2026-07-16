@@ -141,6 +141,12 @@ export default {
       denoiseHint: 'Haut = zone entièrement remplacée · bas = simple retouche',
     },
   },
+  availability: {
+    title: 'Indisponible sur ce serveur',
+    missingNodes: 'Nœuds manquants (custom nodes à installer) :\n{{list}}',
+    missingModels: 'Modèles ou fichiers manquants :\n{{list}}',
+    openAnyway: 'Ouvrir quand même',
+  },
   validation: {
     required: 'Champ requis',
     imageRequired: 'Image requise',

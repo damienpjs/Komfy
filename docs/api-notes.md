@@ -195,8 +195,37 @@ Response (empty at startup: `{}`). After a job, `prompt_id` → `{status, output
 `?max_items=N` parameter to limit. This is the source for finding a prompt's files (remix, Sprint 4b).
 
 ## Additional useful endpoints (recorded)
-- `GET /object_info` → schema of **all** node types (**3447** here, custom nodes included). `GET /object_info/{NodeName}` for a single one. Model lists (checkpoints, loras…) are injected inline into the schemas.
+- `GET /object_info` → schema of **all** node types (**3447** here, custom nodes included). Several MB — never fetch it on mobile; use the per-node form below. Model lists (checkpoints, loras…) are injected inline into the schemas.
 - `GET /models` → folder types (`checkpoints`, `loras`, `vae`, `controlnet`, `upscale_models`, …). `GET /models/{folder}` → files of the folder.
+
+### GET /object_info/{NodeName} (availability check — recorded 2026-07-16)
+```bash
+curl "http://100.x.y.z:8188/object_info/UNETLoader"
+curl "http://100.x.y.z:8188/object_info/ShowText%7Cpysssss"   # '|' in the name URL-encodes fine
+curl "http://100.x.y.z:8188/object_info/DoesNotExistNode"     # → HTTP 200, {}
+```
+Response: single-key map `{"<NodeName>": {schema}}` — **`{}` with HTTP 200, never 404, when the
+node type is unknown** (missing custom node). Per-node responses are 0.5–4 KB. Abridged real
+response (UNETLoader):
+```json
+{"UNETLoader": {
+  "input": {"required": {
+    "unet_name": [["flux1-kontext-dev.safetensors", "krea2_turbo_bf16.safetensors", "..."]],
+    "weight_dtype": [["default", "fp8_e4m3fn", "fp8_e4m3fn_fast", "fp8_e5m2"], {"advanced": true}]}},
+  "input_order": {"required": ["unet_name", "weight_dtype"]},
+  "output": ["MODEL"], "output_is_list": [false], "output_name": ["MODEL"],
+  "name": "UNETLoader", "display_name": "Load Diffusion Model", "description": "",
+  "python_module": "nodes", "category": "model/loaders", "output_node": false}}
+```
+- Input spec = `[type-or-enum, options?]`: `["INT", {"default": 5, "min": -1, …}]`,
+  `["STRING", {"multiline": false, …}]`, or an **enum** whose first element is the array of
+  allowed values. Installed model files surface as these enums (`unet_name` above,
+  `UltralyticsDetectorProvider.model_name`: `["bbox/face_yolov8m.pt", …, "segm/person_yolov8m-seg.pt"]`).
+- ⚠️ An enum can be **empty yet valid at runtime**: `OllamaConnectivityV2.model` returns `[[]]`
+  (the list is only populated by the front-end's refresh button — its tooltip says so) while a
+  literal model name works at execution. **Never flag a value against an empty enum.**
+- Used by `src/workflows/requirements.ts` + `useAvailability` to flag workflows whose custom
+  nodes or model files are missing on the connected server.
   - `GET /models/checkpoints`: `["someModel_xl.safetensors", "anotherModel_v2.safetensors", ...]` (installed checkpoint filenames).
 - `GET /embeddings` → **overridden by the LoRA-Manager custom node**: returns HTML, not the core JSON. Do not rely on it.
 - `GET /features` → `{"supports_preview_metadata": true, "max_upload_size": 104857600, "node_replacements": true, "assets": false, "extension": {"manager": {...}}}`.

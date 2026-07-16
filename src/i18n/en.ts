@@ -138,6 +138,12 @@ export default {
       denoiseHint: 'High = area fully replaced · low = light retouch',
     },
   },
+  availability: {
+    title: 'Unavailable on this server',
+    missingNodes: 'Missing nodes (custom nodes to install):\n{{list}}',
+    missingModels: 'Missing models or files:\n{{list}}',
+    openAnyway: 'Open anyway',
+  },
   validation: {
     required: 'Required field',
     imageRequired: 'Image required',

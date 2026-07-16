@@ -154,7 +154,7 @@ ComfyUI embeds the full workflow and parameters in the PNG metadata (`prompt` an
 
 ## Out of MVP scope (v2 backlog)
 
-~~Image upload into the gallery~~ (done — upload into `input`, now a browsable gallery root alongside `output`) · ~~emptying the trash from the app~~ (done — Settings → Empty trash, permanent, with a file-count/size confirmation) · restoring files from the trash (batch and/or individual) · workflow editing in the app · remote push notifications · multi-server · enriched history with generation parameters · relaunching a job from the history · remixing images whose workflow is not embedded in the app (raw graph re-queue).
+~~Image upload into the gallery~~ (done — upload into `input`, now a browsable gallery root alongside `output`) · ~~emptying the trash from the app~~ (done — Settings → Empty trash, permanent, with a file-count/size confirmation) · restoring files from the trash (batch and/or individual) · workflow editing in the app · remote push notifications · multi-server · enriched history with generation parameters · relaunching a job from the history · remixing images whose workflow is not embedded in the app (raw graph re-queue) · ~~server capability check~~ (done 2026-07-16 — Workflows cards flag missing custom nodes/model files against `/object_info/{NodeName}`, cf. api-notes; first step of the "generic app" track).
 
 ## Frozen decisions
 

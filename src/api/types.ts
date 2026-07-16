@@ -86,6 +86,35 @@ export interface HistoryEntry {
 /** GET /history → prompt_id → entry mapping. */
 export type HistoryResponse = Record<string, HistoryEntry>;
 
+/**
+ * Input spec of a node schema: `[type-or-enum, options?]`.
+ * `["INT", {default: 5, …}]`, `["STRING", {…}]`, or an enum whose first
+ * element is the array of allowed values — installed model files surface as
+ * these enums (`unet_name`, `model_name`…). ⚠️ An enum can be empty yet
+ * valid at runtime (OllamaConnectivityV2.model: list populated lazily by
+ * the front-end) — never flag a value against an empty enum.
+ */
+export type NodeInputSpec = [string | unknown[], Record<string, unknown>?];
+
+/** Node type schema (GET /object_info/{NodeName}). */
+export interface NodeInfo {
+  input?: {
+    required?: Record<string, NodeInputSpec>;
+    optional?: Record<string, NodeInputSpec>;
+  };
+  name: string;
+  display_name: string;
+  category: string;
+  python_module: string;
+  output_node: boolean;
+}
+
+/**
+ * GET /object_info/{NodeName} → single-key map; `{}` (HTTP 200, never 404)
+ * when the node type is unknown to the server (missing custom node).
+ */
+export type NodeInfoResponse = Record<string, NodeInfo>;
+
 export interface SystemStats {
   system: {
     os: string;

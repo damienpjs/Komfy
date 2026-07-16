@@ -131,7 +131,10 @@ changes.
 
 Bonus: an embedded workflow automatically becomes **remixable** — the
 gallery's "Create a variant" button matches images generated with it
-(even with different node IDs) and pre-fills the form.
+(even with different node IDs) and pre-fills the form. The Workflows
+screen also checks every workflow against the connected server
+(`/object_info/{NodeName}`): cards whose custom nodes or model files are
+missing get a warning badge listing exactly what to install.
 
 ## Security
 
@@ -166,10 +169,10 @@ komfy/
 ├── src/app/              # screens (Expo Router): (tabs)/queue·workflows·gallery·settings, workflow/[id], ws-log
 ├── src/api/              # client.ts, ws.ts (WebSocket), types.ts, queryClient.ts
 ├── src/i18n/             # i18next setup + en/fr dictionaries (default: English)
-├── src/workflows/        # manifests + frozen API graphs, patch.ts, match.ts (remix)
+├── src/workflows/        # manifests + frozen API graphs, patch.ts, match.ts (remix), requirements.ts (availability)
 ├── src/components/       # UI (queue cards, LoRA/folder pickers, viewer…)
 ├── src/store/            # Zustand: settings, connection, execution, toast, outputPrefs
-├── src/hooks/            # useQueue, useGallery, useLoras, useRemix, useHealthCheck
+├── src/hooks/            # useQueue, useGallery, useLoras, useRemix, useHealthCheck, useAvailability
 ├── src/utils/            # pathTree (explorer), pngMetadata (tEXt chunks)
 ├── src/theme/tokens.ts   # style guide — no hardcoded styles elsewhere
 ├── server/komfy-listing/ # ComfyUI extension (recursive output+input listing, trash)
