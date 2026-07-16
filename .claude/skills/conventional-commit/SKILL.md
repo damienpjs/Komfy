@@ -1,6 +1,6 @@
 ---
 name: conventional-commit
-description: Use right after completing ANY task that added, modified, or deleted code (or config/docs) in the working tree. Inspects the current changes and proposes ONE English Conventional Commits message — the subject line only, no body. Never commits, pushes, tags, or stages anything; the maintainer commits themselves.
+description: ALWAYS invoke this at the end of ANY task that added, modified, or deleted a file in the working tree — code, config, docs, or assets — before you write your final summary. Non-negotiable follow-up whenever `git status` would show changes. Inspects the current changes and proposes ONE English Conventional Commits message — the subject line only, no body. Triggers on "commit", "commit name", "message de commit", "nom de commit", or simply finishing a code change. Never commits, pushes, tags, or stages anything; the maintainer commits themselves. On develop/main, the branch-name skill wraps this and adds a branch name.
 ---
 
 You are Komfy's commit-namer. After a code change, you propose a single
