@@ -142,6 +142,16 @@ export const krea2FaceSwapMulti: WorkflowManifest = {
       hint: 'wf.faceswap.cropFactorHint',
     },
     {
+      kind: 'model',
+      key: 'model',
+      label: 'wf.common.model',
+      hint: 'wf.common.modelHint',
+      target: { nodeId: '1', input: 'unet_name' },
+      default: 'krea2_turbo_bf16.safetensors',
+      filter: 'krea2',
+      remember: true,
+    },
+    {
       kind: 'persons',
       key: 'persons',
       label: 'wf.faceswap.persons',

@@ -53,6 +53,30 @@ export interface SeedField extends FieldBase {
   target: PatchTarget;
 }
 
+/**
+ * Model field: file-typed input (unet, clip, vae…) picked from the server's
+ * installed files. Options come from the target's /object_info enum (already
+ * fetched by useAvailability — cf. requirements.modelFieldOptions), so the
+ * list is exactly what the server will accept; the frozen graph value stays
+ * as `default`/fallback when the list is unavailable.
+ */
+export interface ModelField extends FieldBase {
+  kind: 'model';
+  target: PatchTarget;
+  /** Frozen graph value — used until the user picks something else. */
+  default: string;
+  /**
+   * Case-insensitive regex narrowing the offered files to the compatible
+   * family (e.g. 'krea2'); when nothing matches, the full list is offered.
+   */
+  filter?: string;
+  /**
+   * The last choice is remembered per workflow (fieldPrefs store) and
+   * re-applied as the initial value on subsequent launches.
+   */
+  remember?: boolean;
+}
+
 export interface SelectOption {
   label: string;
   /** One choice can patch several inputs (e.g. width + height). */
@@ -195,6 +219,7 @@ export type WorkflowField =
   | NumberField
   | SeedField
   | SelectField
+  | ModelField
   | DimensionsField
   | ImageField
   | LorasField

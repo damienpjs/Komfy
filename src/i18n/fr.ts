@@ -54,6 +54,9 @@ export default {
       dimensions: 'Dimensions',
       sourceImage: 'Image source',
       threshold: 'Seuil de détection',
+      model: 'Modèle',
+      modelHint:
+        'Modèles de diffusion installés sur le serveur — famille compatible uniquement',
       lorasHint:
         'Chaînés sur le modèle (LoraLoaderModelOnly), force ~0,9 recommandée',
       turboStepsHint:
@@ -140,6 +143,11 @@ export default {
       featherHint: '0 = bords nets · plus haut = transition plus douce',
       denoiseHint: 'Haut = zone entièrement remplacée · bas = simple retouche',
     },
+  },
+  model: {
+    search: 'Rechercher un modèle…',
+    missing: 'Introuvable sur le serveur — choisir un autre fichier',
+    noResult: 'Aucun modèle correspondant',
   },
   availability: {
     title: 'Indisponible sur ce serveur',

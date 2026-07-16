@@ -225,7 +225,8 @@ response (UNETLoader):
   (the list is only populated by the front-end's refresh button — its tooltip says so) while a
   literal model name works at execution. **Never flag a value against an empty enum.**
 - Used by `src/workflows/requirements.ts` + `useAvailability` to flag workflows whose custom
-  nodes or model files are missing on the connected server.
+  nodes or model files are missing on the connected server, and by the `model` manifest fields
+  (`modelFieldOptions`) as the source of the installed-file lists offered in the launch form.
   - `GET /models/checkpoints`: `["someModel_xl.safetensors", "anotherModel_v2.safetensors", ...]` (installed checkpoint filenames).
 - `GET /embeddings` → **overridden by the LoRA-Manager custom node**: returns HTML, not the core JSON. Do not rely on it.
 - `GET /features` → `{"supports_preview_metadata": true, "max_upload_size": 104857600, "node_replacements": true, "assets": false, "extension": {"manager": {...}}}`.

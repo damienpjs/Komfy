@@ -134,6 +134,16 @@ export const krea2Img2Img: WorkflowManifest = {
       required: true,
     },
     {
+      kind: 'model',
+      key: 'model',
+      label: 'wf.common.model',
+      hint: 'wf.common.modelHint',
+      target: { nodeId: '1', input: 'unet_name' },
+      default: 'krea2_turbo_bf16.safetensors',
+      filter: 'krea2',
+      remember: true,
+    },
+    {
       kind: 'loras',
       key: 'loras',
       label: 'LoRAs',

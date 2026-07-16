@@ -7,7 +7,7 @@
  */
 
 import type { NodeInfo, NodeInputSpec } from '../api/types';
-import type { PatchTarget, WorkflowManifest } from './types';
+import type { ModelField, PatchTarget, WorkflowManifest } from './types';
 
 /** class_types inserted at patch time by the dynamic fields (cf. patch.ts). */
 const LORAS_CHAIN_TYPES = ['LoraLoaderModelOnly'];
@@ -57,6 +57,7 @@ function patchedInputKeys(manifest: WorkflowManifest): Set<string> {
       case 'text':
       case 'seed':
       case 'image':
+      case 'model':
         add(field.target);
         break;
       case 'number':
@@ -91,6 +92,36 @@ function patchedInputKeys(manifest: WorkflowManifest): Set<string> {
 function enumValues(spec: NodeInputSpec | undefined): unknown[] | null {
   if (!spec || !Array.isArray(spec[0]) || spec[0].length === 0) return null;
   return spec[0];
+}
+
+/**
+ * Files offered by a model field: the /object_info enum of its target input
+ * — exactly what the server will accept. `filter` narrows to the compatible
+ * family; when nothing matches, the full list is offered (better than a
+ * dead end). undefined = schemas not loaded / no enum (degraded mode: the
+ * form keeps the frozen default).
+ */
+export function modelFieldOptions(
+  manifest: WorkflowManifest,
+  field: ModelField,
+  nodeInfo: Record<string, NodeInfo | null> | undefined,
+): string[] | undefined {
+  const node = manifest.graph[field.target.nodeId];
+  const info = node ? nodeInfo?.[node.class_type] : undefined;
+  const spec =
+    info?.input?.required?.[field.target.input] ??
+    info?.input?.optional?.[field.target.input];
+  const allowed = enumValues(spec);
+  if (!allowed) return undefined;
+  const files = allowed.filter((v): v is string => typeof v === 'string');
+  if (!field.filter) return files;
+  try {
+    const re = new RegExp(field.filter, 'i');
+    const matching = files.filter((f) => re.test(f));
+    return matching.length > 0 ? matching : files;
+  } catch {
+    return files;
+  }
 }
 
 /** A literal value rejected by the server's enum (typically a model file). */

@@ -190,6 +190,16 @@ export const krea2Image2Prompt: WorkflowManifest = {
       default: { width: 1024, height: 1024 },
     },
     {
+      kind: 'model',
+      key: 'model',
+      label: 'wf.common.model',
+      hint: 'wf.common.modelHint',
+      target: { nodeId: '1', input: 'unet_name' },
+      default: 'krea2_turbo_bf16.safetensors',
+      filter: 'krea2',
+      remember: true,
+    },
+    {
       kind: 'loras',
       key: 'loras',
       label: 'LoRAs',

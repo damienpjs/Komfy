@@ -54,6 +54,9 @@ export default {
       dimensions: 'Dimensions',
       sourceImage: 'Source image',
       threshold: 'Detection threshold',
+      model: 'Model',
+      modelHint:
+        'Diffusion models installed on the server — compatible family only',
       lorasHint:
         'Chained on the model (LoraLoaderModelOnly), strength ~0.9 recommended',
       turboStepsHint: 'Turbo: 8 steps are enough, beyond that gains are negligible',
@@ -137,6 +140,11 @@ export default {
       featherHint: '0 = sharp edges · higher = smoother transition',
       denoiseHint: 'High = area fully replaced · low = light retouch',
     },
+  },
+  model: {
+    search: 'Search a model…',
+    missing: 'Not found on the server — pick another file',
+    noResult: 'No matching model',
   },
   availability: {
     title: 'Unavailable on this server',

@@ -327,6 +327,12 @@ function tryMatch(
         values[field.key] = typeof v === 'string' ? v : '';
         break;
       }
+      case 'model': {
+        const eId = state.map.get(field.target.nodeId);
+        const v = extracted[eId!]?.inputs[field.target.input];
+        values[field.key] = typeof v === 'string' ? v : field.default;
+        break;
+      }
       case 'select': {
         const index = field.options.findIndex((option) =>
           option.patches.every((patch) => {

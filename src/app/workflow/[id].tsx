@@ -26,6 +26,7 @@ import { ComfyApiError, createClient } from '../../api/client';
 import type { PromptErrorResponse } from '../../api/types';
 import { ImageInputField } from '../../components/ImageInputField';
 import { LoraField } from '../../components/LoraField';
+import { ModelField } from '../../components/ModelField';
 import { OutputDirPicker } from '../../components/OutputDirPicker';
 import { PersonsField } from '../../components/PersonsField';
 import { PresetBar } from '../../components/PresetBar';
@@ -48,6 +49,7 @@ import {
   accessoryId,
   KEYBOARD_ACCESSORY_ID,
 } from '../../utils/formAccessory';
+import { useNodeInfo } from '../../hooks/useAvailability';
 import { getWorkflow } from '../../workflows';
 import {
   DEFAULT_OUTPUT_DIR,
@@ -57,6 +59,7 @@ import {
   randomSeed,
   validate,
 } from '../../workflows/patch';
+import { modelFieldOptions } from '../../workflows/requirements';
 import { DEFAULT_GUIDE_SIZE } from '../../workflows/types';
 import type {
   DimensionsValue,
@@ -95,6 +98,7 @@ function initialValues(
   fields: WorkflowField[],
   prefill?: string,
   remembered?: Record<string, number>,
+  rememberedModels?: Record<string, string>,
 ): FieldValues {
   const values: FieldValues = {};
   for (const field of fields) {
@@ -108,6 +112,11 @@ function initialValues(
         kept != null && kept >= 0 && kept < field.options.length
           ? kept
           : field.defaultIndex;
+    }
+    if (field.kind === 'model') {
+      // `remember`: last file kept (the picker flags it if now missing).
+      const kept = field.remember ? rememberedModels?.[field.key] : undefined;
+      values[field.key] = kept ?? field.default;
     }
     if (field.kind === 'loras') values[field.key] = [];
     if (field.kind === 'image') values[field.key] = '';
@@ -168,9 +177,18 @@ export default function WorkflowLaunchScreen() {
   const rememberedSelects = useFieldPrefs(
     (s) => s.selections[manifest?.id ?? ''],
   );
+  const rememberedModels = useFieldPrefs(
+    (s) => s.values[manifest?.id ?? ''],
+  );
+  const nodeInfo = useNodeInfo();
 
   const [values, setValues] = useState<FieldValues>(() =>
-    initialValues(manifest?.fields ?? [], prefill, rememberedSelects),
+    initialValues(
+      manifest?.fields ?? [],
+      prefill,
+      rememberedSelects,
+      rememberedModels,
+    ),
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -227,10 +245,13 @@ export default function WorkflowLaunchScreen() {
   const setValue = (key: string, value: FieldValues[string]) => {
     setValues((v) => ({ ...v, [key]: value }));
     setErrors((e) => ({ ...e, [key]: '' }));
-    // `remember` select field: the choice is persisted for this workflow.
+    // `remember` select/model field: the choice is persisted per workflow.
     const field = manifest.fields.find((f) => f.key === key);
     if (field?.kind === 'select' && field.remember && typeof value === 'number') {
       useFieldPrefs.getState().setSelection(manifest.id, key, value);
+    }
+    if (field?.kind === 'model' && field.remember && typeof value === 'string') {
+      useFieldPrefs.getState().setValue(manifest.id, key, value);
     }
   };
 
@@ -558,6 +579,19 @@ export default function WorkflowLaunchScreen() {
                     : []
                 }
                 onChange={(loras) => setValue(field.key, loras)}
+              />
+            )}
+
+            {field.kind === 'model' && (
+              <ModelField
+                field={field}
+                value={
+                  typeof values[field.key] === 'string'
+                    ? (values[field.key] as string)
+                    : field.default
+                }
+                options={modelFieldOptions(manifest, field, nodeInfo)}
+                onChange={(v) => setValue(field.key, v)}
               />
             )}
 

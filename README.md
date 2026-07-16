@@ -122,7 +122,10 @@ changes.
 2. Create `src/workflows/<id>.ts`: paste the graph, write the manifest
    (name, icon, description, `saveNodeId`, patchable fields — see
    [krea2-text2img.ts](./src/workflows/krea2-text2img.ts) as a model).
-   Field kinds: `text`, `number`, `seed`, `select`, `loras`.
+   Field kinds: `text`, `number`, `seed`, `select`, `model`, `dimensions`,
+   `image`, `loras`, `persons`. A `model` field offers the files actually
+   installed on the server (its target's `/object_info` enum, optional
+   family `filter` regex) instead of freezing a filename.
    User-facing manifest strings are i18n keys — add them to
    [src/i18n/en.ts](./src/i18n/en.ts) and [fr.ts](./src/i18n/fr.ts).
 3. Register it in [src/workflows/index.ts](./src/workflows/index.ts).

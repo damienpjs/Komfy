@@ -329,6 +329,9 @@ export function patchGraph(
       case 'image':
         applyPatch(graph, field.target, String(value ?? ''));
         break;
+      case 'model':
+        applyPatch(graph, field.target, String(value ?? field.default));
+        break;
       case 'dimensions': {
         const v = (value as DimensionsValue | undefined) ?? {
           ...field.default,
