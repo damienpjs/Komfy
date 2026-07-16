@@ -46,8 +46,12 @@ interface Props {
   onRemix?: (image: GalleryImage) => Promise<void>;
   /** Move this image (••• menu) — closes the viewer on the gallery side. */
   onMove?: (image: GalleryImage) => void;
-  /** Delete this image (••• menu) — closes the viewer on the gallery side. */
-  onDelete?: (image: GalleryImage) => void;
+  /**
+   * Delete this image (••• menu). Confirms + trashes on the gallery side and
+   * resolves true when the file was removed; the viewer then advances to the
+   * neighbour image (or closes if it was the last one).
+   */
+  onDelete?: (image: GalleryImage) => Promise<boolean>;
 }
 
 const MAX_SCALE = 4;
@@ -274,6 +278,10 @@ export function ImageViewer({
 }: Props) {
   const { t } = useTranslation();
   const [index, setIndex] = useState(initialIndex);
+  // Local, mutable copy of the frozen list: deleting drops the image here so
+  // the pager keeps going instead of returning to the grid. The viewer is
+  // remounted on every open, so seeding from the prop once is enough.
+  const [items, setItems] = useState(images);
   const listRef = useRef<FlatList<GalleryImage>>(null);
   const [remixing, setRemixing] = useState(false);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'done'>(
@@ -297,6 +305,33 @@ export function ImageViewer({
     }
   };
 
+  // Delete the displayed image, then stay in the viewer on the neighbour
+  // (the following image slides into the freed slot; else the previous one) —
+  // or close when it was the last remaining image.
+  const deleteCurrent = async (image: GalleryImage) => {
+    if (!onDelete) return;
+    const ok = await onDelete(image);
+    if (!ok) return;
+    const delIndex = items.findIndex((i) => i.path === image.path);
+    if (delIndex === -1) return;
+    const next = items.filter((_, k) => k !== delIndex);
+    if (next.length === 0) {
+      onClose();
+      return;
+    }
+    const newIndex = Math.min(delIndex, next.length - 1);
+    setItems(next);
+    setIndex(newIndex);
+    setSaveState('idle');
+    setZoomed(false); // the neighbour page starts unzoomed → un-freeze the pager
+    // Deleting a middle image leaves the pager's pixel offset on the image
+    // that shifted into the slot — no scroll needed. Deleting the LAST image
+    // leaves the offset past the end, so pull it back to the new last page.
+    requestAnimationFrame(() =>
+      listRef.current?.scrollToIndex({ index: newIndex, animated: false }),
+    );
+  };
+
   // ••• menu: save / move / delete the displayed image.
   const openMenu = (image: GalleryImage) => {
     const actions: SheetAction[] = [
@@ -311,7 +346,7 @@ export function ImageViewer({
       actions.push({
         label: t('common.delete'),
         destructive: true,
-        onPress: () => onDelete(image),
+        onPress: () => deleteCurrent(image),
       });
     }
     showActionSheet(image.filename, actions);
@@ -323,7 +358,7 @@ export function ImageViewer({
   const [pageSize, setPageSize] = useState<{ w: number; h: number } | null>(
     null,
   );
-  const current = images[index];
+  const current = items[index];
 
   return (
     <Modal
@@ -355,7 +390,7 @@ export function ImageViewer({
           {pageSize && (
             <FlatList
               ref={listRef}
-              data={images}
+              data={items}
               horizontal
               pagingEnabled
               scrollEnabled={!zoomed}
@@ -396,7 +431,7 @@ export function ImageViewer({
                   Math.max(
                     0,
                     Math.min(
-                      images.length - 1,
+                      items.length - 1,
                       Math.round(e.nativeEvent.contentOffset.x / pageSize.w),
                     ),
                   ),
@@ -416,7 +451,7 @@ export function ImageViewer({
               <Ionicons name="close" size={24} color={colors.text} />
             </Pressable>
             <Text style={styles.counter}>
-              {index + 1} / {images.length}
+              {index + 1} / {items.length}
             </Text>
           </View>
 

@@ -160,24 +160,31 @@ export default function GalleryScreen() {
   };
 
   // Server-side trash (komfy-listing extension) then gallery refresh.
-  const deletePaths = async (paths: string[], label: string) => {
+  // Returns true when every path was trashed (the viewer relies on this to
+  // decide whether to drop the image it just deleted).
+  const deletePaths = async (
+    paths: string[],
+    label: string,
+  ): Promise<boolean> => {
+    let failed: [string, string][];
     try {
       const result = await createClient(serverUrl).deletePaths(paths);
-      const failed = Object.entries(result.errors);
-      if (failed.length) {
-        Alert.alert(
-          t('gallery.partialDelete'),
-          failed.map(([p, e]) => `${p} : ${e}`).join('\n'),
-        );
-      } else {
-        showToast(t('gallery.trashToast', { label }));
-      }
+      failed = Object.entries(result.errors);
     } catch (e) {
       reportWriteError(e, t('gallery.actionDelete'));
-      return;
+      return false;
+    }
+    if (failed.length) {
+      Alert.alert(
+        t('gallery.partialDelete'),
+        failed.map(([p, e]) => `${p} : ${e}`).join('\n'),
+      );
+    } else {
+      showToast(t('gallery.trashToast', { label }));
     }
     exitSelect();
     invalidateGallery();
+    return failed.length === 0;
   };
 
   // Server-side move (komfy-listing extension) then gallery refresh.
@@ -301,18 +308,44 @@ export default function GalleryScreen() {
     setMovePickerOpen(true);
   };
 
-  // Single-image actions from full screen: close the viewer first (the file
-  // is about to change folder or go to the trash), then let its modal finish
-  // dismissing before presenting another one (iOS ignores a presentation
-  // started while a modal is dismissing).
+  // Move from full screen: close the viewer first (the file is about to
+  // change folder), then let its modal finish dismissing before presenting
+  // the picker (iOS ignores a presentation started while a modal is
+  // dismissing).
   const handleViewerMove = (image: GalleryImage) => {
     setViewer(null);
     setTimeout(() => openMovePicker([image.path]), 300);
   };
-  const handleViewerDelete = (image: GalleryImage) => {
-    setViewer(null);
-    setTimeout(() => confirmDelete([image.path], image.filename), 300);
-  };
+
+  // Delete from full screen WITHOUT leaving the viewer: confirm over the open
+  // Modal (a native alert stacks fine on top of it), trash server-side, and
+  // resolve with the outcome so the viewer can advance to the neighbour image
+  // instead of falling back to the grid.
+  const deleteFromViewer = (image: GalleryImage): Promise<boolean> =>
+    new Promise((resolve) => {
+      const targets = realTargets([image.path]);
+      if (targets.length === 0) {
+        resolve(false);
+        return;
+      }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      Alert.alert(
+        t('gallery.deleteTitle', { label: image.filename }),
+        t('gallery.deleteBody'),
+        [
+          {
+            text: t('common.cancel'),
+            style: 'cancel',
+            onPress: () => resolve(false),
+          },
+          {
+            text: t('common.delete'),
+            style: 'destructive',
+            onPress: () => resolve(deletePaths(targets, image.filename)),
+          },
+        ],
+      );
+    });
 
   const imageMenu = (image: GalleryImage) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -680,7 +713,7 @@ export default function GalleryScreen() {
           onClose={() => setViewer(null)}
           onRemix={handleRemix}
           onMove={handleViewerMove}
-          onDelete={handleViewerDelete}
+          onDelete={deleteFromViewer}
         />
       )}
 
