@@ -31,6 +31,7 @@ export default {
     textResult: 'Prompt généré',
     wsLog: 'Journal WS',
     back: 'Retour',
+    importWorkflow: 'Importer un workflow',
   },
   queue: {
     clearTitle: 'Vider la queue ?',
@@ -57,6 +58,7 @@ export default {
       model: 'Modèle',
       modelHint:
         'Modèles de diffusion installés sur le serveur — famille compatible uniquement',
+      negativePrompt: 'Prompt négatif',
       lorasHint:
         'Chaînés sur le modèle (LoraLoaderModelOnly), force ~0,9 recommandée',
       turboStepsHint:
@@ -148,6 +150,28 @@ export default {
     search: 'Rechercher un modèle…',
     missing: 'Introuvable sur le serveur — choisir un autre fichier',
     noResult: 'Aucun modèle correspondant',
+  },
+  importWf: {
+    card: 'Importer',
+    cardDescription: 'Ajouter un workflow depuis son JSON au format API',
+    help:
+      'Coller un workflow au format API (ComfyUI : Réglages → Dev mode → « Save (API Format) »). L’app détecte les champs réglables ; le graphe lui-même est embarqué tel quel.',
+    paste: 'Coller depuis le presse-papiers',
+    analyze: 'Analyser',
+    invalid:
+      'Graphe illisible — exporter au format API (« Save (API Format) »), pas au format éditeur.',
+    tooBig: 'Fichier trop volumineux pour un graphe de workflow (max 512 Ko).',
+    name: 'Nom',
+    defaultName: 'Workflow importé',
+    defaultDescription: 'Importé depuis un graphe au format API',
+    fields: 'Champs détectés',
+    noFields: 'Aucun champ réglable détecté — le workflow sera lancé tel quel.',
+    import: 'Importer',
+    imported: 'Workflow importé ✓',
+    startOver: 'Recommencer',
+    deleteTitle: 'Supprimer ce workflow ?',
+    deleteBody: '{{name}} sera retiré de l’app. Le serveur n’est pas affecté.',
+    customBadge: 'Workflow importé',
   },
   availability: {
     title: 'Indisponible sur ce serveur',
@@ -250,6 +274,7 @@ export default {
     unknownNote:
       'Workflow inconnu de Komfy — paramètres extraits des métadonnées de l’image (lecture seule).',
     requeue: 'Relancer en variante (nouveaux seeds)',
+    import: 'Importer comme workflow…',
   },
   dirPicker: {
     title: 'Dossier de destination',

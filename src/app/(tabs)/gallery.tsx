@@ -27,6 +27,7 @@ import { ComfyApiError, createClient } from '../../api/client';
 import { queryClient } from '../../api/queryClient';
 import { useGallery, type GalleryImage } from '../../hooks/useGallery';
 import { useRemix } from '../../hooks/useRemix';
+import { useImportDraft } from '../../store/importDraft';
 import { useSettings } from '../../store/settings';
 import { useToast } from '../../store/toast';
 import { showActionSheet } from '../../utils/actionSheet';
@@ -764,6 +765,14 @@ export default function GalleryScreen() {
       <RemixSheet
         state={recipe}
         onClose={() => setRecipe(null)}
+        onImport={(graph, filename) => {
+          setRecipe(null);
+          // Default name = the PNG's basename (editable on the screen).
+          useImportDraft
+            .getState()
+            .set(graph, filename.replace(/\.[a-z0-9]+$/i, ''));
+          router.push('/workflow/import' as Href);
+        }}
         onRequeue={async (graph) => {
           try {
             const number = await remix.requeue(graph);

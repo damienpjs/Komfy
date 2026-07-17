@@ -17,6 +17,7 @@ import type { PromptGraph } from '../api/types';
 import { useSettings } from '../store/settings';
 import { parsePngText } from '../utils/pngMetadata';
 import { matchGraph } from '../workflows/match';
+import { allWorkflows } from '../workflows/registry';
 import { withRandomSeeds } from '../workflows/requeue';
 import type { FieldValues } from '../workflows/types';
 import type { GalleryImage } from './useGallery';
@@ -103,7 +104,7 @@ export function useRemix() {
           graph = await graphFromHistory(serverUrl, image);
         }
         if (!graph) return { status: 'no-metadata' };
-        const outcome = matchGraph(graph);
+        const outcome = matchGraph(graph, allWorkflows());
         if (outcome.status === 'unknown-workflow') {
           return { status: 'unknown-workflow', graph };
         }

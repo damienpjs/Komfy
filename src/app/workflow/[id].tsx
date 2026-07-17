@@ -50,7 +50,7 @@ import {
   KEYBOARD_ACCESSORY_ID,
 } from '../../utils/formAccessory';
 import { useNodeInfo } from '../../hooks/useAvailability';
-import { getWorkflow } from '../../workflows';
+import { getAnyWorkflow } from '../../workflows/registry';
 import {
   DEFAULT_OUTPUT_DIR,
   DIMENSION_STEP,
@@ -118,7 +118,7 @@ function initialValues(
       const kept = field.remember ? rememberedModels?.[field.key] : undefined;
       values[field.key] = kept ?? field.default;
     }
-    if (field.kind === 'loras') values[field.key] = [];
+    if (field.kind === 'loras') values[field.key] = field.default ?? [];
     if (field.kind === 'image') values[field.key] = '';
     if (field.kind === 'dimensions')
       values[field.key] = { ...field.default, inverted: false, custom: false };
@@ -168,7 +168,7 @@ export default function WorkflowLaunchScreen() {
     id: string;
     prefill?: string;
   }>();
-  const manifest = getWorkflow(id ?? '');
+  const manifest = getAnyWorkflow(id ?? '');
   const router = useRouter();
   const { t } = useTranslation();
   const serverUrl = useSettings((s) => s.serverUrl);

@@ -29,9 +29,11 @@ interface Props {
   onClose: () => void;
   /** Requeues the graph (new seeds); closing stays the parent's job. */
   onRequeue: (graph: PromptGraph) => Promise<void>;
+  /** Imports the graph as a custom workflow (closing = parent's job). */
+  onImport: (graph: PromptGraph, filename: string) => void;
 }
 
-export function RemixSheet({ state, onClose, onRequeue }: Props) {
+export function RemixSheet({ state, onClose, onRequeue, onImport }: Props) {
   const { t } = useTranslation();
   // Anti double-tap during the POST /prompt.
   const [queuing, setQueuing] = useState(false);
@@ -83,6 +85,17 @@ export function RemixSheet({ state, onClose, onRequeue }: Props) {
           >
             <Ionicons name="shuffle-outline" size={18} color={colors.text} />
             <Text style={styles.requeueText}>{t('remix.requeue')}</Text>
+          </Pressable>
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.importBtn,
+              pressed && { backgroundColor: colors.surfacePressed },
+            ]}
+            onPress={() => onImport(state.graph, state.filename)}
+          >
+            <Ionicons name="download-outline" size={18} color={colors.accent} />
+            <Text style={styles.importText}>{t('remix.import')}</Text>
           </Pressable>
         </ScrollView>
       </View>
@@ -140,6 +153,22 @@ const styles = StyleSheet.create({
   },
   requeueText: {
     color: colors.text,
+    fontFamily: typography.uiSemiBold,
+    fontSize: typography.sizes.sm,
+  },
+  importBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    minHeight: MIN_TOUCH_TARGET,
+    borderRadius: radii.md,
+    borderColor: colors.border,
+    borderWidth: 1,
+    backgroundColor: colors.surface,
+  },
+  importText: {
+    color: colors.accent,
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.sm,
   },

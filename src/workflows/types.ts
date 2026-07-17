@@ -114,6 +114,11 @@ export interface LorasField extends FieldBase {
   modelTargets: PatchTarget[];
   maxCount?: number;
   defaultStrength?: number;
+  /**
+   * Initial selection (imported workflows: the absorbed chain's LoRAs,
+   * editable in the form). Absent = empty form (embedded workflows).
+   */
+  default?: LoraSelection[];
 }
 
 /** Value of a dimensions field: preset or custom, invertible. */

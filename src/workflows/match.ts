@@ -10,7 +10,6 @@
  */
 
 import type { PromptGraph } from '../api/types';
-import { workflows } from './index';
 import type {
   FieldValues,
   LoraSelection,
@@ -410,8 +409,16 @@ function tryMatch(
   return values;
 }
 
-export function matchGraph(extracted: PromptGraph): MatchOutcome {
-  for (const manifest of workflows) {
+/**
+ * Candidates come from the caller (workflows/registry.allWorkflows(): the
+ * embedded manifests + the runtime-imported ones) — this module stays free
+ * of any store import.
+ */
+export function matchGraph(
+  extracted: PromptGraph,
+  candidates: WorkflowManifest[],
+): MatchOutcome {
+  for (const manifest of candidates) {
     const values = tryMatch(extracted, manifest);
     if (values) return { status: 'match', manifestId: manifest.id, values };
   }

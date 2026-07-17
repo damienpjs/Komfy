@@ -118,6 +118,17 @@ changes.
 
 ## Adding a workflow
 
+**Without touching the code** (runtime import): Workflows tab → **Import**
+card → paste an API-format JSON (Settings → Dev mode → "Save (API Format)");
+the app infers the form fields (prompts, seeds, dimensions, model files,
+LoRA chains become an editable LoRAs field) and validates the graph against
+the connected server. Also offered from the gallery when an image's recipe
+matches no known workflow ("Import as workflow"). Imported workflows are
+persisted on the phone, remixable like the embedded ones, and removable
+with a long press on their card.
+
+**As code** (embedded, versioned in the repo):
+
 1. In ComfyUI: Settings → Dev mode → **Save (API Format)**.
 2. Create `src/workflows/<id>.ts`: paste the graph, write the manifest
    (name, icon, description, `saveNodeId`, patchable fields — see
@@ -169,12 +180,12 @@ project.
 
 ```
 komfy/
-├── src/app/              # screens (Expo Router): (tabs)/queue·workflows·gallery·settings, workflow/[id], ws-log
+├── src/app/              # screens (Expo Router): (tabs)/queue·workflows·gallery·settings, workflow/[id]·import, ws-log
 ├── src/api/              # client.ts, ws.ts (WebSocket), types.ts, queryClient.ts
 ├── src/i18n/             # i18next setup + en/fr dictionaries (default: English)
-├── src/workflows/        # manifests + frozen API graphs, patch.ts, match.ts (remix), requirements.ts (availability)
+├── src/workflows/        # manifests + frozen API graphs, patch.ts, match.ts (remix), requirements.ts (availability), infer.ts + registry.ts (runtime import)
 ├── src/components/       # UI (queue cards, LoRA/folder pickers, viewer…)
-├── src/store/            # Zustand: settings, connection, execution, toast, outputPrefs
+├── src/store/            # Zustand: settings, connection, execution, toast, outputPrefs, customWorkflows
 ├── src/hooks/            # useQueue, useGallery, useLoras, useRemix, useHealthCheck, useAvailability
 ├── src/utils/            # pathTree (explorer), pngMetadata (tEXt chunks)
 ├── src/theme/tokens.ts   # style guide — no hardcoded styles elsewhere

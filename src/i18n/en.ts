@@ -31,6 +31,7 @@ export default {
     textResult: 'Generated prompt',
     wsLog: 'WS log',
     back: 'Back',
+    importWorkflow: 'Import a workflow',
   },
   queue: {
     clearTitle: 'Clear the queue?',
@@ -57,6 +58,7 @@ export default {
       model: 'Model',
       modelHint:
         'Diffusion models installed on the server — compatible family only',
+      negativePrompt: 'Negative prompt',
       lorasHint:
         'Chained on the model (LoraLoaderModelOnly), strength ~0.9 recommended',
       turboStepsHint: 'Turbo: 8 steps are enough, beyond that gains are negligible',
@@ -145,6 +147,28 @@ export default {
     search: 'Search a model…',
     missing: 'Not found on the server — pick another file',
     noResult: 'No matching model',
+  },
+  importWf: {
+    card: 'Import',
+    cardDescription: 'Add a workflow from its API-format JSON',
+    help:
+      'Paste a workflow in API format (ComfyUI: Settings → Dev mode → "Save (API Format)"). The app detects the adjustable fields; the graph itself is embedded as-is.',
+    paste: 'Paste from clipboard',
+    analyze: 'Analyze',
+    invalid:
+      'Unreadable graph — export in API format ("Save (API Format)"), not the editor format.',
+    tooBig: 'File too large for a workflow graph (max 512 KB).',
+    name: 'Name',
+    defaultName: 'Imported workflow',
+    defaultDescription: 'Imported from an API-format graph',
+    fields: 'Detected fields',
+    noFields: 'No adjustable field detected — the workflow will run as-is.',
+    import: 'Import',
+    imported: 'Workflow imported ✓',
+    startOver: 'Start over',
+    deleteTitle: 'Delete this workflow?',
+    deleteBody: '{{name}} will be removed from the app. The server is not affected.',
+    customBadge: 'Imported workflow',
   },
   availability: {
     title: 'Unavailable on this server',
@@ -247,6 +271,7 @@ export default {
     unknownNote:
       'Workflow unknown to Komfy — parameters extracted from the image metadata (read-only).',
     requeue: 'Requeue as a variant (new seeds)',
+    import: 'Import as workflow…',
   },
   dirPicker: {
     title: 'Destination folder',

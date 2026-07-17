@@ -17,6 +17,7 @@ import {
   typography,
 } from '../theme/tokens';
 import { matchGraph } from '../workflows/match';
+import { allWorkflows } from '../workflows/registry';
 import { GraphSummary, Row } from './GraphSummary';
 
 interface Props {
@@ -30,7 +31,7 @@ export function JobDetailSheet({ entry, onClose }: Props) {
   if (!entry) return null;
 
   const [number, promptId, graph] = entry;
-  const match = matchGraph(graph);
+  const match = matchGraph(graph, allWorkflows());
 
   const remix = () => {
     if (match.status !== 'match') return;
