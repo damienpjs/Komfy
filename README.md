@@ -124,8 +124,12 @@ the app infers the form fields (prompts, seeds, dimensions, model files,
 LoRA chains become an editable LoRAs field) and validates the graph against
 the connected server. Also offered from the gallery when an image's recipe
 matches no known workflow ("Import as workflow"). Imported workflows are
-persisted on the phone, remixable like the embedded ones, and removable
-with a long press on their card.
+persisted on the phone and remixable like the embedded ones. A long press
+on their card opens Edit / Delete: the editor renames the workflow,
+relabels/reorders/removes fields, adds fields from a graph inspector
+(remaining literal inputs, typed automatically), adds a **LoRAs field** on
+any detected model chain, and copies the manifest JSON — pasting that JSON
+into Import on another phone transfers the workflow as-is.
 
 **As code** (embedded, versioned in the repo):
 
@@ -180,7 +184,7 @@ project.
 
 ```
 komfy/
-├── src/app/              # screens (Expo Router): (tabs)/queue·workflows·gallery·settings, workflow/[id]·import, ws-log
+├── src/app/              # screens (Expo Router): (tabs)/queue·workflows·gallery·settings, workflow/[id]·import·edit, ws-log
 ├── src/api/              # client.ts, ws.ts (WebSocket), types.ts, queryClient.ts
 ├── src/i18n/             # i18next setup + en/fr dictionaries (default: English)
 ├── src/workflows/        # manifests + frozen API graphs, patch.ts, match.ts (remix), requirements.ts (availability), infer.ts + registry.ts (runtime import)

@@ -66,6 +66,10 @@ function AppShell() {
           name="workflow/import"
           options={{ title: t('nav.importWorkflow') }}
         />
+        <Stack.Screen
+          name="workflow/edit"
+          options={{ title: t('nav.editWorkflow') }}
+        />
         <Stack.Screen name="ws-log" options={{ title: t('nav.wsLog') }} />
       </Stack>
       {/* Single status dot, outside the native headers (identical rendering

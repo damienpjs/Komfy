@@ -32,7 +32,12 @@ import {
   spacing,
   typography,
 } from '../../theme/tokens';
-import { inferManifest, parseGraph } from '../../workflows/infer';
+import {
+  inferManifest,
+  MAX_GRAPH_JSON_BYTES,
+  parseGraph,
+  parseManifest,
+} from '../../workflows/infer';
 import { allWorkflows } from '../../workflows/registry';
 import { checkAvailability } from '../../workflows/requirements';
 import type { WorkflowManifest } from '../../workflows/types';
@@ -57,7 +62,26 @@ export default function ImportWorkflowScreen() {
 
   const analyze = (raw: string) => {
     try {
-      const result = inferManifest(parseGraph(raw.trim()));
+      const trimmed = raw.trim();
+      if (trimmed.length > MAX_GRAPH_JSON_BYTES) {
+        throw new Error('importWf.tooBig');
+      }
+      // Exported manifest (edit screen → copy JSON): fields already curated.
+      let manifest = null;
+      try {
+        manifest = parseManifest(JSON.parse(trimmed));
+      } catch {
+        manifest = null;
+      }
+      const result = manifest
+        ? {
+            graph: manifest.graph,
+            fields: manifest.fields,
+            saveNodeId: manifest.saveNodeId,
+            textNodeId: manifest.textNodeId,
+          }
+        : inferManifest(parseGraph(trimmed));
+      if (manifest && name.trim() === '') setName(manifest.name);
       setInferred(result);
       setEnabled(Object.fromEntries(result.fields.map((f) => [f.key, true])));
       setError(null);

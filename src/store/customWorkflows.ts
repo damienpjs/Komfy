@@ -14,6 +14,8 @@ interface CustomWorkflowsState {
   manifests: WorkflowManifest[];
   hydrated: boolean;
   add: (manifest: WorkflowManifest) => void;
+  /** Replaces the manifest with the same id (manifest editor). */
+  update: (manifest: WorkflowManifest) => void;
   remove: (id: string) => void;
 }
 
@@ -24,6 +26,12 @@ export const useCustomWorkflows = create<CustomWorkflowsState>()(
       hydrated: false,
       add: (manifest) =>
         set((s) => ({ manifests: [...s.manifests, manifest] })),
+      update: (manifest) =>
+        set((s) => ({
+          manifests: s.manifests.map((m) =>
+            m.id === manifest.id ? manifest : m,
+          ),
+        })),
       remove: (id) =>
         set((s) => ({ manifests: s.manifests.filter((m) => m.id !== id) })),
     }),

@@ -32,6 +32,7 @@ export default {
     wsLog: 'Journal WS',
     back: 'Retour',
     importWorkflow: 'Importer un workflow',
+    editWorkflow: 'Éditer le workflow',
   },
   queue: {
     clearTitle: 'Vider la queue ?',
@@ -172,6 +173,19 @@ export default {
     deleteTitle: 'Supprimer ce workflow ?',
     deleteBody: '{{name}} sera retiré de l’app. Le serveur n’est pas affecté.',
     customBadge: 'Workflow importé',
+    edit: 'Éditer',
+  },
+  editWf: {
+    notFound:
+      'Workflow introuvable — seuls les workflows importés sont éditables.',
+    fields: 'Champs (libellé, ordre, suppression)',
+    addField: 'Ajouter un champ',
+    addLoras: 'Champ LoRAs (chaîne modèle détectée)',
+    noCandidates:
+      'Plus rien à ajouter : chaque input littéral a déjà son champ.',
+    saved: 'Workflow mis à jour ✓',
+    export: 'Copier le JSON du manifeste (partage)',
+    copied: 'Manifeste copié ✓ — à coller dans Importer sur un autre téléphone',
   },
   availability: {
     title: 'Indisponible sur ce serveur',

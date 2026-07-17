@@ -15,6 +15,7 @@ import type { TFunction } from 'i18next';
 import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAvailability } from '../../hooks/useAvailability';
 import { useCustomWorkflows } from '../../store/customWorkflows';
+import { showActionSheet } from '../../utils/actionSheet';
 import { colors, radii, spacing, typography } from '../../theme/tokens';
 import { useWorkflows } from '../../workflows/registry';
 import type { WorkflowAvailability } from '../../workflows/requirements';
@@ -48,20 +49,31 @@ export default function WorkflowsScreen() {
 
   const open = (id: string) => router.push(`/workflow/${id}` as Href);
 
-  const confirmDelete = (id: string, name: string) => {
+  const customMenu = (id: string, name: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Alert.alert(
-      t('importWf.deleteTitle'),
-      t('importWf.deleteBody', { name }),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('common.delete'),
-          style: 'destructive',
-          onPress: () => useCustomWorkflows.getState().remove(id),
-        },
-      ],
-    );
+    showActionSheet(name, [
+      {
+        label: t('importWf.edit'),
+        onPress: () => router.push(`/workflow/edit?id=${id}` as Href),
+      },
+      {
+        label: t('common.delete'),
+        destructive: true,
+        onPress: () =>
+          Alert.alert(
+            t('importWf.deleteTitle'),
+            t('importWf.deleteBody', { name }),
+            [
+              { text: t('common.cancel'), style: 'cancel' },
+              {
+                text: t('common.delete'),
+                style: 'destructive',
+                onPress: () => useCustomWorkflows.getState().remove(id),
+              },
+            ],
+          ),
+      },
+    ]);
   };
 
   return (
@@ -122,9 +134,7 @@ export default function WorkflowsScreen() {
                 }
               }}
               onLongPress={
-                isCustom
-                  ? () => confirmDelete(item.id, t(item.name))
-                  : undefined
+                isCustom ? () => customMenu(item.id, t(item.name)) : undefined
               }
             >
               <View style={styles.iconWrap}>

@@ -32,6 +32,7 @@ export default {
     wsLog: 'WS log',
     back: 'Back',
     importWorkflow: 'Import a workflow',
+    editWorkflow: 'Edit the workflow',
   },
   queue: {
     clearTitle: 'Clear the queue?',
@@ -169,6 +170,18 @@ export default {
     deleteTitle: 'Delete this workflow?',
     deleteBody: '{{name}} will be removed from the app. The server is not affected.',
     customBadge: 'Imported workflow',
+    edit: 'Edit',
+  },
+  editWf: {
+    notFound: 'Workflow not found — only imported workflows are editable.',
+    fields: 'Fields (label, order, removal)',
+    addField: 'Add a field',
+    addLoras: 'LoRAs field (detected model chain)',
+    noCandidates:
+      'Nothing left to add: every literal input already has a field.',
+    saved: 'Workflow updated ✓',
+    export: 'Copy the manifest JSON (share)',
+    copied: 'Manifest copied ✓ — paste it in Import on another phone',
   },
   availability: {
     title: 'Unavailable on this server',

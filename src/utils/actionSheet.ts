@@ -3,6 +3,7 @@
  */
 
 import { ActionSheetIOS, Alert, Platform } from 'react-native';
+import i18n from '../i18n';
 
 export interface SheetAction {
   label: string;
@@ -12,7 +13,7 @@ export interface SheetAction {
 
 export function showActionSheet(title: string, actions: SheetAction[]): void {
   if (Platform.OS === 'ios') {
-    const options = [...actions.map((a) => a.label), 'Annuler'];
+    const options = [...actions.map((a) => a.label), i18n.t('common.cancel')];
     ActionSheetIOS.showActionSheetWithOptions(
       {
         title,
@@ -33,7 +34,7 @@ export function showActionSheet(title: string, actions: SheetAction[]): void {
         style: a.destructive ? ('destructive' as const) : undefined,
         onPress: a.onPress,
       })),
-      { text: 'Annuler', style: 'cancel' as const },
+      { text: i18n.t('common.cancel'), style: 'cancel' as const },
     ]);
   }
 }

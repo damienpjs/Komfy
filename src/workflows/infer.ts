@@ -12,6 +12,7 @@ import type {
   LoraSelection,
   LorasField,
   WorkflowField,
+  WorkflowManifest,
 } from './types';
 
 /** Parse guard: beyond this a pasted "graph" is unlikely to be one. */
@@ -59,6 +60,147 @@ export function parseGraph(json: string): PromptGraph {
     throw new Error('importWf.invalid');
   }
   return parsed as PromptGraph;
+}
+
+/**
+ * Builds a field for one literal input (manifest editor's "add a field"):
+ * kind picked from the input name and value type. null = not fieldable
+ * (connections, booleans, unknown objects).
+ */
+export function fieldForInput(
+  nodeId: string,
+  input: string,
+  value: unknown,
+  key: string,
+): WorkflowField | null {
+  const target = { nodeId, input };
+  if (typeof value === 'number') {
+    if (input === 'seed' || input === 'noise_seed') {
+      return { kind: 'seed', key, label: 'Seed', target };
+    }
+    if (input === 'steps') {
+      return {
+        kind: 'number',
+        key,
+        label: 'Steps',
+        target,
+        default: value,
+        min: 1,
+        max: 100,
+        integer: true,
+      };
+    }
+    if (input === 'cfg') {
+      return { kind: 'number', key, label: 'CFG', target, default: value, min: 0, max: 30 };
+    }
+    if (input === 'denoise') {
+      return {
+        kind: 'number',
+        key,
+        label: 'Denoise',
+        target,
+        default: value,
+        min: 0.05,
+        max: 1,
+      };
+    }
+    return {
+      kind: 'number',
+      key,
+      label: input,
+      target,
+      default: value,
+      integer: Number.isInteger(value),
+    };
+  }
+  if (typeof value === 'string') {
+    if (MODEL_INPUT_LABELS[input] != null) {
+      return {
+        kind: 'model',
+        key,
+        label: MODEL_INPUT_LABELS[input],
+        target,
+        default: value,
+      };
+    }
+    if (input === 'image') {
+      return { kind: 'image', key, label: 'wf.common.sourceImage', target };
+    }
+    return {
+      kind: 'text',
+      key,
+      label: input,
+      target,
+      default: value,
+      multiline: value.length > 40,
+    };
+  }
+  return null;
+}
+
+/**
+ * LoRA-field candidates of a graph: the distinct sources feeding `model`
+ * connection inputs (LoRA chains insert between a MODEL output and its
+ * consumers, cf. patch.insertLoraChain). Lets the editor add LoRA support
+ * to any imported workflow. Sources that are themselves LoraLoaderModelOnly
+ * (frozen chains) are skipped.
+ */
+export function inferLorasCandidates(graph: PromptGraph): LorasField[] {
+  const bySource = new Map<
+    string,
+    { source: Conn; targets: { nodeId: string; input: string }[] }
+  >();
+  for (const [nodeId, node] of Object.entries(graph)) {
+    const value = node.inputs.model;
+    if (!isConn(value)) continue;
+    if (graph[value[0]]?.class_type === 'LoraLoaderModelOnly') continue;
+    const key = `${value[0]}:${value[1]}`;
+    const entry = bySource.get(key) ?? { source: value, targets: [] };
+    entry.targets.push({ nodeId, input: 'model' });
+    bySource.set(key, entry);
+  }
+  return [...bySource.values()].map(({ source, targets }, i) => ({
+    kind: 'loras',
+    key: i === 0 ? 'loras' : `loras_${i + 1}`,
+    label: 'LoRAs',
+    hint: 'wf.common.lorasHint',
+    modelSource: { nodeId: source[0], output: source[1] },
+    modelTargets: targets,
+    maxCount: 4,
+    defaultStrength: 0.9,
+  }));
+}
+
+/**
+ * Recognizes an exported manifest (edit screen → "copy JSON": share between
+ * phones). Light structural validation — patch/validate stay the runtime
+ * judges. null = not a manifest (probably a bare graph).
+ */
+export function parseManifest(parsed: unknown): WorkflowManifest | null {
+  if (parsed == null || typeof parsed !== 'object') return null;
+  const m = parsed as Partial<WorkflowManifest>;
+  if (
+    typeof m.name !== 'string' ||
+    m.graph == null ||
+    typeof m.graph !== 'object' ||
+    !Array.isArray(m.fields) ||
+    !m.fields.every(
+      (f) =>
+        f != null &&
+        typeof f === 'object' &&
+        typeof f.kind === 'string' &&
+        typeof f.key === 'string',
+    )
+  ) {
+    return null;
+  }
+  const nodes = Object.values(m.graph);
+  const looksLikeNode = (n: unknown): n is PromptNode =>
+    n != null &&
+    typeof n === 'object' &&
+    typeof (n as PromptNode).class_type === 'string';
+  if (nodes.length === 0 || !nodes.every(looksLikeNode)) return null;
+  return m as WorkflowManifest;
 }
 
 /** Model-file inputs recognized on loader nodes → field label (i18n or literal). */
