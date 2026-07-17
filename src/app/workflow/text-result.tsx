@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import * as Clipboard from 'expo-clipboard';
 import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
@@ -20,6 +21,7 @@ import {
   View,
 } from 'react-native';
 import { createClient } from '../../api/client';
+import { useGeneratedPrompts } from '../../store/generatedPrompts';
 import { useSettings } from '../../store/settings';
 import { useToast } from '../../store/toast';
 import {
@@ -33,9 +35,10 @@ import {
 const POLL_MS = 2000;
 
 export default function TextResultScreen() {
-  const { promptId, nodeId } = useLocalSearchParams<{
+  const { promptId, nodeId, workflowId } = useLocalSearchParams<{
     promptId: string;
     nodeId: string;
+    workflowId: string;
   }>();
   const router = useRouter();
   const { t } = useTranslation();
@@ -59,6 +62,15 @@ export default function TextResultScreen() {
     : undefined;
   const failed =
     entry != null && entry.status?.status_str === 'error' && !text;
+
+  // The text only lives in the server's /history (wiped on restart) and this
+  // screen is `replace`-navigated to, so leaving it used to lose the prompt
+  // for good: bank it as soon as it lands. `record` dedupes on promptId, so
+  // the poll's re-renders record one entry per job.
+  useEffect(() => {
+    if (!text || !promptId || !workflowId) return;
+    useGeneratedPrompts.getState().record({ text, workflowId, promptId });
+  }, [text, promptId, workflowId]);
 
   const usePrompt = () => {
     if (!text) return;

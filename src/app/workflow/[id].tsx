@@ -289,7 +289,9 @@ export default function WorkflowLaunchScreen() {
         router.replace(
           `/workflow/text-result?promptId=${encodeURIComponent(
             res.prompt_id,
-          )}&nodeId=${encodeURIComponent(manifest.textNodeId!)}` as Href,
+          )}&nodeId=${encodeURIComponent(
+            manifest.textNodeId!,
+          )}&workflowId=${encodeURIComponent(manifest.id)}` as Href,
         );
         return;
       }
