@@ -45,7 +45,9 @@ export default function WorkflowsScreen() {
   const { t } = useTranslation();
   const availability = useAvailability();
   const workflows = useWorkflows();
-  const customIds = useCustomWorkflows((s) => s.manifests.map((m) => m.id));
+  // Select the stable array reference — deriving (map/filter) inside a
+  // zustand selector returns a fresh object every render → infinite loop.
+  const customs = useCustomWorkflows((s) => s.manifests);
 
   const open = (id: string) => router.push(`/workflow/${id}` as Href);
 
@@ -109,7 +111,7 @@ export default function WorkflowsScreen() {
           }
           const check = availability?.[item.id];
           const unavailable = check != null && !check.ok;
-          const isCustom = customIds.includes(item.id);
+          const isCustom = customs.some((m) => m.id === item.id);
           return (
             <Pressable
               style={({ pressed }) => [
