@@ -1,0 +1,19 @@
+{
+  "enabledPlugins": {
+    "expo@claude-plugins-official": true
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/commit-nudge.sh\"",
+            "timeout": 10,
+            "statusMessage": "Checking for a commit/branch name to propose"
+          }
+        ]
+      }
+    ]
+  }
+}

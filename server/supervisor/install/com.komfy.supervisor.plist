@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  launchd LaunchAgent for the Komfy supervisor (macOS).
+  This is a TEMPLATE: install-macos.sh fills the @TOKENS@ and copies it to
+  ~/Library/LaunchAgents/com.komfy.supervisor.plist. Do not load this file
+  in place — run install-macos.sh instead.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.komfy.supervisor</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>@NODE@</string>
+    <string>@REPO@/server/supervisor/index.js</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <!-- LaunchAgents get a minimal PATH; add the usual spots so `node` and the
+         `tailscale` CLI resolve (Homebrew arm64/x86 + the Tailscale.app CLI). -->
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/Applications/Tailscale.app/Contents/MacOS</string>
+    <!-- Override ComfyUI paths here if they differ from the defaults, e.g.:
+    <key>BASE_DIR</key><string>/Users/you/Documents/ComfyUI</string>
+    -->
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>@HOME@/Library/Logs/komfy-supervisor.log</string>
+  <key>StandardErrorPath</key>
+  <string>@HOME@/Library/Logs/komfy-supervisor.log</string>
+</dict>
+</plist>

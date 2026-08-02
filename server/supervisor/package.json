@@ -1,0 +1,16 @@
+{
+  "name": "komfy-supervisor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Standalone service that owns the ComfyUI process lifecycle (remote on/off + live logs) for the Komfy app. Zero dependencies — run with `node index.js`.",
+  "type": "commonjs",
+  "bin": {
+    "komfy-supervisor": "index.js"
+  },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

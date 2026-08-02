@@ -1,0 +1,21 @@
+# systemd user unit for the Komfy supervisor (Linux).
+# TEMPLATE: install-linux.sh fills the @TOKENS@ and copies it to
+# ~/.config/systemd/user/komfy-supervisor.service.
+[Unit]
+Description=Komfy supervisor (remote ComfyUI on/off + live logs)
+# tailscaled is a system service; a user unit cannot strictly order after it,
+# so the supervisor also retries its bind until the Tailscale IP appears.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=@NODE@ @REPO@/server/supervisor/index.js
+Restart=on-failure
+RestartSec=3
+# Override ComfyUI paths here if they differ from the defaults, e.g.:
+# Environment=BASE_DIR=%h/ComfyUI-data
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=default.target
