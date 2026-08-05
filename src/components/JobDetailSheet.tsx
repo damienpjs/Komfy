@@ -5,7 +5,7 @@
  */
 
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, type Href } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { QueueEntry } from '../api/types';
@@ -16,6 +16,7 @@ import {
   spacing,
   typography,
 } from '../theme/tokens';
+import { remixHref } from '../utils/remixHref';
 import { matchGraph } from '../workflows/match';
 import { allWorkflows } from '../workflows/registry';
 import { GraphSummary, Row } from './GraphSummary';
@@ -36,11 +37,7 @@ export function JobDetailSheet({ entry, onClose }: Props) {
   const remix = () => {
     if (match.status !== 'match') return;
     onClose();
-    router.push(
-      `/workflow/${match.manifestId}?prefill=${encodeURIComponent(
-        JSON.stringify(match.values),
-      )}` as Href,
-    );
+    router.push(remixHref(match.manifestId, match.values, match.sourceSeeds));
   };
 
   return (

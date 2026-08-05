@@ -16,7 +16,7 @@ import { queryClient } from '../api/queryClient';
 import type { PromptGraph } from '../api/types';
 import { useSettings } from '../store/settings';
 import { parsePngText } from '../utils/pngMetadata';
-import { matchGraph } from '../workflows/match';
+import { matchGraph, type SourceSeeds } from '../workflows/match';
 import { allWorkflows } from '../workflows/registry';
 import { withRandomSeeds } from '../workflows/requeue';
 import type { FieldValues } from '../workflows/types';
@@ -27,7 +27,13 @@ import type { GalleryImage } from './useGallery';
  * matches no embedded workflow → requeueable as-is (Remix v2).
  */
 export type RemixResult =
-  | { status: 'match'; manifestId: string; values: FieldValues }
+  | {
+      status: 'match';
+      manifestId: string;
+      values: FieldValues;
+      /** Seed(s) the image was drawn with — offered back by the form. */
+      sourceSeeds: SourceSeeds;
+    }
   | { status: 'unknown-workflow'; graph: PromptGraph }
   | { status: 'no-metadata' };
 
@@ -87,25 +93,41 @@ async function graphFromPng(
   }
 }
 
+/** PNG chunk first (ground truth), /history as the fallback. */
+async function extractGraph(
+  serverUrl: string,
+  image: GalleryImage,
+): Promise<PromptGraph | null> {
+  let graph: PromptGraph | null = null;
+  if (/\.png$/i.test(image.filename)) {
+    try {
+      graph = await graphFromPng(serverUrl, image);
+    } catch {
+      // /view failed: still try /history.
+    }
+  }
+  if (!graph) {
+    graph = await graphFromHistory(serverUrl, image);
+  }
+  return graph;
+}
+
 export function useRemix() {
   const serverUrl = useSettings((s) => s.serverUrl);
   const clientId = useSettings((s) => s.clientId);
 
   return useMemo(
     () => ({
+      /**
+       * Raw recipe of an item, without matching — what the details sheet
+       * renders (seed, model, prompts…). null = no readable metadata.
+       */
+      graphOf: (image: GalleryImage): Promise<PromptGraph | null> =>
+        extractGraph(serverUrl, image),
+
       /** Throws on network error; otherwise a typed result. */
       extract: async (image: GalleryImage): Promise<RemixResult> => {
-        let graph: PromptGraph | null = null;
-        if (/\.png$/i.test(image.filename)) {
-          try {
-            graph = await graphFromPng(serverUrl, image);
-          } catch {
-            // /view failed: still try /history.
-          }
-        }
-        if (!graph) {
-          graph = await graphFromHistory(serverUrl, image);
-        }
+        const graph = await extractGraph(serverUrl, image);
         if (!graph) return { status: 'no-metadata' };
         const outcome = matchGraph(graph, allWorkflows());
         if (outcome.status === 'unknown-workflow') {

@@ -7,7 +7,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Alert,
@@ -32,6 +32,7 @@ import { OutputDirPicker } from '../../components/OutputDirPicker';
 import { PersonsField } from '../../components/PersonsField';
 import { PresetBar } from '../../components/PresetBar';
 import { PromptField } from '../../components/PromptField';
+import { SourceSeedChip } from '../../components/SourceSeedChip';
 import { useBatchPrefs } from '../../store/batchPrefs';
 import { useFieldPrefs } from '../../store/fieldPrefs';
 import { useGeneratedPrompts } from '../../store/generatedPrompts';
@@ -53,6 +54,7 @@ import {
   KEYBOARD_ACCESSORY_ID,
 } from '../../utils/formAccessory';
 import { useNodeInfo } from '../../hooks/useAvailability';
+import type { SourceSeeds } from '../../workflows/match';
 import { getAnyWorkflow } from '../../workflows/registry';
 import {
   DEFAULT_OUTPUT_DIR,
@@ -204,9 +206,10 @@ function comfyErrorMessage(e: unknown): string {
 }
 
 export default function WorkflowLaunchScreen() {
-  const { id, prefill } = useLocalSearchParams<{
+  const { id, prefill, seeds } = useLocalSearchParams<{
     id: string;
     prefill?: string;
+    seeds?: string;
   }>();
   const manifest = getAnyWorkflow(id ?? '');
   const router = useRouter();
@@ -233,6 +236,18 @@ export default function WorkflowLaunchScreen() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [dirPickerOpen, setDirPickerOpen] = useState(false);
+
+  // Remix: seed(s) of the source image, offered under the seed fields
+  // (SourceSeedChip) — never applied on their own, a variant keeps its new
+  // seed unless the user asks for the original one.
+  const sourceSeeds = useMemo<SourceSeeds>(() => {
+    if (!seeds) return {};
+    try {
+      return JSON.parse(seeds) as SourceSeeds;
+    } catch {
+      return {}; // unreadable param: no offer, form untouched
+    }
+  }, [seeds]);
 
   // Prompt picked in the library: this screen stayed mounted underneath it,
   // so the pick lands here on the way back. Merged into the one field it was
@@ -444,6 +459,7 @@ export default function WorkflowLaunchScreen() {
                 field={field}
                 value={values[field.key] as PersonsValue}
                 onChange={(v) => setValue(field.key, v)}
+                sourceSeed={sourceSeeds[field.key]}
               />
             )}
 
@@ -496,47 +512,54 @@ export default function WorkflowLaunchScreen() {
             )}
 
             {field.kind === 'seed' && (
-              <View style={styles.seedRow}>
-                <TextInput
-                  style={[styles.input, styles.seedInput]}
-                  value={
-                    values[field.key] === 'random'
-                      ? ''
-                      : String(values[field.key])
-                  }
-                  onChangeText={(text) =>
-                    setValue(field.key, text.trim() === '' ? 'random' : text)
-                  }
-                  placeholder={t('persons.randomSeed')}
-                  placeholderTextColor={colors.textDisabled}
-                  keyboardType="numeric"
-                  inputAccessoryViewID={accessoryId}
-                />
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.diceBtn,
-                    pressed && { backgroundColor: colors.surfacePressed },
-                  ]}
-                  onPress={() =>
-                    setValue(
-                      field.key,
+              <>
+                <View style={styles.seedRow}>
+                  <TextInput
+                    style={[styles.input, styles.seedInput]}
+                    value={
                       values[field.key] === 'random'
-                        ? randomSeed()
-                        : 'random',
-                    )
-                  }
-                >
-                  <Ionicons
-                    name={
-                      values[field.key] === 'random'
-                        ? 'dice-outline'
-                        : 'refresh-outline'
+                        ? ''
+                        : String(values[field.key])
                     }
-                    size={20}
-                    color={colors.accent}
+                    onChangeText={(text) =>
+                      setValue(field.key, text.trim() === '' ? 'random' : text)
+                    }
+                    placeholder={t('persons.randomSeed')}
+                    placeholderTextColor={colors.textDisabled}
+                    keyboardType="numeric"
+                    inputAccessoryViewID={accessoryId}
                   />
-                </Pressable>
-              </View>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.diceBtn,
+                      pressed && { backgroundColor: colors.surfacePressed },
+                    ]}
+                    onPress={() =>
+                      setValue(
+                        field.key,
+                        values[field.key] === 'random'
+                          ? randomSeed()
+                          : 'random',
+                      )
+                    }
+                  >
+                    <Ionicons
+                      name={
+                        values[field.key] === 'random'
+                          ? 'dice-outline'
+                          : 'refresh-outline'
+                      }
+                      size={20}
+                      color={colors.accent}
+                    />
+                  </Pressable>
+                </View>
+                <SourceSeedChip
+                  seed={sourceSeeds[field.key]}
+                  current={values[field.key] as number | string | undefined}
+                  onReuse={(seed) => setValue(field.key, seed)}
+                />
+              </>
             )}
 
             {field.kind === 'dimensions' &&

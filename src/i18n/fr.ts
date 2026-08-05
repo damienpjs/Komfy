@@ -434,6 +434,9 @@ export default {
     launchX: 'Lancer ×{{count}}',
     launch: 'Lancer',
     done: 'Terminé',
+    sourceSeed: "Seed d'origine {{seed}} — réutiliser",
+    sourceSeedActive: "Seed d'origine de l'image réutilisé.",
+    sourceSeedA11y: "Réutiliser le seed de l'image d'origine, {{seed}}",
   },
   graph: {
     model: 'Modèle',
@@ -558,6 +561,8 @@ export default {
     detailsModified: 'Modification',
     detailsNeedsExt:
       "Poids et dates nécessitent l'extension komfy-listing : redémarrer ComfyUI pour la recharger.",
+    detailsRecipe: 'Recette',
+    detailsRecipeFailed: 'Recette illisible : {{message}}',
   },
   jobDetail: {
     title: 'Job #{{number}}',

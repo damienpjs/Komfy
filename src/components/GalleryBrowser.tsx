@@ -36,6 +36,7 @@ import { useRemix } from '../hooks/useRemix';
 import { useImportDraft } from '../store/importDraft';
 import { useSettings } from '../store/settings';
 import { useToast } from '../store/toast';
+import { remixHref } from '../utils/remixHref';
 import { saveImageToPhotos } from '../utils/saveToPhotos';
 import { useConnection } from '../store/connection';
 import {
@@ -367,9 +368,7 @@ export function GalleryBrowser() {
       if (result.status === 'match') {
         setViewer(null);
         router.push(
-          `/workflow/${result.manifestId}?prefill=${encodeURIComponent(
-            JSON.stringify(result.values),
-          )}` as Href,
+          remixHref(result.manifestId, result.values, result.sourceSeeds),
         );
       } else if (result.status === 'no-metadata') {
         Alert.alert(t('gallery.noMetadataTitle'), t('gallery.noMetadataBody'));

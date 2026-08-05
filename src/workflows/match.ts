@@ -6,7 +6,8 @@
  *  - LoraLoaderModelOnly (loras field);
  *  - per-character SEGS filter + DetailerForEach, or a lone DetailerForEach
  *    on the raw SEGS (persons field, FaceSwap — see PersonsValue.allFaces).
- * On a match → pre-filled form (seed reset to "random").
+ * On a match → pre-filled form (seed reset to "random", the source image's
+ * own seed carried aside as `sourceSeeds` so the form can offer to reuse it).
  */
 
 import type { PromptGraph } from '../api/types';
@@ -30,8 +31,21 @@ function isConn(v: unknown): v is Conn {
   );
 }
 
+/**
+ * Seed the matched image was drawn with, per seed-carrying field key
+ * (kind 'seed' and the persons field's shared seed). Empty when the graph
+ * wires its seeds instead of holding literals. Kept OUT of the values so a
+ * variant stays a variant by default — the form only offers to reuse it.
+ */
+export type SourceSeeds = Record<string, number>;
+
 export type MatchOutcome =
-  | { status: 'match'; manifestId: string; values: FieldValues }
+  | {
+      status: 'match';
+      manifestId: string;
+      values: FieldValues;
+      sourceSeeds: SourceSeeds;
+    }
   | { status: 'unknown-workflow' };
 
 interface RawPerson extends PersonValue {
@@ -39,6 +53,22 @@ interface RawPerson extends PersonValue {
   index: number | null;
   denoise: number;
   steps: number;
+  /** This pass's seed (numbered mode: base + index — cf. patch.ts). */
+  seed?: number;
+}
+
+/**
+ * Literal seed of an input: a number, or a digits-only string (some custom
+ * nodes serialize theirs that way). A connection (seed driven by another
+ * node) has no literal to reuse → undefined.
+ */
+function literalSeed(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && /^\d+$/.test(value.trim())) {
+    const n = Number(value.trim());
+    return Number.isFinite(n) ? n : undefined;
+  }
+  return undefined;
 }
 
 /**
@@ -242,6 +272,7 @@ function absorbDetailer(
     denoise: Number(detailer.inputs.denoise),
     steps: Number(detailer.inputs.steps),
     guideSize: Number.isFinite(guideSize) ? guideSize : undefined,
+    seed: literalSeed(detailer.inputs.seed),
   });
 
   const imageConn = detailer.inputs.image;
@@ -381,7 +412,7 @@ function walk(
 function tryMatch(
   extracted: PromptGraph,
   manifest: WorkflowManifest,
-): FieldValues | null {
+): { values: FieldValues; sourceSeeds: SourceSeeds } | null {
   // Text-result workflow: no image (hence no PNG to remix).
   if (manifest.saveNodeId == null) return null;
   // Entry point: the output node (same class_type as saveNodeId).
@@ -476,6 +507,7 @@ function tryMatch(
   }
 
   const values: FieldValues = {};
+  const sourceSeeds: SourceSeeds = {};
   for (const field of manifest.fields) {
     switch (field.kind) {
       case 'text': {
@@ -493,10 +525,18 @@ function tryMatch(
         values[field.key] = Number.isFinite(n) ? n : field.default;
         break;
       }
-      case 'seed':
-        // Variant = same parameters, new seed (ROADMAP 4b).
+      case 'seed': {
+        // Variant = same parameters, new seed (ROADMAP 4b). The image's own
+        // seed is kept aside: the form offers it back in one tap.
         values[field.key] = 'random';
+        const eId = state.map.get(field.target.nodeId);
+        const seed =
+          eId != null
+            ? literalSeed(extracted[eId]?.inputs[field.target.input])
+            : undefined;
+        if (seed != null) sourceSeeds[field.key] = seed;
         break;
+      }
       case 'image': {
         const eId = state.map.get(field.target.nodeId);
         const v = extracted[eId!]?.inputs[field.target.input];
@@ -589,6 +629,12 @@ function tryMatch(
         break;
       }
       case 'persons': {
+        // Shared seed: patch.ts gives pass i the seed `base + index`, so the
+        // base is recovered from any pass (allFaces = a single pass, base as is).
+        const first = state.persons[0];
+        if (first?.seed != null) {
+          sourceSeeds[field.key] = first.seed - (first.index ?? 0);
+        }
         if (allFaces) {
           const raw = state.persons[0];
           values[field.key] = {
@@ -635,7 +681,7 @@ function tryMatch(
       }
     }
   }
-  return values;
+  return { values, sourceSeeds };
 }
 
 /**
@@ -648,8 +694,15 @@ export function matchGraph(
   candidates: WorkflowManifest[],
 ): MatchOutcome {
   for (const manifest of candidates) {
-    const values = tryMatch(extracted, manifest);
-    if (values) return { status: 'match', manifestId: manifest.id, values };
+    const matched = tryMatch(extracted, manifest);
+    if (matched) {
+      return {
+        status: 'match',
+        manifestId: manifest.id,
+        values: matched.values,
+        sourceSeeds: matched.sourceSeeds,
+      };
+    }
   }
   return { status: 'unknown-workflow' };
 }

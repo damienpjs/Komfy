@@ -37,14 +37,17 @@ import type {
   PersonsValue,
 } from '../workflows/types';
 import { LoraField } from './LoraField';
+import { SourceSeedChip } from './SourceSeedChip';
 
 interface Props {
   field: PersonsFieldSpec;
   value: PersonsValue;
   onChange: (value: PersonsValue) => void;
+  /** Remix: shared seed of the source image, offered back in one tap. */
+  sourceSeed?: number;
 }
 
-export function PersonsField({ field, value, onChange }: Props) {
+export function PersonsField({ field, value, onChange, sourceSeed }: Props) {
   const { t } = useTranslation();
   // Per-character denoise text being edited (intermediate states like "0,"
   // tolerated; numeric commit on the fly).
@@ -340,6 +343,14 @@ export function PersonsField({ field, value, onChange }: Props) {
           </View>
         </View>
       </View>
+
+      {/* Remix: the seed the source image was drawn with (full width — the
+          shared row is too narrow for it). */}
+      <SourceSeedChip
+        seed={sourceSeed}
+        current={value.seed}
+        onReuse={(seed) => onChange({ ...value, seed })}
+      />
     </View>
   );
 }
