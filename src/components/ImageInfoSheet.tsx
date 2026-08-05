@@ -1,17 +1,29 @@
 /**
- * Simple file details opened by the viewer's swipe-up gesture: name, folder,
+ * File details opened by the viewer's swipe-up gesture: name, folder,
  * dimensions (measured client-side — image load or the video track), duration
- * (videos), size and dates (from the komfy-listing listing). Nothing
- * workflow-related here — the recipe lives behind the "variant" flow
- * (RemixSheet).
+ * (videos), size and dates (from the komfy-listing listing), then the
+ * generation recipe read from the file itself (PNG `prompt` chunk, /history
+ * for the videos): model, prompts, seed, sampling, LoRAs — the same
+ * GraphSummary block as the queue detail and the unknown-workflow sheet.
  */
 
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import type { PromptGraph } from '../api/types';
 import type { GalleryImage } from '../hooks/useGallery';
+import { useRemix } from '../hooks/useRemix';
 import { colors, spacing, typography } from '../theme/tokens';
 import { formatBytes } from '../utils/format';
-import { Row } from './GraphSummary';
+import { GraphSummary, Row } from './GraphSummary';
 
 interface Props {
   /** Item to describe — null keeps the sheet closed. */
@@ -23,9 +35,50 @@ interface Props {
   onClose: () => void;
 }
 
-export function ImageInfoSheet({ image, dimensions, durationSec, onClose }: Props) {
+/** Recipe of the displayed item: loaded once per sheet opening. */
+function useRecipe(image: GalleryImage) {
+  const remix = useRemix();
+  const [state, setState] = useState<
+    | { status: 'loading' }
+    | { status: 'ready'; graph: PromptGraph }
+    | { status: 'none' }
+    | { status: 'failed'; message: string }
+  >({ status: 'loading' });
+
+  useEffect(() => {
+    let cancelled = false;
+    setState({ status: 'loading' });
+    remix
+      .graphOf(image)
+      .then((graph) => {
+        if (cancelled) return;
+        setState(graph ? { status: 'ready', graph } : { status: 'none' });
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        setState({
+          status: 'failed',
+          message: e instanceof Error ? e.message : String(e),
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+    // The body is mounted only while the sheet is open, and keyed on the
+    // item: one read per opening, none in the background.
+  }, [remix, image]);
+
+  return state;
+}
+
+function InfoSheetBody({
+  image,
+  dimensions,
+  durationSec,
+  onClose,
+}: Props & { image: GalleryImage }) {
   const { t, i18n } = useTranslation();
-  if (!image) return null;
+  const recipe = useRecipe(image);
 
   const date = (epochS?: number) =>
     epochS
@@ -99,10 +152,36 @@ export function ImageInfoSheet({ image, dimensions, durationSec, onClose }: Prop
           {image.size == null && (
             <Text style={styles.needsExt}>{t('viewer.detailsNeedsExt')}</Text>
           )}
+
+          <View style={styles.separator} />
+          <Text style={styles.section}>{t('viewer.detailsRecipe')}</Text>
+
+          {recipe.status === 'loading' && (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator size="small" color={colors.accent} />
+              <Text style={styles.note}>{t('viewer.readingRecipe')}</Text>
+            </View>
+          )}
+          {recipe.status === 'ready' && <GraphSummary graph={recipe.graph} />}
+          {recipe.status === 'none' && (
+            <Text style={styles.note}>{t('gallery.noMetadataBody')}</Text>
+          )}
+          {recipe.status === 'failed' && (
+            <Text style={styles.note}>
+              {t('viewer.detailsRecipeFailed', { message: recipe.message })}
+            </Text>
+          )}
         </ScrollView>
       </View>
     </Modal>
   );
+}
+
+export function ImageInfoSheet({ image, ...rest }: Props) {
+  // Keyed on the item: opening the sheet on another file remounts the body,
+  // so its recipe state starts clean instead of showing the previous one.
+  if (!image) return null;
+  return <InfoSheetBody key={image.path} image={image} {...rest} />;
 }
 
 const styles = StyleSheet.create({
@@ -140,5 +219,26 @@ const styles = StyleSheet.create({
     fontFamily: typography.ui,
     fontSize: typography.sizes.xs,
     marginTop: spacing.sm,
+  },
+  separator: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginTop: spacing.sm,
+  },
+  section: {
+    color: colors.text,
+    fontFamily: typography.uiSemiBold,
+    fontSize: typography.sizes.md,
+  },
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  note: {
+    color: colors.textDisabled,
+    fontFamily: typography.ui,
+    fontSize: typography.sizes.xs,
+    lineHeight: 18,
   },
 });

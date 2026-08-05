@@ -144,10 +144,12 @@ ComfyUI embeds the full workflow and parameters in the PNG metadata (`prompt` an
   2. Fallback: download the PNG via `/view` and parse the tEXt chunks app-side (light TS PNG parser — no native lib required).
 - [x] Matching: compare the extracted graph against the app's embedded workflows (class_type/structure fingerprint). If it matches a known workflow → pre-fill its launch form with the extracted parameters (prompt, seed, etc.).
 - [x] UI: **"Create a variant"** button in the full-screen view. Accepted deviation from the initial plan: button always active, verdict on tap (spinner then an explicit "image without metadata" / "unknown workflow" message) — anticipating the check would have required downloading every PNG on swipe, prohibitive on 4G. Amended (2026-07-28): also enabled for videos — the recipe comes from `/history` (native `SaveVideo` lists the `.mp4` under `outputs.images`); the dual-expert WAN i2v matcher now attributes each expert's LoRA chain to its own field (was merging both) and tolerates optional branches switched off via `bypassNodes` (e.g. last-frame).
-- [x] Editable pre-filled form → new seed by default → `POST /prompt`.
+- [x] Editable pre-filled form → new seed by default → `POST /prompt`. Amended (2026-08-05): the source image's seed travels alongside the values (`seeds` route param, never a form value) and is offered under the seed field — one tap to freeze the noise and iterate on the prompt alone. Generic: it lives in the `seed` field renderer and in the FaceSwap shared seed (`PersonsField`), so every workflow — embedded or imported — gets it.
 - [x] Case not handled in the MVP: workflow unknown to the app (valid metadata but a different graph) → explicit message, no raw re-queue attempt (v2 backlog: re-queue of the graph as-is).
 
-**Deliverable**: long-press/open an image → "Create a variant" → job queued with the same parameters, different seed.
+**Deliverable**: long-press/open an image → "Create a variant" → job queued with the same parameters, different seed (or the original one, on request).
+
+Related (2026-08-05): the file details sheet (swipe up in the full-screen viewer) now also reads the recipe — model, prompts, **seed**, sampling, LoRAs — via the same extraction, so consulting the seed no longer requires going through the variant flow.
 
 ## Sprint 5 — Polish & distribution (1 day)
 

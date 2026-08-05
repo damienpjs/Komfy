@@ -427,6 +427,9 @@ export default {
     launchX: 'Launch ×{{count}}',
     launch: 'Launch',
     done: 'Done',
+    sourceSeed: 'Source seed {{seed}} — reuse',
+    sourceSeedActive: 'Source seed of the image reused.',
+    sourceSeedA11y: 'Reuse the source image seed, {{seed}}',
   },
   graph: {
     model: 'Model',
@@ -551,6 +554,8 @@ export default {
     detailsModified: 'Modified',
     detailsNeedsExt:
       'Size and dates need the komfy-listing extension: restart ComfyUI to reload it.',
+    detailsRecipe: 'Recipe',
+    detailsRecipeFailed: 'Could not read the recipe: {{message}}',
   },
   jobDetail: {
     title: 'Job #{{number}}',
