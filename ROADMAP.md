@@ -17,7 +17,7 @@ Mobile remote (iOS/Android) for the local ComfyUI pipeline (reference machine: M
 > Windows alike. On a standard install where `output` is an ordinary,
 > always-present folder, the iCloud "evicted file" / "volume not mounted"
 > caveats below simply never fire. See
-> [docs/portability.md](docs/portability.md) for the OS-agnostic runguide.
+> `docs/portability.md` (local notes) for the OS-agnostic runguide.
 
 ### Target server
 
