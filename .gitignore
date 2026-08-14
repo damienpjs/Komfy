@@ -43,5 +43,9 @@ server/supervisor/.token
 expo-env.d.ts
 # @end expo-cli
 
-#docs
-docs/
+# docs/ — local working notes (API captures, workflow plans): never published.
+# Exception: the architecture diagram embedded in the README §Architecture.
+docs/*
+!docs/architecture.excalidraw
+!docs/architecture.png
+!docs/architecture-dark.png

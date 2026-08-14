@@ -11,9 +11,21 @@ gallery, remix an image from its recipe. UI in English and French
 > for other workflows.
 
 Stack: Expo SDK 54 (React Native + TypeScript), Expo Router, Zustand,
-TanStack Query, i18next. Network: **Tailscale only**. See
-[docs/api-notes.md](./docs/api-notes.md) for the real API responses
-(source of truth for the TS types).
+TanStack Query, i18next. Network: **Tailscale only**. The types in
+[`src/api/types.ts`](./src/api/types.ts) transcribe responses captured from a
+real ComfyUI server (0.27.0) — none of them are guessed; the capture notes
+themselves (`docs/api-notes.md`) are local working files, not published.
+
+## Architecture
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./docs/architecture-dark.png">
+  <img src="./docs/architecture.png" width="100%"
+       alt="Komfy architecture: the Expo app (screens, Zustand, TanStack Query, workflow manifest engine, network layer) reaches the local machine through one mandatory hop — the Tailscale tailnet, with no LAN mode, port forwarding or relay fallback — to ComfyUI on port 8188 (core API plus the komfy-listing extension) and to a standalone supervisor on port 8189 that starts, stops and tails ComfyUI.">
+</picture>
+
+<sub>Editable source: [`docs/architecture.excalidraw`](./docs/architecture.excalidraw)
+— drop it on [excalidraw.com](https://excalidraw.com) to edit, then re-export.</sub>
 
 ## Prerequisites
 
@@ -269,5 +281,6 @@ komfy/
 ├── src/theme/tokens.ts   # style guide — no hardcoded styles elsewhere
 ├── server/komfy-listing/ # ComfyUI extension (recursive output+input listing, trash)
 ├── server/supervisor/    # standalone Node service: remote ComfyUI on/off + live console
-└── docs/api-notes.md     # real API responses (Sprint 0 and later)
+└── docs/architecture.*   # architecture diagram: Excalidraw source + PNG exports
+                          # (rest of docs/ = local notes, git-ignored)
 ```

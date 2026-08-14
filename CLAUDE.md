@@ -24,8 +24,12 @@ approved the exact names.**
 
 ## Pointers
 
-- Real ComfyUI API responses (source of truth for the TS types):
-  `docs/api-notes.md` — do not code the client on assumptions.
+- Real ComfyUI API responses: `docs/api-notes.md` — source of truth for the
+  TS types in `src/api/types.ts`. It is a **local, git-ignored** file (all of
+  `docs/` is, except the architecture diagram published in the README), so it
+  may not be present in a fresh clone. Either way the rule stands: never code
+  the client on assumptions — with the notes out of reach, check a live server
+  (`GET /object_info`, `/history`, `/system_stats`) before adding a shape.
 - Style guide: tokens centralized in `src/theme/tokens.ts`, no hardcoded
   styles in screens.
 - i18n: UI strings live in `src/i18n/en.ts` and `fr.ts` (default English);
