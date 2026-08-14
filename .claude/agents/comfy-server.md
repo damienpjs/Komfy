@@ -98,4 +98,5 @@ the install's cwd with the data venv's python:
 - After launching: validate `curl http://$(tailscale ip -4):<port>/queue`.
 - Never interrupt/clear an existing instance's queue: it may carry real
   jobs.
-- No `git commit` (project convention, see CLAUDE.md).
+- No `git commit`: this agent diagnoses and launches, it never writes
+  history — commits go through the maintainer's approval (see CLAUDE.md).
