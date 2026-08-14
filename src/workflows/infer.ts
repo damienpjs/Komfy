@@ -218,6 +218,9 @@ const MODEL_INPUT_LABELS: Record<string, string> = {
 /** Display order of the inferred fields (form top → bottom). */
 const KIND_RANK: Record<WorkflowField['kind'], number> = {
   image: 0,
+  // Same rank as the image it is painted over, and never inferred either: an
+  // imported LoadImageMask has no way to say which picture it masks.
+  mask: 0,
   text: 1,
   model: 2,
   // Never inferred from an imported graph (embedded workflows only), but the

@@ -3,6 +3,7 @@
 export default {
   common: {
     cancel: 'Annuler',
+    done: 'Terminé',
     delete: 'Supprimer',
     save: 'Enregistrer',
     close: 'Fermer',
@@ -312,6 +313,34 @@ export default {
       label: 'Style de prompt',
       hint: 'Conventions du modèle pour lequel le prompt est écrit',
     },
+    inpaintDraw: {
+      name: 'Inpaint (masque dessiné)',
+      description: 'Peindre une zone au doigt et la régénérer',
+      mask: 'Zone à régénérer',
+      maskHint:
+        "Peindre sur l'image — le pinceau marque ce qui sera régénéré",
+      promptPlaceholder: 'Ce qui doit apparaître dans la zone peinte…',
+      maskMode: 'Méthode de masquage',
+      maskModeNoise: 'Masque de bruit',
+      maskModeConditioning: 'Conditionnement inpaint',
+      maskModeHint:
+        'Le masque de bruit fonctionne avec tous les modèles. Le conditionnement fond mieux les bords, mais convient aux modèles entraînés pour l’inpainting',
+      area: 'Zone peinte',
+      areaRepaint: 'La régénérer',
+      areaPreserve: 'La préserver',
+      areaHint:
+        'Ou inverser : garder le dessin intact et refaire tout le reste',
+      grow: 'Élargir',
+      growHint:
+        'Élargit (ou rétrécit, si négatif) la zone peinte de ce nombre de pixels',
+      feather: 'Adoucir',
+      featherHint:
+        'Adoucit le bord du masque — plus la valeur est haute, plus le fondu est progressif',
+      denoiseHint:
+        "1 = la zone est entièrement réécrite, moins en conserve une partie de l'original",
+      cfgHint:
+        'Fidélité au prompt. 1 pour un modèle turbo/distillé, 5–8 sinon',
+    },
     inpaint: {
       name: 'Inpaint auto (KREA2)',
       description:
@@ -397,6 +426,7 @@ export default {
   validation: {
     required: 'Champ requis',
     imageRequired: 'Image requise',
+    maskRequired: 'Dessiner la zone à régénérer',
     modelRequired: 'Choisir un modèle',
     integerDims: 'Dimensions entières requises',
     dimRange: 'Entre {{min}} et {{max}} px',
@@ -513,6 +543,20 @@ export default {
       '{{size}} Mo — la limite est de {{limit}} Mo. Choisir une image plus légère.',
     uploadFailed: 'Upload impossible',
     choose: 'Choisir une image',
+  },
+  maskInput: {
+    needsSource: "Choisir d'abord l'image source",
+    draw: 'Dessiner le masque',
+    uploadFailed: 'Upload du masque impossible',
+  },
+  maskEditor: {
+    title: 'Peindre la zone',
+    paint: 'Pinceau',
+    erase: 'Gomme',
+    undo: 'Annuler',
+    clear: 'Tout effacer',
+    fit: 'Recadrer',
+    hint: 'Un doigt dessine · deux doigts zooment et déplacent',
   },
   lora: {
     add: 'Ajouter un LoRA',
