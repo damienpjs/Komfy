@@ -72,6 +72,7 @@ function patchedInputKeys(manifest: WorkflowManifest): Set<string> {
       case 'text':
       case 'seed':
       case 'image':
+      case 'mask':
       case 'model':
         add(field.target);
         break;

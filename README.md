@@ -217,10 +217,13 @@ into Import on another phone transfers the workflow as-is.
 2. Create `src/workflows/<id>.ts`: paste the graph, write the manifest
    (name, icon, description, `saveNodeId`, patchable fields — see
    [krea2-text2img.ts](./src/workflows/krea2-text2img.ts) as a model).
-   Field kinds: `text`, `number`, `seed`, `select`, `model`, `dimensions`,
-   `image`, `loras`, `persons`. A `model` field offers the files actually
-   installed on the server (its target's `/object_info` enum, optional
-   family `filter` regex) instead of freezing a filename.
+   Field kinds: `text`, `number`, `seed`, `select`, `model`, `modelSource`,
+   `dimensions`, `image`, `mask`, `loras`, `persons`. A `model` field offers
+   the files actually installed on the server (its target's `/object_info`
+   enum, optional family `filter` regex) instead of freezing a filename;
+   `modelSource` generalizes it to a whole model (checkpoint, or diffusion
+   model + CLIP + VAE). A `mask` field lets the user paint an area over the
+   picture held by another field (`sourceKey`) and uploads it as a PNG.
    User-facing manifest strings are i18n keys — add them to
    [src/i18n/en.ts](./src/i18n/en.ts) and [fr.ts](./src/i18n/fr.ts).
 3. Register it in [src/workflows/index.ts](./src/workflows/index.ts).
@@ -277,7 +280,7 @@ komfy/
 ├── src/components/       # UI (queue cards, pickers, viewer, SetupWizard, ServerPowerCard, PairingScanner…)
 ├── src/store/            # Zustand: settings, connection, supervisor, execution, toast, outputPrefs, customWorkflows, generatedPrompts (phone-local prompt library)
 ├── src/hooks/            # useQueue, useGallery, useLoras, useRemix, useHealthCheck, useSupervisor(+Logs), useAvailability, usePendingPrompts
-├── src/utils/            # pathTree (explorer), pngMetadata (tEXt chunks), pairing (QR/deep-link setup code)
+├── src/utils/            # pathTree (explorer), pngMetadata (tEXt chunks), pairing (QR/deep-link setup code), maskRaster + png (JS mask rasterizer/PNG encoder)
 ├── src/theme/tokens.ts   # style guide — no hardcoded styles elsewhere
 ├── server/komfy-listing/ # ComfyUI extension (recursive output+input listing, trash)
 ├── server/supervisor/    # standalone Node service: remote ComfyUI on/off + live console

@@ -3,6 +3,7 @@
 export default {
   common: {
     cancel: 'Cancel',
+    done: 'Done',
     delete: 'Delete',
     save: 'Save',
     close: 'Close',
@@ -308,6 +309,30 @@ export default {
       label: 'Prompt style',
       hint: 'Conventions of the model the prompt is written for',
     },
+    inpaintDraw: {
+      name: 'Inpaint (drawn mask)',
+      description: 'Paint an area with your finger and regenerate it',
+      mask: 'Area to inpaint',
+      maskHint: 'Paint over the image — the brush marks what gets regenerated',
+      promptPlaceholder: 'What should appear in the painted area…',
+      maskMode: 'Masking method',
+      maskModeNoise: 'Noise mask',
+      maskModeConditioning: 'Inpaint conditioning',
+      maskModeHint:
+        'The noise mask works with every model. Inpaint conditioning blends edges better, but suits models trained for inpainting',
+      area: 'Painted area',
+      areaRepaint: 'Regenerate it',
+      areaPreserve: 'Preserve it',
+      areaHint: 'Or invert: keep the drawing untouched and redo the rest',
+      grow: 'Grow',
+      growHint:
+        'Widens (or shrinks, if negative) the painted area by this many pixels',
+      feather: 'Feather',
+      featherHint: 'Softens the mask edge — the higher, the more gradual the blend',
+      denoiseHint:
+        '1 = the area is fully rewritten, lower keeps some of the original',
+      cfgHint: 'Prompt adherence. 1 for a turbo/distilled model, 5–8 otherwise',
+    },
     inpaint: {
       name: 'Auto inpaint (KREA2)',
       description: 'Regenerates an auto-detected area — or everything but it',
@@ -390,6 +415,7 @@ export default {
   validation: {
     required: 'Required field',
     imageRequired: 'Image required',
+    maskRequired: 'Draw the area to inpaint',
     modelRequired: 'Pick a model',
     integerDims: 'Integer dimensions required',
     dimRange: 'Between {{min}} and {{max}} px',
@@ -506,6 +532,20 @@ export default {
       '{{size}} MB — the limit is {{limit}} MB. Pick a lighter image.',
     uploadFailed: 'Upload failed',
     choose: 'Choose an image',
+  },
+  maskInput: {
+    needsSource: 'Pick the source image first',
+    draw: 'Draw the mask',
+    uploadFailed: 'Mask upload failed',
+  },
+  maskEditor: {
+    title: 'Paint the area',
+    paint: 'Brush',
+    erase: 'Eraser',
+    undo: 'Undo',
+    clear: 'Clear',
+    fit: 'Fit',
+    hint: 'One finger draws · two fingers zoom and pan',
   },
   lora: {
     add: 'Add a LoRA',

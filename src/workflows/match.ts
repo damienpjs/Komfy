@@ -537,7 +537,10 @@ function tryMatch(
         if (seed != null) sourceSeeds[field.key] = seed;
         break;
       }
-      case 'image': {
+      case 'image':
+      case 'mask': {
+        // Both carry a server-side filename; remixing re-uses the mask
+        // already sitting in the input folder, editable again in the form.
         const eId = state.map.get(field.target.nodeId);
         const v = extracted[eId!]?.inputs[field.target.input];
         values[field.key] = typeof v === 'string' ? v : '';

@@ -25,6 +25,7 @@ import {
 import { ComfyApiError, createClient } from '../../api/client';
 import type { PromptErrorResponse } from '../../api/types';
 import { ImageInputField } from '../../components/ImageInputField';
+import { MaskInputField } from '../../components/MaskInputField';
 import { LoraField } from '../../components/LoraField';
 import { ModelField } from '../../components/ModelField';
 import { ModelSourceField } from '../../components/ModelSourceField';
@@ -161,7 +162,7 @@ function initialValues(
       values[field.key] = restored;
     }
     if (field.kind === 'loras') values[field.key] = field.default ?? [];
-    if (field.kind === 'image') values[field.key] = '';
+    if (field.kind === 'image' || field.kind === 'mask') values[field.key] = '';
     if (field.kind === 'dimensions')
       values[field.key] = { ...field.default, inverted: false, custom: false };
     if (field.kind === 'persons')
@@ -467,6 +468,14 @@ export default function WorkflowLaunchScreen() {
               <ImageInputField
                 value={String(values[field.key] ?? '')}
                 onChange={(name) => setValue(field.key, name)}
+              />
+            )}
+
+            {field.kind === 'mask' && (
+              <MaskInputField
+                value={String(values[field.key] ?? '')}
+                onChange={(name) => setValue(field.key, name)}
+                sourceFilename={String(values[field.sourceKey] ?? '')}
               />
             )}
 

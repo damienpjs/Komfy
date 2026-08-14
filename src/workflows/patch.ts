@@ -92,6 +92,11 @@ export function validate(
         errors[field.key] = i18n.t('validation.imageRequired');
       }
     }
+    if (field.kind === 'mask' && field.required) {
+      if (typeof value !== 'string' || value === '') {
+        errors[field.key] = i18n.t('validation.maskRequired');
+      }
+    }
     if (field.kind === 'dimensions') {
       const v = value as DimensionsValue | undefined;
       const dims = [v?.width, v?.height];
@@ -509,7 +514,10 @@ function insertModelSource(
     rewire(field.vaeTargets, [field.checkpointNodeId, 2]);
     // SD1.5/SDXL checkpoints use a 4-channel latent; swap the 16-channel
     // node in place (same width/height/batch_size signature).
-    const latent = graph[field.latentNodeId];
+    // Image-to-image workflows have no empty latent to swap (cf. the field's
+    // latentNodeId doc) — the VAE settles the channel count there.
+    const latent =
+      field.latentNodeId != null ? graph[field.latentNodeId] : undefined;
     if (latent) latent.class_type = 'EmptyLatentImage';
     delete graph[field.unetNodeId];
     delete graph[field.clipNodeId];
@@ -568,6 +576,7 @@ export function patchGraph(
         );
         break;
       case 'image':
+      case 'mask':
         applyPatch(graph, field.target, String(value ?? ''));
         break;
       case 'model':

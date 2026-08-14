@@ -116,8 +116,12 @@ export interface ModelSourceField extends FieldBase {
    * models), swapped in place to 4-channel (EmptyLatentImage) in checkpoint
    * mode — the usual SD1.5/SDXL case. Both nodes share the width/height/
    * batch_size signature, so only class_type changes (cf. insertModelSource).
+   *
+   * Absent when the workflow has no empty latent because it starts from an
+   * encoded image: VAEEncode derives the channel count from the VAE, so
+   * there is nothing to swap (cf. the hand-drawn inpaint).
    */
-  latentNodeId: string;
+  latentNodeId?: string;
   /** MODEL consumers rewired to the active model output (e.g. KSampler). */
   modelTargets: PatchTarget[];
   /** CLIP consumers rewired to the active CLIP output (CLIPTextEncode). */
@@ -263,6 +267,24 @@ export interface ImageField extends FieldBase {
 }
 
 /**
+ * Hand-drawn mask field: the user paints over the image held by another
+ * field (`sourceKey`), the strokes are rasterized and encoded to a PNG in
+ * JS (cf. utils/maskRaster + utils/png — Komfy has no native canvas, see
+ * the README's Expo Go constraint), uploaded via POST /upload/image, and
+ * the value becomes the server-side filename patched into LoadImageMask.
+ *
+ * Same value shape as `image` (a filename string), so patch/match/remix
+ * treat the two identically.
+ */
+export interface MaskField extends FieldBase {
+  kind: 'mask';
+  target: PatchTarget;
+  /** Key of the `image` field whose picture is painted over. */
+  sourceKey: string;
+  required?: boolean;
+}
+
+/**
  * Working resolutions of the detailer (DetailerForEach guide_size).
  * The face crop is regenerated at this resolution: higher = more real
  * detail on large images (the face is no longer downscaled before the
@@ -353,6 +375,7 @@ export type WorkflowField =
   | ModelSourceField
   | DimensionsField
   | ImageField
+  | MaskField
   | LorasField
   | PersonsField;
 
