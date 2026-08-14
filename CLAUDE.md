@@ -1,14 +1,25 @@
 # Komfy — project conventions
 
-## Git: reserved to the maintainer
+## Git: the maintainer approves, then the agent writes
 
-**No agent commits, pushes, or takes credit for anything.**
+**The agent may branch and commit — but only after the maintainer has
+approved the exact names.**
 
-- No `git commit`, `git push`, `git tag`, or history rewriting — ever,
-  even when the task looks "finished and verified".
-- No `Co-Authored-By` trailer, no changes to `git config user.*`.
-- The agent leaves its changes in the working tree and summarizes what
-  changed; **the maintainer commits** if they see fit.
+- **Propose before writing.** Announce the branch name, the commit
+  message(s) and which files land in each, then wait for an explicit go —
+  no silent commit, even when the task looks "finished and verified".
+- Branches and commits follow Conventional Commits — `type/kebab-summary`
+  and `type(scope): description` — see the `branch-name` and
+  `conventional-commit` skills, which produce those names.
+- A commit message is its subject line and nothing else: no body, no
+  footer, no trailer.
+- Work never lands directly on `develop` or `main`: branch first.
+- A push follows the same rule as a commit: announce the exact refs, wait
+  for the go, then push. An approval is never transitive — a go on a commit
+  is not a go on a push, and a go on one push does not cover the next.
+- Still reserved to the maintainer, with or without approval: `git tag` and
+  any history rewriting (`rebase`, `commit --amend`, `reset --hard`,
+  force-push).
 - `git status` / `git diff` / `git log` (read-only) remain allowed.
 
 ## Pointers

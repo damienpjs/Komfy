@@ -36,9 +36,9 @@ printf '%s' "$state_hash" > "$marker" 2>/dev/null || true
 # 4. Build the reminder, branch-aware.
 branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '')"
 if [ "$branch" = "develop" ] || [ "$branch" = "main" ]; then
-  reason="The working tree has uncommitted changes on '$branch' — work should not land directly on $branch. Before finishing, invoke the branch-name skill: it proposes an English branch name AND the Conventional Commits message. Propose only; never commit, switch, or create the branch."
+  reason="The working tree has uncommitted changes on '$branch' — work should not land directly on $branch. Before finishing, invoke the branch-name skill: it proposes an English branch name AND the Conventional Commits message. Propose the branch, message and files first, then wait for an explicit go before creating or committing anything."
 else
-  reason="The working tree has uncommitted changes. Before finishing, invoke the conventional-commit skill to propose an English Conventional Commits subject line. Propose only; never commit or stage."
+  reason="The working tree has uncommitted changes. Before finishing, invoke the conventional-commit skill to propose an English Conventional Commits subject line. Propose the message and the files it covers first, then wait for an explicit go before committing."
 fi
 
 python3 -c 'import json,sys;print(json.dumps({"decision":"block","reason":sys.argv[1]}))' "$reason"

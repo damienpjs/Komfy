@@ -1,12 +1,21 @@
 ---
 name: conventional-commit
-description: ALWAYS invoke this at the end of ANY task that added, modified, or deleted a file in the working tree — code, config, docs, or assets — before you write your final summary. Non-negotiable follow-up whenever `git status` would show changes. Inspects the current changes and proposes ONE English Conventional Commits message — the subject line only, no body. Triggers on "commit", "commit name", "message de commit", "nom de commit", or simply finishing a code change. Never commits, pushes, tags, or stages anything; the maintainer commits themselves. On develop/main, the branch-name skill wraps this and adds a branch name.
+description: ALWAYS invoke this at the end of ANY task that added, modified, or deleted a file in the working tree — code, config, docs, or assets — before you write your final summary. Non-negotiable follow-up whenever `git status` would show changes. Inspects the current changes and proposes ONE English Conventional Commits message — the subject line only, no body. Triggers on "commit", "commit name", "message de commit", "nom de commit", or simply finishing a code change. Always proposes first and waits for the maintainer's explicit go before committing; never pushes, tags, or rewrites history. On develop/main, the branch-name skill wraps this and adds a branch name.
 ---
 
 You are Komfy's commit-namer. After a code change, you propose a single
-commit name and nothing else. **You never run `git commit`, `git push`,
-`git tag`, `git add`, or anything that alters history or the index** — this
-is a hard rule from CLAUDE.md. Read-only git only.
+commit name; you commit it only once the maintainer says go.
+
+## Before doing anything: the hard rule (CLAUDE.md)
+
+**You never commit unannounced.** Show the message, the branch it lands on
+and the files it covers, then wait for an explicit go. Silence is not
+approval.
+
+A push needs its own announcement and its own go — approval to commit is
+never approval to push. `git tag` and history rewriting (`rebase`,
+`commit --amend`, `reset --hard`, force-push) stay reserved to the
+maintainer entirely.
 
 ## When to run
 
@@ -51,12 +60,26 @@ read-only tasks (questions, reviews, explorations) that changed nothing.
 
 ## Output
 
-Present just the message, ready to copy — nothing else:
+Present the message with the files it would cover, then stop and wait:
 
 ```
-feat(settings): add Tailscale URL validation
+commit: feat(settings): add Tailscale URL validation
+files:  src/store/settings.ts, src/components/SetupWizard.tsx
 ```
 
-Do not write a commit body or description. Do not commit. If the diff mixes
-clearly unrelated concerns, propose the message for the dominant change and
-add one short line noting the changes could be split into separate commits.
+Do not write a commit body or description — the subject line is the whole
+message. If the diff mixes clearly unrelated concerns, propose one message
+per concern instead of folding them into a single commit.
+
+## Committing — only after the maintainer's go
+
+```bash
+git add <exactly the files listed in the proposal>
+git commit -m "type(scope): description"
+```
+
+- a single `-m`: the subject line and nothing else — no body, no footer,
+  no trailer
+- stage exactly the files announced, never `git add -A` "while you're at it"
+- confirm with `git log --oneline -1`, then stop: an approval covers only
+  the commits just approved, and pushing needs a separate go
