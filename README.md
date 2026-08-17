@@ -40,7 +40,9 @@ Server side:
   and [ComfyUI-Custom-Scripts](https://github.com/pythongosssss/ComfyUI-Custom-Scripts)
   ("→ Prompt" workflows),
   [ComfyUI_UltimateSDUpscale](https://github.com/ssitu/ComfyUI_UltimateSDUpscale)
-  (Upscale workflow);
+  (Upscale workflow), comfyui-krea2edit (Krea2 Edit nodes) and
+  [ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes)
+  (Edit workflow — the latter sizes the output canvas from the source image);
 - **Ollama** running locally (`127.0.0.1:11434`, never exposed on the
   tailnet) with a vision model tagged `gemma4-vision:latest` — only for the
   "→ Prompt" workflows. Any Gemma-class vision model works; alias yours

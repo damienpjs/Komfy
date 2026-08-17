@@ -176,6 +176,13 @@ export function describeJob(graph: PromptGraph): JobSummary {
     summary.width = asNumber(latent?.inputs.width);
     summary.height = asNumber(latent?.inputs.height);
   }
+  // A canvas the graph sizes itself (KREA2 edit: dimensions derived from the
+  // source image) leaves a 0 placeholder on the sizing node — the real format
+  // is only known server-side, so show nothing rather than "0 × 0".
+  if ((summary.width ?? 0) <= 0 || (summary.height ?? 0) <= 0) {
+    summary.width = undefined;
+    summary.height = undefined;
+  }
 
   for (const node of nodes) {
     // Model: any node carrying a literal unet_name / ckpt_name (covers

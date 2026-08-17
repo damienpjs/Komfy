@@ -60,6 +60,29 @@ export function LoraField({ field, value, onChange }: Props) {
 
   return (
     <View style={styles.wrap}>
+      {/*
+        LoRAs the workflow always applies (LorasField.fixed): shown so the
+        recipe stays readable, but with no slider and no remove button — they
+        are part of the workflow, not of the selection.
+      */}
+      {(field.fixed ?? []).map((lora, index) => (
+        <View key={`fixed-${lora.name}-${index}`} style={[styles.card, styles.fixedCard]}>
+          <View style={styles.cardHeader}>
+            <View style={styles.cardTitleWrap}>
+              <Text style={styles.cardName} numberOfLines={1}>
+                {loraDisplayName(lora.name)}
+              </Text>
+              <View style={styles.dirChip}>
+                <Ionicons name="lock-closed" size={11} color={colors.textMuted} />
+                <Text style={styles.dirChipText} numberOfLines={1}>
+                  {t('lora.fixed', { strength: lora.strength })}
+                </Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      ))}
+
       {value.map((lora, index) => (
         // Key by name+index: the same LoRA can legitimately appear twice (e.g.
         // both WAN i2v experts default to the lightx2v distill), and a bare
@@ -165,6 +188,10 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     padding: spacing.md,
     gap: spacing.xs,
+  },
+  fixedCard: {
+    borderStyle: 'dashed',
+    backgroundColor: colors.bgElevated,
   },
   cardHeader: {
     flexDirection: 'row',

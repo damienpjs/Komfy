@@ -266,6 +266,24 @@ export function checkAvailability(
     }
   }
 
+  // Fixed LoRAs: inserted at patch time, so they have no frozen graph literal
+  // to check above — their file is validated against the chain's own enum
+  // (LoraLoaderModelOnly, already in requiredClassTypes). Without this a
+  // workflow built around a missing LoRA would look available and fail at
+  // launch. The anchor node is the chain's MODEL source (only `value` is
+  // surfaced to the user).
+  for (const field of manifest.fields) {
+    if (field.kind !== 'loras') continue;
+    for (const lora of field.fixed ?? []) {
+      checkValue(
+        'LoraLoaderModelOnly',
+        field.modelSource.nodeId,
+        'lora_name',
+        lora.name,
+      );
+    }
+  }
+
   // Select options: every choice offered must exist server-side (e.g. the
   // inpaint detector models).
   for (const field of manifest.fields) {

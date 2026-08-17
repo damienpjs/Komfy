@@ -2,6 +2,7 @@
 
 import { inpaintDraw } from './inpaint-draw';
 import { krea2Depth } from './krea2-depth';
+import { krea2Edit } from './krea2-edit';
 import { krea2FaceSwap } from './krea2-faceswap';
 import { krea2Image2Prompt } from './krea2-image2prompt';
 import { krea2Img2Img } from './krea2-img2img';
@@ -17,6 +18,7 @@ import { wan22I2v } from './wan22-i2v';
 export const workflows: WorkflowManifest[] = [
   krea2Text2Img,
   krea2Img2Img,
+  krea2Edit,
   wan22I2v,
   ltxI2v,
   krea2Upscale,

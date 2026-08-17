@@ -194,8 +194,9 @@ function connFrom(
 /**
  * Inserts the LoRA chain into the graph:
  * MODEL source → lora 1 → … → lora N → every MODEL target.
- * With no LoRA selected, the graph stays intact (targets already wired to
- * the source in the frozen JSON).
+ * The field's `fixed` LoRAs open the chain, ahead of the user's selection.
+ * With nothing to insert at all, the graph stays intact (targets already
+ * wired to the source in the frozen JSON).
  *
  * When the field declares a CLIP wiring (clipSource/clipTargets), each node is
  * a LoraLoader (MODEL + CLIP) rather than LoraLoaderModelOnly: the same LoRAs
@@ -229,7 +230,8 @@ function insertLoraChain(
   // Namespaced by field.key: a manifest may hold several loras fields (e.g. the
   // WAN dual-expert i2v, or an imported multi-chain graph), each inserting its
   // own chain — a shared `komfy_lora_N` id would collide across them.
-  loras.forEach((lora, i) => {
+  const chain = field.fixed != null ? [...field.fixed, ...loras] : loras;
+  chain.forEach((lora, i) => {
     const id = `komfy_lora_${field.key}_${i + 1}`;
     if (graph[id]) throw new Error(`Node id collision: ${id}`);
     if (withClip) {
