@@ -601,7 +601,10 @@ function tryMatch(
         const hId = state.map.get(field.heightTarget.nodeId);
         const w = Number(extracted[wId!]?.inputs[field.widthTarget.input]);
         const h = Number(extracted[hId!]?.inputs[field.heightTarget.input]);
-        if (Number.isFinite(w) && Number.isFinite(h)) {
+        // > 0: a workflow whose canvas is sized by the graph itself (KREA2
+        // edit — dimensions derived from the source image) leaves a 0 on the
+        // sizing node. That is a placeholder, not a format: keep the default.
+        if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) {
           // Matching landscape preset (straight or inverted), else custom.
           const straight = field.options.some(
             (o) => o.width === w && o.height === h,
@@ -626,9 +629,27 @@ function tryMatch(
       }
       case 'loras': {
         // Each field takes only the LoRAs on the chain feeding its own MODEL
-        // source — the extracted node the manifest source maps to.
-        const source = state.map.get(field.modelSource.nodeId);
-        values[field.key] = (source && state.loras.get(source)) || [];
+        // source — the extracted node the manifest source maps to. In
+        // checkpoint mode that source (the manifest UNET loader) is absorbed
+        // into the shared CheckpointLoaderSimple and therefore never mapped:
+        // the chain resolves up to the checkpoint node, which is the key to
+        // read. Without this the LoRAs of a checkpoint-rendered image were
+        // silently dropped on remix.
+        const source =
+          state.checkpoint != null &&
+          isModelLoader(field.modelSource.nodeId, modelSourceField)
+            ? state.checkpoint
+            : state.map.get(field.modelSource.nodeId);
+        const absorbed = (source && state.loras.get(source)) || [];
+        // The field's fixed LoRAs open the chain at launch (cf. patch.ts) and
+        // are not part of the selection: drop them back off, but only when the
+        // chain really starts with them (an image rendered before they existed
+        // keeps every LoRA it carries).
+        const fixed = field.fixed ?? [];
+        const opensWithFixed = fixed.every(
+          (f, i) => absorbed[i]?.name === f.name,
+        );
+        values[field.key] = opensWithFixed ? absorbed.slice(fixed.length) : absorbed;
         break;
       }
       case 'persons': {

@@ -226,6 +226,20 @@ export interface LorasField extends FieldBase {
   clipTargets?: PatchTarget[];
   defaultStrength?: number;
   /**
+   * LoRAs the workflow ALWAYS applies, inserted at the head of the chain
+   * (before the user's) and not editable — the LoRA a workflow is built
+   * around, e.g. the KREA2 identity-edit weights without which the edit no
+   * longer preserves the subject.
+   *
+   * They are deliberately not frozen as graph nodes: a LoraLoaderModelOnly
+   * sitting in the frozen graph would be swallowed by the remix chain
+   * absorption (cf. match.resolveThroughLoras) and come back as a removable
+   * user LoRA. Inserted at patch time instead, they stay out of the form, are
+   * stripped off again on remix, and their file is still checked against the
+   * server (cf. requirements.checkAvailability).
+   */
+  fixed?: LoraSelection[];
+  /**
    * Initial selection (imported workflows: the absorbed chain's LoRAs,
    * editable in the form). Absent = empty form (embedded workflows).
    */

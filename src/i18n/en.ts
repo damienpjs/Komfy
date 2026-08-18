@@ -116,6 +116,26 @@ export default {
       promptPlaceholder: 'Describe the expected result…',
       denoiseHint: 'Low = faithful to the source · 1 = full regeneration',
     },
+    edit: {
+      name: 'Edit an image (KREA2)',
+      description:
+        'Describes the change to make — identity and scene are preserved, no mask needed',
+      promptPlaceholder:
+        'her right hand rests on the table, nothing else moves…',
+      promptHint:
+        'Describe the CHANGE, not the whole image — and say what must stay untouched',
+      lorasHint:
+        'Chained after the identity LoRA — keep the extra ones light (~0.4), they compete with it',
+      refBoost: 'Source fidelity (ref_boost)',
+      refBoostHint:
+        '1 = off. Above, the result is pulled harder toward the source appearance; below, it loosens — the useful value depends on the model',
+      canvas: 'Output canvas',
+      canvasHint:
+        '"Source" keeps the source frame exactly (floored to a multiple of 16). 1/2 MP keep its aspect ratio at a lighter size — for a photo too large to generate at native resolution',
+      canvasSource: 'Source',
+      canvasManual: 'Manual',
+      formatHint: 'Format of the generated image — the source is fitted into it',
+    },
     i2v: {
       name: 'Image → Video (WAN 2.2)',
       description:
@@ -549,6 +569,7 @@ export default {
   },
   lora: {
     add: 'Add a LoRA',
+    fixed: 'Always applied · ×{{strength}}',
     max: 'Maximum {{count}} LoRAs',
     search: 'Search across all folders…',
     listError: 'Could not list LoRAs (server unreachable?)',
