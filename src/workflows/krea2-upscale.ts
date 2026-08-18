@@ -1,5 +1,12 @@
 /**
- * KREA2 Turbo — non-destructive upscale.
+ * KREA2 Turbo — upscale, in two modes picked by the `mode` field.
+ *
+ * "Sans diffusion" (nodes 10 → 11): the pixel upscaler alone, then a lanczos
+ * resample to a fraction of its native scale. No latent round-trip at all, so
+ * the result is deterministic and cannot drift — but ESRGAN only sharpens what
+ * is already there, it invents no texture (and amplifies JPEG artefacts).
+ *
+ * "Génératif" (node 8, the historical behaviour, untouched):
  * LoadImage → UltimateSDUpscale: the pixel upscaler (4x-UltraSharp)
  * enlarges the image, then KREA2 refines it tile by tile at low denoise
  * (0.2) — enough to synthesize real texture, too little to restructure
@@ -109,7 +116,41 @@ const graph: PromptGraph = {
     },
     _meta: { title: 'Save Image' },
   },
+  // Non-generative branch (mode "sans diffusion"): the pixel upscaler alone,
+  // then a plain resample. Deterministic — no latent, no seed, no prompt, so
+  // no identity drift by construction. Bypassed in generative mode, where
+  // UltimateSDUpscale drives the same upscale model itself.
+  '10': {
+    class_type: 'ImageUpscaleWithModel',
+    inputs: {
+      upscale_model: ['7', 0],
+      image: ['6', 0],
+    },
+    _meta: { title: 'Pixel upscale (model native scale)' },
+  },
+  // The upscale model has a fixed scale (×4 for UltraSharp, ×2 for
+  // RealESRGAN_x2plus) and /object_info does not expose it, so the factor is
+  // expressed as a FRACTION of that native scale — correct whatever model the
+  // upscaler field picks. scale_by 1.0 = raw model output, no resampling.
+  '11': {
+    class_type: 'ImageScaleBy',
+    inputs: {
+      image: ['10', 0],
+      upscale_method: 'lanczos',
+      scale_by: 0.5,
+    },
+    _meta: { title: 'Fraction of the native scale' },
+  },
 };
+
+/**
+ * Output size in "sans diffusion" mode, as a fraction of the upscale model's
+ * own scale — the only model-independent way to express it (cf. node 11).
+ */
+const scaleOption = (label: string, scale: number) => ({
+  label,
+  patches: [{ target: { nodeId: '11', input: 'scale_by' }, value: scale }],
+});
 
 const tileOption = (size: number) => ({
   label: `${size} px`,
@@ -134,6 +175,31 @@ export const krea2Upscale: WorkflowManifest = {
       target: { nodeId: '6', input: 'image' },
       required: true,
     },
+    // Mode switch. Ordered right after the image so it reads first, which is
+    // why patch.ts guards the seed/select/loras patches against the node this
+    // option removes — the fields below still target node 8 when it is gone.
+    {
+      kind: 'select',
+      key: 'mode',
+      label: 'wf.upscale.mode',
+      hint: 'wf.upscale.modeHint',
+      defaultIndex: 0,
+      remember: true,
+      options: [
+        // Historical behaviour: node 8 does everything, the pixel branch is dropped.
+        { label: 'wf.upscale.modeGenerative', patches: [], bypassNodes: ['10', '11'] },
+        // Pure pixel: the sink reads the resample, and the whole diffusion side
+        // goes — the sampler AND the loaders/encoders that only fed it. Leaving
+        // them dangling would cost nothing at run time (ComfyUI executes
+        // backwards from the outputs) but it would make the prompt ambiguous to
+        // remix: two orphaned CLIPTextEncode with no way to tell them apart.
+        {
+          label: 'wf.upscale.modePixel',
+          patches: [{ target: { nodeId: '9', input: 'images' }, value: ['11', 0] }],
+          bypassNodes: ['8', '1', '2', '3', '4', '5'],
+        },
+      ],
+    },
     {
       kind: 'number',
       key: 'upscale_by',
@@ -143,6 +209,21 @@ export const krea2Upscale: WorkflowManifest = {
       min: 1,
       max: 4,
       hint: 'wf.upscale.factorHint',
+      showWhen: { key: 'mode', equals: 0 },
+    },
+    {
+      kind: 'select',
+      key: 'native_scale',
+      label: 'wf.upscale.factor',
+      hint: 'wf.upscale.nativeScaleHint',
+      defaultIndex: 2,
+      remember: true,
+      showWhen: { key: 'mode', equals: 1 },
+      options: [
+        scaleOption('wf.upscale.scaleNative', 1),
+        scaleOption('wf.upscale.scaleThreeQuarters', 0.75),
+        scaleOption('wf.upscale.scaleHalf', 0.5),
+      ],
     },
     {
       kind: 'number',
@@ -153,6 +234,7 @@ export const krea2Upscale: WorkflowManifest = {
       min: 0.05,
       max: 0.5,
       hint: 'wf.upscale.denoiseHint',
+      showWhen: { key: 'mode', equals: 0 },
     },
     {
       kind: 'text',
@@ -163,6 +245,7 @@ export const krea2Upscale: WorkflowManifest = {
       placeholder: 'wf.upscale.promptPlaceholder',
       multiline: true,
       hint: 'wf.upscale.promptHint',
+      showWhen: { key: 'mode', equals: 0 },
     },
     {
       kind: 'text',
@@ -173,6 +256,7 @@ export const krea2Upscale: WorkflowManifest = {
       placeholder: 'wf.common.negativePlaceholder',
       hint: 'wf.common.negativeHint',
       multiline: true,
+      showWhen: { key: 'mode', equals: 0 },
     },
     {
       kind: 'model',
@@ -183,6 +267,7 @@ export const krea2Upscale: WorkflowManifest = {
       default: 'krea2_turbo_bf16.safetensors',
       filter: 'krea2',
       remember: true,
+      showWhen: { key: 'mode', equals: 0 },
     },
     {
       kind: 'model',
@@ -201,6 +286,7 @@ export const krea2Upscale: WorkflowManifest = {
       modelSource: { nodeId: '1', output: 0 },
       modelTargets: [{ nodeId: '8', input: 'model' }],
       defaultStrength: 0.9,
+      showWhen: { key: 'mode', equals: 0 },
     },
     {
       kind: 'number',
@@ -212,6 +298,7 @@ export const krea2Upscale: WorkflowManifest = {
       max: 30,
       integer: true,
       hint: 'wf.common.turboStepsHint',
+      showWhen: { key: 'mode', equals: 0 },
     },
     {
       kind: 'select',
@@ -220,6 +307,7 @@ export const krea2Upscale: WorkflowManifest = {
       hint: 'wf.upscale.tileSizeHint',
       defaultIndex: 1,
       remember: true,
+      showWhen: { key: 'mode', equals: 0 },
       options: [768, 1024, 1280].map(tileOption),
     },
     {
@@ -227,6 +315,7 @@ export const krea2Upscale: WorkflowManifest = {
       key: 'seed',
       label: 'Seed',
       target: { nodeId: '8', input: 'seed' },
+      showWhen: { key: 'mode', equals: 0 },
     },
   ],
 };
