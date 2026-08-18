@@ -11,12 +11,14 @@
  */
 
 import type { PromptGraph } from '../api/types';
+import { applySelectOption } from './patch';
 import type {
   FieldValues,
   LoraSelection,
   ModelSourceField,
   PersonsField,
   PersonValue,
+  SelectField,
   WorkflowManifest,
 } from './types';
 
@@ -409,14 +411,17 @@ function walk(
   return true;
 }
 
-function tryMatch(
+function matchVariant(
   extracted: PromptGraph,
   manifest: WorkflowManifest,
+  graph: PromptGraph,
+  forced: Map<string, number>,
 ): { values: FieldValues; sourceSeeds: SourceSeeds } | null {
   // Text-result workflow: no image (hence no PNG to remix).
   if (manifest.saveNodeId == null) return null;
   // Entry point: the output node (same class_type as saveNodeId).
-  const saveType = manifest.graph[manifest.saveNodeId].class_type;
+  const saveType = graph[manifest.saveNodeId]?.class_type;
+  if (saveType == null) return null;
   const sinks = Object.keys(extracted).filter(
     (id) => extracted[id].class_type === saveType,
   );
@@ -439,7 +444,7 @@ function tryMatch(
       (f) => f.kind === 'loras' && f.clipTargets != null,
     ),
   };
-  if (!walk(extracted, manifest.graph, sinks[0], manifest.saveNodeId, state)) {
+  if (!walk(extracted, graph, sinks[0], manifest.saveNodeId, state)) {
     return null;
   }
 
@@ -460,14 +465,14 @@ function tryMatch(
   // Manifest side outputs (e.g. the image2prompt ShowText): unreachable
   // from the save node, paired afterwards with the only remaining extracted
   // node of the same class_type.
-  for (const mId of Object.keys(manifest.graph)) {
+  for (const mId of Object.keys(graph)) {
     if (state.map.has(mId)) continue;
     // Checkpoint mode: the UNET/CLIP/VAE loaders are absorbed into the shared
     // CheckpointLoaderSimple, so they have no extracted twin to pair here.
     if (state.checkpoint != null && isModelLoader(mId, modelSourceField)) {
       continue;
     }
-    const mType = manifest.graph[mId].class_type;
+    const mType = graph[mId].class_type;
     const candidates = Object.keys(extracted).filter(
       (id) => !state.visited.has(id) && extracted[id].class_type === mType,
     );
@@ -475,7 +480,7 @@ function tryMatch(
     // being off, not a mismatch.
     if (candidates.length === 0 && bypassable.has(mId)) continue;
     if (candidates.length !== 1) return null;
-    if (!walk(extracted, manifest.graph, candidates[0], mId, state)) {
+    if (!walk(extracted, graph, candidates[0], mId, state)) {
       return null;
     }
   }
@@ -584,16 +589,24 @@ function tryMatch(
         break;
       }
       case 'select': {
-        const index = field.options.findIndex((option) =>
-          option.patches.every((patch) => {
-            const eId = state.map.get(patch.target.nodeId);
-            return (
-              eId != null &&
-              extracted[eId].inputs[patch.target.input] === patch.value
-            );
-          }),
+        // Only options identified by their LITERAL patches can be read back
+        // from the values: an empty patch list matches anything, and a link
+        // patch ([nodeId, slot]) describes a shape, not a value. Options that
+        // differ only in shape are settled by the variant that matched.
+        const index = field.options.findIndex(
+          (option) =>
+            option.patches.length > 0 &&
+            option.patches.every((patch) => {
+              if (Array.isArray(patch.value)) return false;
+              const eId = state.map.get(patch.target.nodeId);
+              return (
+                eId != null &&
+                extracted[eId].inputs[patch.target.input] === patch.value
+              );
+            }),
         );
-        values[field.key] = index >= 0 ? index : field.defaultIndex;
+        values[field.key] =
+          index >= 0 ? index : forced.get(field.key) ?? field.defaultIndex;
         break;
       }
       case 'dimensions': {
@@ -706,6 +719,66 @@ function tryMatch(
     }
   }
   return { values, sourceSeeds };
+}
+
+/**
+ * Selects whose options reshape the graph instead of only setting values: a
+ * link patch (`[nodeId, slot]`), a bypassed sink, or a passthrough node. Their
+ * chosen option is NOT recoverable from the literals — comparing patch values
+ * would mean comparing arrays by identity, and an option may carry no patch at
+ * all (only removals), which would match anything. So the extracted graph is
+ * matched against the shape each option actually produces.
+ */
+function structuralSelects(manifest: WorkflowManifest): SelectField[] {
+  return manifest.fields.filter(
+    (f): f is SelectField =>
+      f.kind === 'select' &&
+      f.options.some(
+        (o) =>
+          (o.bypassNodes?.length ?? 0) > 0 ||
+          (o.passthroughNodes?.length ?? 0) > 0 ||
+          o.patches.some((p) => Array.isArray(p.value)),
+      ),
+  );
+}
+
+/** The variant space is a cartesian product — keep it bounded. */
+const MAX_VARIANTS = 64;
+
+/**
+ * Tries the manifest in each of the shapes its structural selects can produce,
+ * default option first so an ambiguous graph resolves to the default.
+ */
+function tryMatch(
+  extracted: PromptGraph,
+  manifest: WorkflowManifest,
+): { values: FieldValues; sourceSeeds: SourceSeeds } | null {
+  const selects = structuralSelects(manifest);
+  const total = selects.reduce((n, f) => n * f.options.length, 1);
+  // Nothing reshapes the graph (or too many combinations): the frozen graph is
+  // the only shape worth trying.
+  if (selects.length === 0 || total > MAX_VARIANTS) {
+    return matchVariant(extracted, manifest, manifest.graph, new Map());
+  }
+  // Per field, the default option is tried first, then the others in order.
+  const orders = selects.map((f) => [
+    f.defaultIndex,
+    ...f.options.map((_, i) => i).filter((i) => i !== f.defaultIndex),
+  ]);
+  for (let combo = 0; combo < total; combo++) {
+    const graph: PromptGraph = JSON.parse(JSON.stringify(manifest.graph));
+    const forced = new Map<string, number>();
+    let rest = combo;
+    selects.forEach((field, f) => {
+      const index = orders[f][rest % field.options.length];
+      rest = Math.floor(rest / field.options.length);
+      forced.set(field.key, index);
+      applySelectOption(graph, field.options[index]);
+    });
+    const matched = matchVariant(extracted, manifest, graph, forced);
+    if (matched) return matched;
+  }
+  return null;
 }
 
 /**

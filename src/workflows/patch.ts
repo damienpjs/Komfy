@@ -18,6 +18,7 @@ import type {
   PersonsField,
   PersonsValue,
   PersonValue,
+  SelectOption,
   WorkflowManifest,
 } from './types';
 
@@ -208,6 +209,10 @@ function insertLoraChain(
   field: LorasField,
   loras: LoraSelection[],
 ): void {
+  // Every consumer gone (an earlier select dropped the branch that used the
+  // MODEL — e.g. the upscale "sans diffusion" mode): building the chain would
+  // only litter the prompt with loaders feeding nothing.
+  if (!field.modelTargets.some((t) => graph[t.nodeId])) return;
   const withClip = field.clipSource != null && field.clipTargets != null;
   // Upstream = whatever currently feeds the first target. A modelSource field
   // patched earlier may have rewired it (checkpoint vs diffusion loader), so
@@ -260,12 +265,40 @@ function insertLoraChain(
     }
     prevModel = [id, 0];
   });
+  // Consumers an earlier select removed (e.g. UltimateSDUpscale in the upscale
+  // "sans diffusion" mode, where LoRAs are meaningless anyway) are skipped: the
+  // chain is simply left dangling and pruned with the rest of the dead branch.
   for (const target of field.modelTargets) {
-    applyPatch(graph, target, prevModel);
+    if (graph[target.nodeId]) applyPatch(graph, target, prevModel);
   }
   if (withClip) {
-    for (const target of field.clipTargets!) applyPatch(graph, target, prevClip!);
+    for (const target of field.clipTargets!) {
+      if (graph[target.nodeId]) applyPatch(graph, target, prevClip!);
+    }
   }
+}
+
+/**
+ * Applies one select option to a graph: its patches, then the two kinds of node
+ * removal. Exported because match.ts replays the options onto the manifest
+ * graph to recognise which variant produced an extracted graph — a select that
+ * reshapes the graph cannot be recovered from literal values alone.
+ */
+export function applySelectOption(
+  graph: PromptGraph,
+  option: SelectOption,
+): void {
+  for (const patch of option.patches) {
+    // A select may drive a node an earlier select toggled off (e.g. the upscale
+    // tile size, whose UltimateSDUpscale is gone in the "sans diffusion"
+    // mode): the value is then moot — skip rather than throw.
+    if (!graph[patch.target.nodeId]) continue;
+    applyPatch(graph, patch.target, patch.value);
+  }
+  // Mid-chain nodes toggled off: delete and short-circuit (CTRL+B).
+  passthroughBypass(graph, option.passthroughNodes ?? []);
+  // Optional branch toggled off: drop the sink nodes this option bypasses.
+  for (const nodeId of option.bypassNodes ?? []) delete graph[nodeId];
 }
 
 /**
@@ -571,6 +604,10 @@ export function patchGraph(
         break;
       }
       case 'seed':
+        // Same guard as `text`/`number`: the sampler this seed drives may have
+        // been removed by an earlier select (e.g. the upscale "sans diffusion"
+        // mode, which drops UltimateSDUpscale) — the seed is then moot.
+        if (!graph[field.target.nodeId]) break;
         applyPatch(
           graph,
           field.target,
@@ -582,6 +619,10 @@ export function patchGraph(
         applyPatch(graph, field.target, String(value ?? ''));
         break;
       case 'model':
+        // Same guard as `text`/`number`/`seed`: the loader may belong to a
+        // branch an earlier select dropped (the upscale "sans diffusion" mode
+        // removes the KREA2 loaders outright).
+        if (!graph[field.target.nodeId]) break;
         applyPatch(graph, field.target, String(value ?? field.default));
         break;
       case 'modelSource':
@@ -607,16 +648,10 @@ export function patchGraph(
       case 'select': {
         const index =
           typeof value === 'number' ? value : field.defaultIndex;
-        const option = field.options[index] ?? field.options[field.defaultIndex];
-        for (const patch of option.patches) {
-          applyPatch(graph, patch.target, patch.value);
-        }
-        // Mid-chain nodes toggled off: delete and short-circuit (CTRL+B).
-        passthroughBypass(graph, option.passthroughNodes ?? []);
-        // Optional branch toggled off: drop the sink nodes this option bypasses.
-        for (const nodeId of option.bypassNodes ?? []) {
-          delete graph[nodeId];
-        }
+        applySelectOption(
+          graph,
+          field.options[index] ?? field.options[field.defaultIndex],
+        );
         break;
       }
     }
