@@ -242,9 +242,19 @@ export default {
       name: 'Upscale (KREA2)',
       description:
         'Non-destructive upscale — sharper details, faces preserved',
+      mode: 'Mode',
+      modeHint:
+        'Generative = the pixel upscaler, then a KREA2 pass that synthesises real texture · No diffusion = the upscaler alone, deterministic, zero identity drift — but it invents no detail and amplifies existing artefacts',
+      modeGenerative: 'Generative (KREA2)',
+      modePixel: 'No diffusion',
       factor: 'Upscale factor',
       factorHint:
         '×2 = width and height doubled. Refinement runs tile by tile, so a larger factor just takes longer',
+      nativeScaleHint:
+        'Fraction of the upscale model’s own scale (×4 for UltraSharp, ×2 for RealESRGAN_x2plus). Native = the raw model output, with no resampling at all',
+      scaleNative: 'Native (no resampling)',
+      scaleThreeQuarters: '¾ of native',
+      scaleHalf: '½ of native',
       denoiseHint:
         'Strength of the KREA2 detail pass. ≤ 0.25 = adds texture without touching identity · higher starts reinventing',
       promptPlaceholder: 'e.g. portrait photo, detailed skin, sharp focus…',
@@ -252,7 +262,7 @@ export default {
         'Optional — briefly describing the image can guide the added detail',
       upscaler: 'Upscaler model',
       upscalerHint:
-        'Pixel upscaler applied before the KREA2 refinement (UltraSharp = sharper, ESRGAN = softer)',
+        'Pixel upscaler — the whole job in “No diffusion” mode, the pass before the KREA2 refinement otherwise (UltraSharp = sharper, ESRGAN = softer)',
       tileSize: 'Tile size',
       tileSizeHint:
         'Refinement runs tile by tile. Larger = fewer seams and better face coherence, but more memory per tile',

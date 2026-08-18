@@ -246,9 +246,19 @@ export default {
       name: 'Upscale (KREA2)',
       description:
         'Agrandissement non destructif — détails affinés, visages préservés',
+      mode: 'Mode',
+      modeHint:
+        'Génératif = l’upscaler pixel, puis une passe KREA2 qui synthétise de la vraie texture · Sans diffusion = l’upscaler seul, déterministe, zéro dérive d’identité — mais il n’invente aucun détail et amplifie les artefacts existants',
+      modeGenerative: 'Génératif (KREA2)',
+      modePixel: 'Sans diffusion',
       factor: 'Facteur d’agrandissement',
       factorHint:
         '×2 = largeur et hauteur doublées. Le raffinement se fait tuile par tuile, un facteur plus grand prend juste plus de temps',
+      nativeScaleHint:
+        'Fraction de l’échelle propre au modèle d’upscale (×4 pour UltraSharp, ×2 pour RealESRGAN_x2plus). Native = la sortie brute du modèle, sans aucun rééchantillonnage',
+      scaleNative: 'Native (sans rééchantillonnage)',
+      scaleThreeQuarters: '¾ de la native',
+      scaleHalf: '½ de la native',
       denoiseHint:
         'Force de la passe de détail KREA2. ≤ 0,25 = ajoute de la texture sans toucher à l’identité · plus haut commence à réinventer',
       promptPlaceholder: 'ex. photo portrait, peau détaillée, netteté…',
@@ -256,7 +266,7 @@ export default {
         'Optionnel — décrire brièvement l’image peut guider le détail ajouté',
       upscaler: 'Modèle d’upscale',
       upscalerHint:
-        'Upscaler pixel appliqué avant le raffinement KREA2 (UltraSharp = plus net, ESRGAN = plus doux)',
+        'Upscaler pixel — tout le travail en mode « Sans diffusion », la passe avant le raffinement KREA2 sinon (UltraSharp = plus net, ESRGAN = plus doux)',
       tileSize: 'Taille des tuiles',
       tileSizeHint:
         'Le raffinement se fait tuile par tuile. Plus grand = moins de raccords et visages plus cohérents, mais plus de mémoire par tuile',
