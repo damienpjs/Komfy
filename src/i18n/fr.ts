@@ -140,39 +140,6 @@ export default {
       canvasManual: 'Manuel',
       formatHint: 'Format de l’image générée — la source y est ajustée',
     },
-    i2v: {
-      name: 'Image → Vidéo (WAN 2.2)',
-      description:
-        'Anime une image fixe en court clip — WAN 2.2 I2V A14B, double expert (high/low)',
-      promptPlaceholder:
-        'Décris le mouvement — ce qui bouge, la caméra, la lumière… (garde la scène stable)',
-      lengthHint:
-        'Longueur du clip en images (durée ≈ images ÷ FPS). WAN préfère 4·n+1 (49, 81, 97, 121)',
-      fpsHint:
-        'Cadence de lecture — à longueur fixe, plus de FPS = clip plus court et plus fluide',
-      interpolation: 'Interpolation d’images (RIFE)',
-      interpOff: 'Non',
-      interpX2: '×2',
-      interpX3: '×3',
-      interpX4: '×4',
-      interpolationHint:
-        'RIFE insère des images intermédiaires pour un mouvement plus fluide (×N multiplie le nombre d’images). La vidéo lit le flux interpolé : augmente les FPS d’autant pour garder la vitesse réelle — sinon le mouvement ralentit',
-      shiftHint:
-        'Décalage du ModelSampling — plus haut favorise le mouvement et la cohérence, plus bas garde le détail (défaut WAN ≈ 6)',
-      highExpert: 'Expert haut bruit',
-      lowExpert: 'Expert bas bruit',
-      expertHint:
-        'WAN 2.2 A14B scinde le débruitage en deux : l’expert haut bruit pose le mouvement (premières étapes), l’expert bas bruit affine le détail',
-      clip: 'Encodeur de texte (CLIP)',
-      clipHint: 'UMT5-XXL encode le prompt pour WAN — garde-le sauf variante',
-      lorasHigh: 'LoRAs haut bruit',
-      lorasLow: 'LoRAs bas bruit',
-      lastFrame: 'Enregistrer la dernière image',
-      lastFrameOff: 'Non',
-      lastFrameOn: 'Oui',
-      lastFrameHint:
-        'Enregistre aussi la dernière image de la vidéo — utile pour enchaîner des segments (workflows en boucle / continuation)',
-    },
     ltx: {
       name: 'Image → Vidéo + audio (LTX 2.3)',
       description:
@@ -334,11 +301,6 @@ export default {
         'Oriente la description de Gemma-4 sans remplacer l’analyse de l’image',
       seedHint: 'Re-tirer le seed donne une description différente',
     },
-    i2p2i: {
-      name: 'Image → Prompt → Image',
-      description:
-        'Gemma-4 décrit l’image, le prompt généré alimente le t2i KREA2',
-    },
     style: {
       label: 'Style de prompt',
       hint: 'Conventions du modèle pour lequel le prompt est écrit',
@@ -370,41 +332,6 @@ export default {
         "1 = la zone est entièrement réécrite, moins en conserve une partie de l'original",
       cfgHint:
         'Fidélité au prompt. 1 pour un modèle turbo/distillé, 5–8 sinon',
-    },
-    inpaint: {
-      name: 'Inpaint auto (KREA2)',
-      description:
-        'Régénère une zone détectée automatiquement — ou tout sauf elle',
-      detector: 'Détection automatique',
-      detFace: 'Visage',
-      detHead: 'Tête (visage + cheveux)',
-      detHands: 'Mains',
-      detPerson: 'Personne',
-      detFeet: 'Pieds',
-      detectorHint:
-        'Les détecteurs segm (tête, personne) masquent la silhouette exacte, les autres un rectangle',
-      segments: 'Segments détectés',
-      segmentsAll: 'Tous',
-      segmentsSingle: 'Un seul',
-      segmentsHint:
-        'Inpainter toutes les détections d’un coup, ou en isoler une seule (choisie ci-dessous)',
-      skip: 'Aller au segment',
-      skipHint:
-        '0 = le premier (de gauche à droite), 1 = le deuxième… Utilisé seulement pour isoler un seul segment',
-      mode: 'Zone détectée',
-      modeInpaint: 'Inpainter',
-      modePreserve: 'Préserver (inpainter le reste)',
-      modeHint:
-        'Préserver = la zone détectée reste intacte, tout le reste est régénéré',
-      promptPlaceholder:
-        'Décrire ce qui doit apparaître dans la zone régénérée…',
-      thresholdHint: 'Plus bas = détections plus nombreuses (moins sûres)',
-      dilation: 'Extension de la zone (px)',
-      dilationHint:
-        'Agrandit (ou rétrécit si négatif) la zone autour de la détection',
-      feather: 'Adoucissement des bords',
-      featherHint: '0 = bords nets · plus haut = transition plus douce',
-      denoiseHint: 'Haut = zone entièrement remplacée · bas = simple retouche',
     },
   },
   model: {

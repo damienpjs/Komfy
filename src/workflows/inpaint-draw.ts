@@ -5,10 +5,10 @@
  * uploaded as a PNG by the `mask` field) → GrowMask → gaussian blur →
  * optional inversion → the sampler only touches the painted area.
  *
- * Unlike krea2-inpaint, nothing here is tied to a model family or to a
- * detector: the area comes from the user's finger, and the model comes from
- * the generic `modelSource` picker (any checkpoint, or any diffusion
- * model + CLIP + VAE installed on the server).
+ * Nothing here is tied to a model family or to an automatic detector: the
+ * area comes from the user's finger, and the model comes from the generic
+ * `modelSource` picker (any checkpoint, or any diffusion model + CLIP + VAE
+ * installed on the server).
  *
  * Two ways to confine the sampling, picked by the `maskMode` select:
  *  - `SetLatentNoiseMask` (default): noise is limited to the mask, the rest
@@ -32,8 +32,8 @@
  * It is a no-op on a hard-edged mask, so it costs nothing when feather = 0.
  *
  * The inversion goes through an ImpactSwitch on a literal `select` rather
- * than a rewire, for the same reason as krea2-inpaint: remix matching
- * compares connections structurally, and a literal stays recoverable.
+ * than a rewire: remix matching compares connections structurally (cf.
+ * match.ts), and a literal stays recoverable by the select.
  */
 
 import type { PromptGraph } from '../api/types';

@@ -84,9 +84,9 @@ export function LoraField({ field, value, onChange }: Props) {
       ))}
 
       {value.map((lora, index) => (
-        // Key by name+index: the same LoRA can legitimately appear twice (e.g.
-        // both WAN i2v experts default to the lightx2v distill), and a bare
-        // name key would collide (cf. GraphSummary, same pattern).
+        // Key by name+index: the same LoRA can legitimately appear twice in a
+        // chain (stacked at two strengths), and a bare name key would collide
+        // (cf. GraphSummary, same pattern).
         <View key={`${lora.name}-${index}`} style={styles.card}>
           <View style={styles.cardHeader}>
             <View style={styles.cardTitleWrap}>

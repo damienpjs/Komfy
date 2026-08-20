@@ -212,18 +212,6 @@ export interface LorasField extends FieldBase {
   modelSource: { nodeId: string; output: number };
   /** MODEL inputs rewired to the end of the chain (e.g. KSampler.model). */
   modelTargets: PatchTarget[];
-  /**
-   * Optional CLIP wiring. When set, the chain uses LoraLoader (MODEL + CLIP)
-   * instead of LoraLoaderModelOnly, so the same LoRAs also patch the text
-   * encoder — needed when a distillation/content LoRA carries CLIP weights.
-   * WAN 2.2 i2v: the reference rgthree stack feeds both prompts a loraised
-   * CLIP; feeding the raw CLIP instead leaves residual "sparkle" noise in the
-   * distilled 8-step render. Each LoraSelection.strength drives both
-   * strength_model and strength_clip (rgthree stacks use a single strength).
-   */
-  clipSource?: { nodeId: string; output: number };
-  /** CLIP inputs rewired to the chain's CLIP output (e.g. CLIPTextEncode.clip). */
-  clipTargets?: PatchTarget[];
   defaultStrength?: number;
   /**
    * LoRAs the workflow ALWAYS applies, inserted at the head of the chain

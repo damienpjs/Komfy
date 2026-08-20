@@ -1,7 +1,8 @@
 /**
  * LTX 2.3 — image-to-video + audio (two-pass: First Pass then Upscale Pass).
  *
- * Standalone workflow (NOT modelled on WAN's high/low experts). The frozen
+ * Standalone workflow: two sampling passes sharing a single diffusion
+ * loader (the model is not split across passes). The frozen
  * graph is the canonical API export of docs/ltx/ (86 nodes, validated on the
  * live server), with five surgical edits so Komfy can drive it:
  *   - the rgthree Power Lora Loader (934) is dropped → the `loras` field

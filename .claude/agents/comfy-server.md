@@ -42,7 +42,7 @@ everything each time, on purpose (IPs and paths can change).
 
 The canonical, tuned launch lives in `scripts/start-comfy.sh` (also
 `npm run comfy`; `scripts/start-comfy.ps1` on Windows). It encodes the
-attention backend, `--enable-manager`, the WAN 2.2 `--bf16-text-enc`, and the
+attention backend, `--enable-manager`, `--bf16-text-enc`, and the
 `user_tailscale/` isolation, resolves the Tailscale IP itself, and — on macOS
 only, gated behind `uname = Darwin` — the MPS high-watermark ratio. Its paths
 (`COMFY_DIR`, `VENV_PY`, `BASE_DIR`) come from environment variables,
@@ -67,9 +67,10 @@ nohup npm run comfy > /tmp/comfy-tailscale.log 2>&1 &
 then tail the log until the "ecoute" line appears and validate with the curl
 in the Rules below.
 
-`--bf16-text-enc` (already in the script) is required by the WAN 2.2
-image-to-video workflow (its UMT5-XXL encoder overflows in fp16) and is safe
-for the image workflows — keep it on relaunch.
+`--bf16-text-enc` (already in the script) runs the text encoders in bf16
+rather than the default fp16 — the safe choice for large encoders, whose
+activations can overflow in fp16. Harmless for the shipped workflows — keep
+it on relaunch.
 
 ### Fallback — script missing, or its default paths don't fit this machine
 

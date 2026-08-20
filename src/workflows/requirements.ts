@@ -28,11 +28,7 @@ export function requiredClassTypes(manifest: WorkflowManifest): string[] {
   const types = new Set<string>();
   for (const node of Object.values(manifest.graph)) types.add(node.class_type);
   for (const field of manifest.fields) {
-    if (field.kind === 'loras') {
-      LORAS_CHAIN_TYPES.forEach((t) => types.add(t));
-      // CLIP-wired chain uses LoraLoader (MODEL + CLIP) instead (cf. patch.ts).
-      if (field.clipTargets != null) types.add('LoraLoader');
-    }
+    if (field.kind === 'loras') LORAS_CHAIN_TYPES.forEach((t) => types.add(t));
     if (field.kind === 'persons')
       PERSONS_CHAIN_TYPES.forEach((t) => types.add(t));
     // Checkpoint mode splices in a CheckpointLoaderSimple (kept out of the
@@ -100,7 +96,6 @@ function patchedInputKeys(manifest: WorkflowManifest): Set<string> {
         break;
       case 'loras':
         field.modelTargets.forEach(add);
-        field.clipTargets?.forEach(add);
         break;
       case 'persons':
         field.imageTargets.forEach(add);
@@ -284,8 +279,8 @@ export function checkAvailability(
     }
   }
 
-  // Select options: every choice offered must exist server-side (e.g. the
-  // inpaint detector models).
+  // Select options: every choice offered must exist server-side (a sampler, a
+  // scheduler, a model file a select switches between).
   for (const field of manifest.fields) {
     if (field.kind !== 'select') continue;
     for (const option of field.options) {

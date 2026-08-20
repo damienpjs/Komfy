@@ -90,11 +90,11 @@ nothing below assumes a Mac.
      --user-directory <comfy-data-dir>/user_tailscale
    ```
 
-   `--bf16-text-enc` is **required for the Image → Video (WAN 2.2) workflow**:
-   its UMT5-XXL text encoder overflows in the default fp16 (black / NaN
-   frames), and bf16 fixes it. It is safe for the image workflows — KREA2's
-   Qwen3-VL encoder is fp8-scaled (weights stay fp8, bf16 only sets the
-   compute dtype, which is Qwen's native dtype) and conditioning is
+   `--bf16-text-enc` runs the text encoders in bf16 instead of the default
+   fp16 — the safe choice for large encoders, whose activations can overflow
+   in fp16 and yield black / NaN output. It is safe for the workflows shipped
+   here: KREA2's Qwen3-VL encoder is fp8-scaled (weights stay fp8, bf16 only
+   sets the compute dtype, which is Qwen's native dtype) and conditioning is
    accumulated in fp32, so their output is unaffected.
 
    **Per-OS notes:**
