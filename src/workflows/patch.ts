@@ -198,11 +198,6 @@ function connFrom(
  * The field's `fixed` LoRAs open the chain, ahead of the user's selection.
  * With nothing to insert at all, the graph stays intact (targets already
  * wired to the source in the frozen JSON).
- *
- * When the field declares a CLIP wiring (clipSource/clipTargets), each node is
- * a LoraLoader (MODEL + CLIP) rather than LoraLoaderModelOnly: the same LoRAs
- * also patch the text encoder, and the CLIP targets are rewired to the chain's
- * CLIP output — mirroring an rgthree Lora Loader Stack (WAN 2.2 i2v).
  */
 function insertLoraChain(
   graph: PromptGraph,
@@ -213,7 +208,6 @@ function insertLoraChain(
   // MODEL — e.g. the upscale "sans diffusion" mode): building the chain would
   // only litter the prompt with loaders feeding nothing.
   if (!field.modelTargets.some((t) => graph[t.nodeId])) return;
-  const withClip = field.clipSource != null && field.clipTargets != null;
   // Upstream = whatever currently feeds the first target. A modelSource field
   // patched earlier may have rewired it (checkpoint vs diffusion loader), so
   // the live connection wins; the field source is the fallback. For every
@@ -224,45 +218,22 @@ function insertLoraChain(
     firstModel ? graph[firstModel.nodeId]?.inputs?.[firstModel.input] : undefined,
     [field.modelSource.nodeId, field.modelSource.output],
   );
-  let prevClip: [string, number] | undefined;
-  if (withClip) {
-    const firstClip = field.clipTargets![0];
-    prevClip = connFrom(
-      firstClip ? graph[firstClip.nodeId]?.inputs?.[firstClip.input] : undefined,
-      [field.clipSource!.nodeId, field.clipSource!.output],
-    );
-  }
-  // Namespaced by field.key: a manifest may hold several loras fields (e.g. the
-  // WAN dual-expert i2v, or an imported multi-chain graph), each inserting its
-  // own chain — a shared `komfy_lora_N` id would collide across them.
+  // Namespaced by field.key: a manifest may hold several loras fields (an
+  // imported multi-chain graph), each inserting its own chain — a shared
+  // `komfy_lora_N` id would collide across them.
   const chain = field.fixed != null ? [...field.fixed, ...loras] : loras;
   chain.forEach((lora, i) => {
     const id = `komfy_lora_${field.key}_${i + 1}`;
     if (graph[id]) throw new Error(`Node id collision: ${id}`);
-    if (withClip) {
-      graph[id] = {
-        class_type: 'LoraLoader',
-        inputs: {
-          model: prevModel,
-          clip: prevClip!,
-          lora_name: lora.name,
-          strength_model: lora.strength,
-          strength_clip: lora.strength,
-        },
-        _meta: { title: `LoRA ${i + 1}: ${lora.name}` },
-      };
-      prevClip = [id, 1];
-    } else {
-      graph[id] = {
-        class_type: 'LoraLoaderModelOnly',
-        inputs: {
-          model: prevModel,
-          lora_name: lora.name,
-          strength_model: lora.strength,
-        },
-        _meta: { title: `LoRA ${i + 1}: ${lora.name}` },
-      };
-    }
+    graph[id] = {
+      class_type: 'LoraLoaderModelOnly',
+      inputs: {
+        model: prevModel,
+        lora_name: lora.name,
+        strength_model: lora.strength,
+      },
+      _meta: { title: `LoRA ${i + 1}: ${lora.name}` },
+    };
     prevModel = [id, 0];
   });
   // Consumers an earlier select removed (e.g. UltimateSDUpscale in the upscale
@@ -270,11 +241,6 @@ function insertLoraChain(
   // chain is simply left dangling and pruned with the rest of the dead branch.
   for (const target of field.modelTargets) {
     if (graph[target.nodeId]) applyPatch(graph, target, prevModel);
-  }
-  if (withClip) {
-    for (const target of field.clipTargets!) {
-      if (graph[target.nodeId]) applyPatch(graph, target, prevClip!);
-    }
   }
 }
 

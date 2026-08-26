@@ -87,8 +87,8 @@ interface WalkState {
   /**
    * Root-level LoRA chains, keyed by the extracted node the chain resolves up
    * to (its MODEL source). A manifest may hold several loras fields fed by
-   * distinct sources (WAN dual-expert i2v: high/low) — keying by source keeps
-   * each expert's LoRAs on its own field instead of merging them into one list.
+   * distinct sources (an imported multi-chain graph) — keying by source keeps
+   * each chain on its own field instead of merging them into one list.
    */
   loras: Map<string, LoraSelection[]>;
   /** Absorbed characters (persons field, FaceSwap). */
@@ -99,12 +99,6 @@ interface WalkState {
   personsField?: PersonsField;
   /** modelSource field config of the tested manifest, if any. */
   modelSourceField?: ModelSourceField;
-  /**
-   * True when the tested manifest has a loras field wiring the CLIP (WAN i2v):
-   * only then is LoraLoader (MODEL + CLIP) absorbed as a dynamic chain — every
-   * other manifest keeps LoraLoader as a plain structural node, unchanged.
-   */
-  absorbClipLoras: boolean;
   /**
    * Extracted CheckpointLoaderSimple absorbed in checkpoint mode: it stands
    * in for the frozen graph's separate UNET/CLIP/VAE loaders. Set = the
@@ -128,13 +122,10 @@ function mapShared(
 
 /**
  * Absorbs a LoRA chain, returning the upstream connection it resolves to plus
- * the LoRAs collected along the way (application order). Handles
- * LoraLoaderModelOnly (MODEL only) and — when the manifest wires the CLIP
- * (state.absorbClipLoras) — LoraLoader (MODEL + CLIP). A LoraLoader is entered
- * by output slot: slot 0 walks up `.model`, slot 1 walks up `.clip`, so a chain
- * shared between the model and the text encoder (WAN i2v) is followed on either
- * path. LoRAs are collected only on the MODEL output (slot 0) — the CLIP
- * traversal of the same chain must not count them twice.
+ * the LoRAs collected along the way (application order). The chain is the one
+ * the `loras` field builds at patch time: LoraLoaderModelOnly nodes on the
+ * MODEL path. Any other class_type stops the walk and is left to the caller as
+ * a plain structural node.
  */
 function resolveThroughLoras(
   graph: PromptGraph,
@@ -145,30 +136,15 @@ function resolveThroughLoras(
   const collected: LoraSelection[] = [];
   for (;;) {
     const node = graph[current[0]];
-    const type = node?.class_type;
-    if (type === 'LoraLoaderModelOnly') {
-      state.visited.add(current[0]);
-      collected.unshift({
-        name: String(node.inputs.lora_name),
-        strength: Number(node.inputs.strength_model),
-      });
-      const next = node.inputs.model;
-      if (!isConn(next)) return { conn: current, loras: collected };
-      current = next;
-    } else if (state.absorbClipLoras && type === 'LoraLoader') {
-      state.visited.add(current[0]);
-      if (current[1] === 0) {
-        collected.unshift({
-          name: String(node.inputs.lora_name),
-          strength: Number(node.inputs.strength_model),
-        });
-      }
-      const next = current[1] === 1 ? node.inputs.clip : node.inputs.model;
-      if (!isConn(next)) return { conn: current, loras: collected };
-      current = next;
-    } else {
-      break;
-    }
+    if (node?.class_type !== 'LoraLoaderModelOnly') break;
+    state.visited.add(current[0]);
+    collected.unshift({
+      name: String(node.inputs.lora_name),
+      strength: Number(node.inputs.strength_model),
+    });
+    const next = node.inputs.model;
+    if (!isConn(next)) return { conn: current, loras: collected };
+    current = next;
   }
   return { conn: current, loras: collected };
 }
@@ -295,20 +271,13 @@ function resolveConnection(
   for (;;) {
     const node = extracted[current[0]];
     if (!node) return current;
-    const isLora =
-      node.class_type === 'LoraLoaderModelOnly' ||
-      (state.absorbClipLoras && node.class_type === 'LoraLoader');
-    if (isLora) {
+    if (node.class_type === 'LoraLoaderModelOnly') {
       const resolved = resolveThroughLoras(extracted, current, state);
       current = resolved.conn;
-      const stillLora = extracted[current[0]]?.class_type;
-      if (
-        stillLora === 'LoraLoaderModelOnly' ||
-        (state.absorbClipLoras && stillLora === 'LoraLoader')
-      )
+      if (extracted[current[0]]?.class_type === 'LoraLoaderModelOnly')
         return null; // malformed chain
       // Key by the MODEL source the chain resolves to (its terminal), so a
-      // manifest with several loras fields (per-expert) keeps each chain apart.
+      // manifest with several loras fields keeps each chain apart.
       // Overwrite, not append: a source feeding several targets resolves the
       // same complete chain each time — accumulating would double it.
       if (resolved.loras.length) state.loras.set(current[0], resolved.loras);
@@ -440,9 +409,6 @@ function matchVariant(
     visited: new Set(),
     personsField,
     modelSourceField,
-    absorbClipLoras: manifest.fields.some(
-      (f) => f.kind === 'loras' && f.clipTargets != null,
-    ),
   };
   if (!walk(extracted, graph, sinks[0], manifest.saveNodeId, state)) {
     return null;
@@ -451,7 +417,7 @@ function matchVariant(
   // Nodes a select option deletes when its branch is switched off (patch.ts
   // `bypassNodes`) — absent from the extracted graph of a job that ran with
   // that option. When such a node sits OFF the sink path (a side output, e.g.
-  // the WAN i2v last-frame SaveImage), its absence is expected: skip it below
+  // the LTX i2v last-frame SaveImage), its absence is expected: skip it below
   // instead of failing the whole match.
   const bypassable = new Set<string>();
   for (const f of manifest.fields) {
@@ -462,9 +428,9 @@ function matchVariant(
     }
   }
 
-  // Manifest side outputs (e.g. the image2prompt ShowText): unreachable
-  // from the save node, paired afterwards with the only remaining extracted
-  // node of the same class_type.
+  // Manifest side outputs (a text echo, a secondary save): unreachable from
+  // the save node, paired afterwards with the only remaining extracted node
+  // of the same class_type.
   for (const mId of Object.keys(graph)) {
     if (state.map.has(mId)) continue;
     // Checkpoint mode: the UNET/CLIP/VAE loaders are absorbed into the shared

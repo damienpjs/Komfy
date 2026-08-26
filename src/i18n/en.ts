@@ -136,39 +136,6 @@ export default {
       canvasManual: 'Manual',
       formatHint: 'Format of the generated image — the source is fitted into it',
     },
-    i2v: {
-      name: 'Image → Video (WAN 2.2)',
-      description:
-        'Animates a still image into a short clip — WAN 2.2 I2V A14B, dual expert (high/low)',
-      promptPlaceholder:
-        'Describe the motion — what moves, the camera, the light… (keep the scene stable)',
-      lengthHint:
-        'Clip length in frames (duration ≈ frames ÷ FPS). WAN prefers 4·n+1 (49, 81, 97, 121)',
-      fpsHint:
-        'Playback frame rate — at a fixed length, higher FPS = shorter, smoother clip',
-      interpolation: 'Frame interpolation (RIFE)',
-      interpOff: 'Off',
-      interpX2: '×2',
-      interpX3: '×3',
-      interpX4: '×4',
-      interpolationHint:
-        'RIFE inserts in-between frames for smoother motion (×N multiplies the frame count). The video plays the interpolated stream, so raise FPS by the same factor to keep real-time speed — otherwise motion slows down',
-      shiftHint:
-        'ModelSampling shift — higher favors motion and coherence, lower keeps more detail (WAN default ≈ 6)',
-      highExpert: 'High-noise expert',
-      lowExpert: 'Low-noise expert',
-      expertHint:
-        'WAN 2.2 A14B splits denoising in two: the high-noise expert lays down motion (first steps), the low-noise expert refines detail',
-      clip: 'Text encoder (CLIP)',
-      clipHint: 'UMT5-XXL encodes the prompt for WAN — keep it unless you have a variant',
-      lorasHigh: 'High-noise LoRAs',
-      lorasLow: 'Low-noise LoRAs',
-      lastFrame: 'Save last frame',
-      lastFrameOff: 'Off',
-      lastFrameOn: 'Save',
-      lastFrameHint:
-        "Also saves the video's last frame as an image — useful to chain segments (loop / continuation workflows)",
-    },
     ltx: {
       name: 'Image → Video + audio (LTX 2.3)',
       description:
@@ -330,11 +297,6 @@ export default {
         "Steers Gemma-4's description without replacing the image analysis",
       seedHint: 'Redrawing the seed gives a different description',
     },
-    i2p2i: {
-      name: 'Image → Prompt → Image',
-      description:
-        'Gemma-4 describes the image, the generated prompt feeds the KREA2 t2i',
-    },
     style: {
       label: 'Prompt style',
       hint: 'Conventions of the model the prompt is written for',
@@ -362,39 +324,6 @@ export default {
       denoiseHint:
         '1 = the area is fully rewritten, lower keeps some of the original',
       cfgHint: 'Prompt adherence. 1 for a turbo/distilled model, 5–8 otherwise',
-    },
-    inpaint: {
-      name: 'Auto inpaint (KREA2)',
-      description: 'Regenerates an auto-detected area — or everything but it',
-      detector: 'Automatic detection',
-      detFace: 'Face',
-      detHead: 'Head (face + hair)',
-      detHands: 'Hands',
-      detPerson: 'Person',
-      detFeet: 'Feet',
-      detectorHint:
-        'Segm detectors (head, person) mask the exact silhouette, the others a rectangle',
-      segments: 'Detected segments',
-      segmentsAll: 'All',
-      segmentsSingle: 'A single one',
-      segmentsHint:
-        'Inpaint every detection at once, or isolate just one (chosen below)',
-      skip: 'Skip to segment',
-      skipHint:
-        '0 = the first (left to right), 1 = the second… Only used when isolating a single segment',
-      mode: 'Detected area',
-      modeInpaint: 'Inpaint',
-      modePreserve: 'Preserve (inpaint the rest)',
-      modeHint:
-        'Preserve = the detected area stays intact, everything else is regenerated',
-      promptPlaceholder: 'Describe what should appear in the regenerated area…',
-      thresholdHint: 'Lower = more (less certain) detections',
-      dilation: 'Area extension (px)',
-      dilationHint:
-        'Grows (or shrinks if negative) the area around the detection',
-      feather: 'Edge softening',
-      featherHint: '0 = sharp edges · higher = smoother transition',
-      denoiseHint: 'High = area fully replaced · low = light retouch',
     },
   },
   model: {
