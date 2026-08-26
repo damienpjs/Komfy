@@ -266,21 +266,21 @@ export default {
       dimensionsHint:
         'Garder l’orientation de la source (« Inverser » pour portrait) — la carte est recadrée au centre à ce format',
     },
-    faceswap: {
-      name: 'FaceSwap (KREA2)',
+    detectReplace: {
+      name: 'Détecter & Remplacer (KREA2)',
       description:
-        'Remplace les visages détectés — une identité pour tous, ou une par visage',
-      dilation: 'Zone modifiée (autour du visage)',
+        'Remplace les zones détectées — un même contenu pour toutes, ou un par zone',
+      dilation: 'Zone modifiée (autour de la détection)',
       dilationHint:
-        'Agrandit la zone régénérée à partir du visage détecté (en pixels). ~10 = visage serré · 80–150 = front + cheveux + menton (toute la tête). Si la zone est coupée, augmenter le « Cadrage ».',
+        'Agrandit la zone régénérée à partir de la zone détectée (en pixels). ~10 = zone serrée · 80–150 = alentours larges. Si la zone est coupée, augmenter le « Cadrage ».',
       thresholdHint:
-        'Monter (0,6–0,7) élimine les fausses détections (oreilles, arrière-plan) qui décalent les n° de visages ; baisser si un visage n’est pas trouvé',
+        'Monter (0,6–0,7) élimine les fausses détections qui décalent les n° de zones ; baisser si une zone n’est pas trouvée',
       cropFactor: 'Cadrage autour de la zone',
       cropFactorHint:
         'Contexte fourni au re-générateur (× la zone détectée). Doit rester assez grand pour contenir la zone dilatée — à augmenter si une grande dilatation est rognée',
-      persons: 'Personnages',
-      personsHint:
-        'Une identité pour tous les visages, ou une par visage (numérotés de gauche à droite sur la photo)',
+      zones: 'Remplacements',
+      zonesHint:
+        'Un même contenu pour toutes les zones, ou un par zone (numérotées de gauche à droite sur la photo)',
     },
     t2p: {
       name: 'Texte → Prompt',
@@ -388,11 +388,11 @@ export default {
     integerDims: 'Dimensions entières requises',
     dimRange: 'Entre {{min}} et {{max}} px',
     dimStep: 'Multiples de {{step}} requis',
-    atLeastOnePerson: 'Au moins un personnage',
-    allBypassed: 'Tous les visages sont en bypass — rien à générer',
-    identityRequired: 'Prompt d’identité requis pour chaque visage actif',
-    maxLorasPerPerson: 'Maximum {{count}} LoRAs par personnage',
-    denoiseRange: 'Denoise entre 0,05 et 1 pour chaque visage actif',
+    atLeastOneZone: 'Au moins un remplacement',
+    allBypassed: 'Toutes les zones sont en bypass — rien à générer',
+    promptRequired: 'Prompt requis pour chaque zone active',
+    maxLorasPerZone: 'Maximum {{count}} LoRAs par zone',
+    denoiseRange: 'Denoise entre 0,05 et 1 pour chaque zone active',
     stepsRange: 'Steps entre 1 et 30',
     invalidStrength: 'Force invalide',
     invalidNumber: 'Nombre invalide',
@@ -459,23 +459,23 @@ export default {
     clear: 'Effacer',
     empty: "En attente d'événements… (lancer un job pour voir le flux)",
   },
-  persons: {
-    allFacesLabel: 'Même identité pour tous les visages',
-    allFacesTitle: 'Tous les visages détectés',
-    allFacesNote:
-      'Cette identité remplace tous les visages trouvés sur la photo, quel qu’en soit le nombre — pas de numérotation, rien à énumérer. Les visages ratés par la détection restent intacts : baisser le « Seuil de détection » pour en attraper davantage.',
-    faceTitle: 'Visage n°{{number}} (gauche → droite)',
-    bypassLabel: 'Ne pas modifier ce visage (bypass)',
+  zones: {
+    allZonesLabel: 'Même contenu pour toutes les zones',
+    allZonesTitle: 'Toutes les zones détectées',
+    allZonesNote:
+      'Ce contenu remplace toutes les zones trouvées sur la photo, quel qu’en soit le nombre — pas de numérotation, rien à énumérer. Les zones ratées par la détection restent intactes : baisser le « Seuil de détection » pour en attraper davantage.',
+    zoneTitle: 'Zone n°{{number}} (gauche → droite)',
+    bypassLabel: 'Ne pas modifier cette zone (bypass)',
     bypassNote:
-      'Visage conservé tel quel — aucune passe générée, il garde son numéro dans l’ordre gauche → droite.',
-    identityPlaceholder: 'Identité du visage (ex. a man’s face…)',
-    denoiseLabel: 'Denoise de ce visage',
-    denoiseLabelAll: 'Denoise de chaque visage',
+      'Zone conservée telle quelle — aucune passe générée, elle garde son numéro dans l’ordre gauche → droite.',
+    promptPlaceholder: 'Contenu de la zone (ex. a man’s face…)',
+    denoiseLabel: 'Denoise de cette zone',
+    denoiseLabelAll: 'Denoise de chaque zone',
     detailLabel: 'Niveau de détail',
     detailHint:
-      'Résolution à laquelle le visage est régénéré. À augmenter (768–1280) pour plus de détail sur les images haute résolution ; plus lent et plus gourmand en VRAM.',
-    addPerson: 'Ajouter un personnage',
-    maxPersons: 'Maximum {{count}} personnages',
+      'Résolution à laquelle la zone est régénérée. À augmenter (768–1280) pour plus de détail sur les images haute résolution ; plus lent et plus gourmand en VRAM.',
+    addZone: 'Ajouter un remplacement',
+    maxZones: 'Maximum {{count}} zones',
     steps: 'Steps',
     seed: 'Seed',
     randomSeed: 'aléatoire',
@@ -700,7 +700,7 @@ export default {
       'Image en cours de génération sur la carte du job (nécessite `--preview-method auto` côté ComfyUI)',
     loraMax: 'LoRAs par champ',
     loraMaxHint:
-      'Limite le nombre de LoRAs par champ, dans tous les workflows (FaceSwap : par personnage). Désactivé = aucune limite.',
+      'Limite le nombre de LoRAs par champ, dans tous les workflows (Détecter & Remplacer : par zone). Désactivé = aucune limite.',
     loraMaxValue: 'Maximum',
     trashTitle: 'Corbeille',
     trashEmptyState: 'Vide — rien à supprimer.',

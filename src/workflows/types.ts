@@ -299,60 +299,60 @@ export const GUIDE_SIZE_OPTIONS = [512, 768, 1024, 1280] as const;
 export const DEFAULT_GUIDE_SIZE = 512;
 
 /**
- * Seed stride between two batch jobs in allFaces mode. DetailerForEach
+ * Seed stride between two batch jobs in allZones mode. DetailerForEach
  * derives `seed + i` for each seg it iterates over, so a single pass burns
- * one seed per detected face — a count only known once the detector has
- * run. Striding by a face count no photo will reach keeps the jobs of a
+ * one seed per detected zone — a count only known once the detector has
+ * run. Striding by a zone count no photo will reach keeps the jobs of a
  * batch from landing on each other's seeds.
  */
-export const ALL_FACES_SEED_STRIDE = 64;
+export const ALL_ZONES_SEED_STRIDE = 64;
 
-/** One FaceSwap character: dedicated identity + LoRAs + denoise. */
-export interface PersonValue {
+/** One Detect & Replace zone: dedicated content + LoRAs + denoise. */
+export interface ZoneValue {
   prompt: string;
   loras: LoraSelection[];
-  /** Replacement strength for THIS face (0.05–1). */
+  /** Replacement strength for THIS zone (0.05–1). */
   denoise: number;
   /**
-   * Detail level = DetailerForEach guide_size for THIS face (px).
+   * Detail level = DetailerForEach guide_size for THIS zone (px).
    * Absent ⇒ DEFAULT_GUIDE_SIZE. See GUIDE_SIZE_OPTIONS.
    */
   guideSize?: number;
   /**
-   * Bypass: the face keeps its place in the numbering (left → right) but
+   * Bypass: the zone keeps its place in the numbering (left → right) but
    * NO pass is generated — it is not altered at all.
    */
   bypass?: boolean;
 }
 
-/** Persons field value: characters (index = face number, left → right) + shared settings. */
-export interface PersonsValue {
-  persons: PersonValue[];
+/** Zones field value: replacements (index = zone number, left → right) + shared settings. */
+export interface ZonesValue {
+  zones: ZoneValue[];
   /**
-   * true = `persons[0]` alone is used, and its pass is fed the raw SEGS:
-   * DetailerForEach iterates over every detected face natively (no filter,
-   * no numbering, no count limit). The rest of `persons` is kept so
-   * toggling back restores the per-face setup.
+   * true = `zones[0]` alone is used, and its pass is fed the raw SEGS:
+   * DetailerForEach iterates over every detected zone natively (no filter,
+   * no numbering, no count limit). The rest of `zones` is kept so
+   * toggling back restores the per-zone setup.
    */
-  allFaces?: boolean;
+  allZones?: boolean;
   steps: number;
   seed: number | 'random';
 }
 
 /**
- * Characters field (FaceSwap). Two patch-time shapes, cf. PersonsValue.allFaces:
- *  - one identity per face: for each character i, the chain
+ * Zones field (Detect & Replace). Two patch-time shapes, cf. ZonesValue.allZones:
+ *  - one identity per zone: for each replacement i, the chain
  *      ImpactSEGSOrderedFilter(ascending x1, take_start=i) → DetailerForEach
  *    wired in series on the image (last detailer output → imageTargets);
- *  - same identity for every face: a single DetailerForEach fed `segsSource`
+ *  - same identity for every zone: a single DetailerForEach fed `segsSource`
  *    directly — it is a for-each over the whole SEGS batch.
- * Each character has its own identity CLIPTextEncode and LoRA chain.
+ * Each replacement has its own CLIPTextEncode and LoRA chain.
  */
-export interface PersonsField extends FieldBase {
-  kind: 'persons';
+export interface ZonesField extends FieldBase {
+  kind: 'zones';
   /** LoadImage IMAGE output. */
   imageSource: { nodeId: string; output: number };
-  /** BboxDetectorSEGS SEGS output (all detected faces). */
+  /** BboxDetectorSEGS SEGS output (all detected zones). */
   segsSource: { nodeId: string; output: number };
   modelSource: { nodeId: string; output: number };
   clipSource: { nodeId: string; output: number };
@@ -361,8 +361,8 @@ export interface PersonsField extends FieldBase {
   negativeSource: { nodeId: string; output: number };
   /** IMAGE inputs rewired to the last detailer's output (SaveImage.images). */
   imageTargets: PatchTarget[];
-  /** Absent = no cap: one pass per character, the cost is linear. */
-  maxPersons?: number;
+  /** Absent = no cap: one pass per zone, the cost is linear. */
+  maxZones?: number;
   defaultStrength?: number;
   defaultDenoise: number;
   defaultSteps: number;
@@ -379,7 +379,7 @@ export type WorkflowField =
   | ImageField
   | MaskField
   | LorasField
-  | PersonsField;
+  | ZonesField;
 
 export interface WorkflowManifest {
   id: string;
@@ -418,6 +418,6 @@ export type FieldValues = Record<
   | 'random'
   | LoraSelection[]
   | DimensionsValue
-  | PersonsValue
+  | ZonesValue
   | ModelSourceValue
 >;

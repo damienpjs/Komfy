@@ -34,7 +34,7 @@ interface SettingsState {
   previewsEnabled: boolean;
   /**
    * Global cap on the number of LoRAs per field — applies to every workflow
-   * type (the regular LoRAs field and the FaceSwap's per-character chain
+   * type (the regular LoRAs field and the Detect & Replace's per-zone chain
    * alike). null = no limit.
    */
   loraMaxCount: number | null;

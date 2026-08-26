@@ -264,11 +264,12 @@ control, provided by Tailscale (WireGuard, explicitly enrolled devices).
 
 Komfy is a remote control for **your own** ComfyUI instance: what gets
 generated is entirely determined by the models and workflows you choose to
-run. The embedded FaceSwap workflow edits faces in a source image; it is
-intended for creative work on your own photos or with the **explicit
-consent** of the people depicted. Do not use it to impersonate or deceive,
-or to produce non-consensual or intimate imagery of real people — such use
-is illegal in many jurisdictions and contrary to the intent of this
+run. The embedded Detect & Replace workflow regenerates a zone of a source
+image — by default the detected faces, but any zone the chosen detector can
+find; it is intended for creative work on your own photos or with the
+**explicit consent** of the people depicted. Do not use it to impersonate or
+deceive, or to produce non-consensual or intimate imagery of real people —
+such use is illegal in many jurisdictions and contrary to the intent of this
 project.
 
 ## Structure

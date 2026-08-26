@@ -62,7 +62,7 @@ function coveredInputs(fields: WorkflowField[]): Set<string> {
             keys.add(`${p.target.nodeId}/${p.target.input}`);
         break;
       case 'loras':
-      case 'persons':
+      case 'zones':
         break;
     }
   }

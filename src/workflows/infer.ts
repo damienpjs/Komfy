@@ -230,7 +230,7 @@ const KIND_RANK: Record<WorkflowField['kind'], number> = {
   loras: 4,
   select: 5,
   number: 6,
-  persons: 7,
+  zones: 7,
   seed: 8,
 };
 

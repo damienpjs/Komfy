@@ -16,7 +16,7 @@ import type {
 
 /** class_types inserted at patch time by the dynamic fields (cf. patch.ts). */
 const LORAS_CHAIN_TYPES = ['LoraLoaderModelOnly'];
-const PERSONS_CHAIN_TYPES = [
+const ZONES_CHAIN_TYPES = [
   'ImpactSEGSOrderedFilter',
   'CLIPTextEncode',
   'LoraLoaderModelOnly',
@@ -29,8 +29,8 @@ export function requiredClassTypes(manifest: WorkflowManifest): string[] {
   for (const node of Object.values(manifest.graph)) types.add(node.class_type);
   for (const field of manifest.fields) {
     if (field.kind === 'loras') LORAS_CHAIN_TYPES.forEach((t) => types.add(t));
-    if (field.kind === 'persons')
-      PERSONS_CHAIN_TYPES.forEach((t) => types.add(t));
+    if (field.kind === 'zones')
+      ZONES_CHAIN_TYPES.forEach((t) => types.add(t));
     // Checkpoint mode splices in a CheckpointLoaderSimple (kept out of the
     // frozen graph) and swaps the 16-channel latent to a 4-channel one.
     if (field.kind === 'modelSource') {
@@ -97,7 +97,7 @@ function patchedInputKeys(manifest: WorkflowManifest): Set<string> {
       case 'loras':
         field.modelTargets.forEach(add);
         break;
-      case 'persons':
+      case 'zones':
         field.imageTargets.forEach(add);
         break;
     }
