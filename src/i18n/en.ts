@@ -262,21 +262,24 @@ export default {
       dimensionsHint:
         'Keep the source orientation ("Invert" for portrait) — the depth map is center-cropped to this format',
     },
-    faceswap: {
-      name: 'FaceSwap (KREA2)',
+    detectReplace: {
+      name: 'Detect & Replace (KREA2)',
       description:
-        'Replaces the detected faces — one identity for all, or one per face',
-      dilation: 'Modified area (around the face)',
+        'Replaces the detected zones — one content for all, or one per zone',
+      detector: 'What to detect',
+      detectorHint:
+        'The model that finds the zones to replace — faces by default, but any detector installed on the server (hands, whole person…) works the same way',
+      dilation: 'Modified area (around the zone)',
       dilationHint:
-        'Grows the regenerated area from the detected face (in pixels). ~10 = tight face · 80–150 = forehead + hair + chin (whole head). If the area gets cut off, increase the "Framing".',
+        'Grows the regenerated area from the detected zone (in pixels). ~10 = tight crop · 80–150 = wide surroundings. If the area gets cut off, increase the "Framing".',
       thresholdHint:
-        'Raising it (0.6–0.7) removes false detections (ears, background) that shift the face numbers; lower it if a face is not found',
+        'Raising it (0.6–0.7) removes false detections that shift the zone numbers; lower it if a zone is not found',
       cropFactor: 'Framing around the area',
       cropFactorHint:
         'Context given to the regenerator (× the detected area). Must stay large enough to contain the dilated area — increase it if a large dilation gets cropped',
-      persons: 'Characters',
-      personsHint:
-        'One identity for every face, or one per face (numbered left to right on the photo)',
+      zones: 'Replacements',
+      zonesHint:
+        'One content for every zone, or one per zone (numbered left to right on the photo)',
     },
     t2p: {
       name: 'Text → Prompt',
@@ -379,11 +382,11 @@ export default {
     integerDims: 'Integer dimensions required',
     dimRange: 'Between {{min}} and {{max}} px',
     dimStep: 'Multiples of {{step}} required',
-    atLeastOnePerson: 'At least one character',
-    allBypassed: 'All faces are bypassed — nothing to generate',
-    identityRequired: 'Identity prompt required for every active face',
-    maxLorasPerPerson: 'Maximum {{count}} LoRAs per character',
-    denoiseRange: 'Denoise between 0.05 and 1 for every active face',
+    atLeastOneZone: 'At least one replacement',
+    allBypassed: 'All zones are bypassed — nothing to generate',
+    promptRequired: 'Prompt required for every active zone',
+    maxLorasPerZone: 'Maximum {{count}} LoRAs per zone',
+    denoiseRange: 'Denoise between 0.05 and 1 for every active zone',
     stepsRange: 'Steps between 1 and 30',
     invalidStrength: 'Invalid strength',
     invalidNumber: 'Invalid number',
@@ -450,23 +453,23 @@ export default {
     clear: 'Clear',
     empty: 'Waiting for events… (queue a job to see the stream)',
   },
-  persons: {
-    allFacesLabel: 'Same identity for every face',
-    allFacesTitle: 'Every detected face',
-    allFacesNote:
-      'This identity replaces every face found on the photo, however many — no numbering, nothing to enumerate. Faces missed by the detection are left untouched: lower the "Detection threshold" to catch more.',
-    faceTitle: 'Face #{{number}} (left → right)',
-    bypassLabel: 'Leave this face untouched (bypass)',
+  zones: {
+    allZonesLabel: 'Same content for every zone',
+    allZonesTitle: 'Every detected zone',
+    allZonesNote:
+      'This content replaces every zone found on the photo, however many — no numbering, nothing to enumerate. Zones missed by the detection are left untouched: lower the "Detection threshold" to catch more.',
+    zoneTitle: 'Zone #{{number}} (left → right)',
+    bypassLabel: 'Leave this zone untouched (bypass)',
     bypassNote:
-      'Face kept as-is — no pass generated, it keeps its number in the left → right order.',
-    identityPlaceholder: "Face identity (e.g. a man's face…)",
-    denoiseLabel: 'Denoise for this face',
-    denoiseLabelAll: 'Denoise for every face',
+      'Zone kept as-is — no pass generated, it keeps its number in the left → right order.',
+    promptPlaceholder: "Zone content (e.g. a man's face…)",
+    denoiseLabel: 'Denoise for this zone',
+    denoiseLabelAll: 'Denoise for every zone',
     detailLabel: 'Detail level',
     detailHint:
-      'Resolution at which the face is regenerated. Increase it (768–1280) for more detail on high-resolution images; slower and more VRAM-hungry.',
-    addPerson: 'Add a character',
-    maxPersons: 'Maximum {{count}} characters',
+      'Resolution at which the zone is regenerated. Increase it (768–1280) for more detail on high-resolution images; slower and more VRAM-hungry.',
+    addZone: 'Add a replacement',
+    maxZones: 'Maximum {{count}} zones',
     steps: 'Steps',
     seed: 'Seed',
     randomSeed: 'random',
@@ -690,7 +693,7 @@ export default {
       'Live image on the running job card (requires `--preview-method auto` on the ComfyUI side)',
     loraMax: 'LoRAs per field',
     loraMaxHint:
-      'Cap how many LoRAs each field accepts, across every workflow (FaceSwap: per character). Off = no limit.',
+      'Cap how many LoRAs each field accepts, across every workflow (Detect & Replace: per zone). Off = no limit.',
     loraMaxValue: 'Maximum',
     trashTitle: 'Trash',
     trashEmptyState: 'Empty — nothing to remove.',

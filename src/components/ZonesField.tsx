@@ -1,9 +1,9 @@
 /**
- * Character editor for the FaceSwap. Two modes:
- *  - "same identity for every face": a single card, no numbering — the pass
- *    covers all detected faces, however many;
- *  - one card per character (face number left → right, identity prompt,
- *    dedicated LoRAs — same editor and explorer as the other workflows).
+ * Zone editor for Detect & Replace. Two modes:
+ *  - "same content for every zone": a single card, no numbering — the pass
+ *    covers all detected zones, however many;
+ *  - one card per zone (zone number left → right, prompt, dedicated LoRAs —
+ *    same editor and explorer as the other workflows).
  * Plus the shared settings (denoise, steps, seed).
  */
 
@@ -33,29 +33,29 @@ import {
 } from '../workflows/types';
 import type {
   LorasField,
-  PersonsField as PersonsFieldSpec,
-  PersonsValue,
+  ZonesField as ZonesFieldSpec,
+  ZonesValue,
 } from '../workflows/types';
 import { LoraField } from './LoraField';
 import { SourceSeedChip } from './SourceSeedChip';
 
 interface Props {
-  field: PersonsFieldSpec;
-  value: PersonsValue;
-  onChange: (value: PersonsValue) => void;
+  field: ZonesFieldSpec;
+  value: ZonesValue;
+  onChange: (value: ZonesValue) => void;
   /** Remix: shared seed of the source image, offered back in one tap. */
   sourceSeed?: number;
 }
 
-export function PersonsField({ field, value, onChange, sourceSeed }: Props) {
+export function ZonesField({ field, value, onChange, sourceSeed }: Props) {
   const { t } = useTranslation();
-  // Per-character denoise text being edited (intermediate states like "0,"
+  // Per-zone denoise text being edited (intermediate states like "0,"
   // tolerated; numeric commit on the fly).
   const [denoiseTexts, setDenoiseTexts] = useState<Record<number, string>>({});
-  // "Detail level" panel (guide_size): collapsed by default, per character.
+  // "Detail level" panel (guide_size): collapsed by default, per zone.
   const [detailOpen, setDetailOpen] = useState<Record<number, boolean>>({});
 
-  // Per-character LoRA config: reuses the existing editor (the LoRA count
+  // Per-zone LoRA config: reuses the existing editor (the LoRA count
   // cap comes from the global setting, applied inside LoraField).
   const loraFieldSpec: LorasField = {
     kind: 'loras',
@@ -66,22 +66,22 @@ export function PersonsField({ field, value, onChange, sourceSeed }: Props) {
     defaultStrength: field.defaultStrength,
   };
 
-  const setPerson = (i: number, patch: Partial<PersonsValue['persons'][0]>) =>
+  const setZone = (i: number, patch: Partial<ZonesValue['zones'][0]>) =>
     onChange({
       ...value,
-      persons: value.persons.map((p, j) => (j === i ? { ...p, ...patch } : p)),
+      zones: value.zones.map((z, j) => (j === i ? { ...z, ...patch } : z)),
     });
 
-  const removePerson = (i: number) => {
+  const removeZone = (i: number) => {
     setDenoiseTexts({}); // indexes shift: restart from committed values
-    onChange({ ...value, persons: value.persons.filter((_, j) => j !== i) });
+    onChange({ ...value, zones: value.zones.filter((_, j) => j !== i) });
   };
 
-  const addPerson = () =>
+  const addZone = () =>
     onChange({
       ...value,
-      persons: [
-        ...value.persons,
+      zones: [
+        ...value.zones,
         {
           prompt: '',
           loras: [],
@@ -91,18 +91,18 @@ export function PersonsField({ field, value, onChange, sourceSeed }: Props) {
       ],
     });
 
-  const allFaces = !!value.allFaces;
+  const allZones = !!value.allZones;
   const atMax =
-    field.maxPersons != null && value.persons.length >= field.maxPersons;
+    field.maxZones != null && value.zones.length >= field.maxZones;
 
-  // Identity + LoRAs + denoise + detail level: identical in both modes.
-  const personBody = (person: PersonsValue['persons'][0], i: number) => (
+  // Prompt + LoRAs + denoise + detail level: identical in both modes.
+  const zoneBody = (zone: ZonesValue['zones'][0], i: number) => (
     <>
       <TextInput
         style={styles.promptInput}
-        value={person.prompt}
-        onChangeText={(t) => setPerson(i, { prompt: t })}
-        placeholder={t('persons.identityPlaceholder')}
+        value={zone.prompt}
+        onChangeText={(t) => setZone(i, { prompt: t })}
+        placeholder={t('zones.promptPlaceholder')}
         placeholderTextColor={colors.textDisabled}
         multiline
         autoCapitalize="none"
@@ -111,22 +111,22 @@ export function PersonsField({ field, value, onChange, sourceSeed }: Props) {
 
       <LoraField
         field={loraFieldSpec}
-        value={person.loras}
-        onChange={(loras) => setPerson(i, { loras })}
+        value={zone.loras}
+        onChange={(loras) => setZone(i, { loras })}
       />
 
-      <View style={styles.personDenoiseRow}>
-        <Text style={styles.personDenoiseLabel}>
-          {allFaces ? t('persons.denoiseLabelAll') : t('persons.denoiseLabel')}
+      <View style={styles.zoneDenoiseRow}>
+        <Text style={styles.zoneDenoiseLabel}>
+          {allZones ? t('zones.denoiseLabelAll') : t('zones.denoiseLabel')}
         </Text>
         <TextInput
-          style={styles.personDenoiseInput}
+          style={styles.zoneDenoiseInput}
           keyboardType="decimal-pad"
-          value={denoiseTexts[i] ?? String(person.denoise)}
+          value={denoiseTexts[i] ?? String(zone.denoise)}
           onChangeText={(t) => {
             setDenoiseTexts((s) => ({ ...s, [i]: t }));
             const n = Number(t.replace(',', '.'));
-            if (Number.isFinite(n)) setPerson(i, { denoise: n });
+            if (Number.isFinite(n)) setZone(i, { denoise: n });
           }}
           inputAccessoryViewID={accessoryId}
         />
@@ -144,10 +144,10 @@ export function PersonsField({ field, value, onChange, sourceSeed }: Props) {
             color={colors.textMuted}
           />
           <Text style={styles.detailHeaderLabel}>
-            {t('persons.detailLabel')}
+            {t('zones.detailLabel')}
           </Text>
           <Text style={styles.detailHeaderValue}>
-            {person.guideSize ?? DEFAULT_GUIDE_SIZE} px
+            {zone.guideSize ?? DEFAULT_GUIDE_SIZE} px
           </Text>
         </Pressable>
 
@@ -155,7 +155,7 @@ export function PersonsField({ field, value, onChange, sourceSeed }: Props) {
           <>
             <View style={styles.detailOptions}>
               {GUIDE_SIZE_OPTIONS.map((size) => {
-                const active = (person.guideSize ?? DEFAULT_GUIDE_SIZE) === size;
+                const active = (zone.guideSize ?? DEFAULT_GUIDE_SIZE) === size;
                 return (
                   <Pressable
                     key={size}
@@ -163,7 +163,7 @@ export function PersonsField({ field, value, onChange, sourceSeed }: Props) {
                       styles.detailOption,
                       active && styles.detailOptionActive,
                     ]}
-                    onPress={() => setPerson(i, { guideSize: size })}
+                    onPress={() => setZone(i, { guideSize: size })}
                   >
                     <Text
                       style={[
@@ -177,7 +177,7 @@ export function PersonsField({ field, value, onChange, sourceSeed }: Props) {
                 );
               })}
             </View>
-            <Text style={styles.detailHint}>{t('persons.detailHint')}</Text>
+            <Text style={styles.detailHint}>{t('zones.detailHint')}</Text>
           </>
         )}
       </View>
@@ -187,56 +187,56 @@ export function PersonsField({ field, value, onChange, sourceSeed }: Props) {
   return (
     <View style={styles.wrap}>
       <View style={styles.modeRow}>
-        <Text style={styles.modeLabel}>{t('persons.allFacesLabel')}</Text>
+        <Text style={styles.modeLabel}>{t('zones.allZonesLabel')}</Text>
         <Switch
-          value={allFaces}
-          onValueChange={(v) => onChange({ ...value, allFaces: v })}
+          value={allZones}
+          onValueChange={(v) => onChange({ ...value, allZones: v })}
           trackColor={{ false: colors.bgElevated, true: colors.accent }}
           thumbColor={colors.text}
         />
       </View>
 
-      {allFaces ? (
-        <View style={styles.personCard}>
-          <View style={styles.personHeader}>
-            <View style={styles.personBadge}>
-              <Ionicons name="people" size={14} color={colors.text} />
+      {allZones ? (
+        <View style={styles.zoneCard}>
+          <View style={styles.zoneHeader}>
+            <View style={styles.zoneBadge}>
+              <Ionicons name="apps-outline" size={14} color={colors.text} />
             </View>
-            <Text style={styles.personTitle}>{t('persons.allFacesTitle')}</Text>
+            <Text style={styles.zoneTitle}>{t('zones.allZonesTitle')}</Text>
           </View>
-          <Text style={styles.modeNote}>{t('persons.allFacesNote')}</Text>
-          {personBody(value.persons[0], 0)}
+          <Text style={styles.modeNote}>{t('zones.allZonesNote')}</Text>
+          {zoneBody(value.zones[0], 0)}
         </View>
       ) : (
         <>
-          {value.persons.map((person, i) => (
+          {value.zones.map((zone, i) => (
             <View
               key={i}
               style={[
-                styles.personCard,
-                person.bypass && styles.personCardBypass,
+                styles.zoneCard,
+                zone.bypass && styles.zoneCardBypass,
               ]}
             >
-              <View style={styles.personHeader}>
+              <View style={styles.zoneHeader}>
                 <View
                   style={[
-                    styles.personBadge,
-                    person.bypass && styles.personBadgeBypass,
+                    styles.zoneBadge,
+                    zone.bypass && styles.zoneBadgeBypass,
                   ]}
                 >
-                  <Text style={styles.personBadgeText}>{i + 1}</Text>
+                  <Text style={styles.zoneBadgeText}>{i + 1}</Text>
                 </View>
                 <Text
                   style={[
-                    styles.personTitle,
-                    person.bypass && { color: colors.textMuted },
+                    styles.zoneTitle,
+                    zone.bypass && { color: colors.textMuted },
                   ]}
                 >
-                  {t('persons.faceTitle', { number: i + 1 })}
+                  {t('zones.zoneTitle', { number: i + 1 })}
                 </Text>
-                {value.persons.length > 1 && (
+                {value.zones.length > 1 && (
                   <Pressable
-                    onPress={() => removePerson(i)}
+                    onPress={() => removeZone(i)}
                     hitSlop={10}
                     style={({ pressed }) => pressed && { opacity: 0.6 }}
                   >
@@ -251,20 +251,20 @@ export function PersonsField({ field, value, onChange, sourceSeed }: Props) {
 
               <View style={styles.bypassRow}>
                 <Text style={styles.bypassLabel}>
-                  {t('persons.bypassLabel')}
+                  {t('zones.bypassLabel')}
                 </Text>
                 <Switch
-                  value={!!person.bypass}
-                  onValueChange={(bypass) => setPerson(i, { bypass })}
+                  value={!!zone.bypass}
+                  onValueChange={(bypass) => setZone(i, { bypass })}
                   trackColor={{ false: colors.bgElevated, true: colors.warning }}
                   thumbColor={colors.text}
                 />
               </View>
 
-              {person.bypass ? (
-                <Text style={styles.bypassNote}>{t('persons.bypassNote')}</Text>
+              {zone.bypass ? (
+                <Text style={styles.bypassNote}>{t('zones.bypassNote')}</Text>
               ) : (
-                personBody(person, i)
+                zoneBody(zone, i)
               )}
             </View>
           ))}
@@ -275,18 +275,18 @@ export function PersonsField({ field, value, onChange, sourceSeed }: Props) {
               pressed && { backgroundColor: colors.surfacePressed },
               atMax && { opacity: 0.4 },
             ]}
-            onPress={addPerson}
+            onPress={addZone}
             disabled={atMax}
           >
             <Ionicons
-              name="person-add-outline"
+              name="add-circle-outline"
               size={18}
               color={colors.accent}
             />
             <Text style={styles.addText}>
               {atMax
-                ? t('persons.maxPersons', { count: field.maxPersons })
-                : t('persons.addPerson')}
+                ? t('zones.maxZones', { count: field.maxZones })
+                : t('zones.addZone')}
             </Text>
           </Pressable>
         </>
@@ -294,7 +294,7 @@ export function PersonsField({ field, value, onChange, sourceSeed }: Props) {
 
       <View style={styles.sharedRow}>
         <View style={styles.sharedItem}>
-          <Text style={styles.sharedLabel}>{t('persons.steps')}</Text>
+          <Text style={styles.sharedLabel}>{t('zones.steps')}</Text>
           <TextInput
             style={styles.sharedInput}
             keyboardType="number-pad"
@@ -306,7 +306,7 @@ export function PersonsField({ field, value, onChange, sourceSeed }: Props) {
           />
         </View>
         <View style={[styles.sharedItem, { flex: 1.4 }]}>
-          <Text style={styles.sharedLabel}>{t('persons.seed')}</Text>
+          <Text style={styles.sharedLabel}>{t('zones.seed')}</Text>
           <View style={styles.seedRow}>
             <TextInput
               style={[styles.sharedInput, { flex: 1 }]}
@@ -318,7 +318,7 @@ export function PersonsField({ field, value, onChange, sourceSeed }: Props) {
                   seed: t.trim() === '' ? 'random' : parseInt(t, 10) || 0,
                 })
               }
-              placeholder={t('persons.randomSeed')}
+              placeholder={t('zones.randomSeed')}
               placeholderTextColor={colors.textDisabled}
               inputAccessoryViewID={accessoryId}
             />
@@ -378,7 +378,7 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.xs,
     lineHeight: 18,
   },
-  personCard: {
+  zoneCard: {
     backgroundColor: colors.bgElevated,
     borderColor: colors.border,
     borderWidth: 1,
@@ -386,12 +386,12 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.sm,
   },
-  personHeader: {
+  zoneHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
   },
-  personBadge: {
+  zoneBadge: {
     width: 24,
     height: 24,
     borderRadius: 12,
@@ -399,12 +399,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  personBadgeText: {
+  zoneBadgeText: {
     color: colors.text,
     fontFamily: typography.uiBold,
     fontSize: typography.sizes.xs,
   },
-  personTitle: {
+  zoneTitle: {
     flex: 1,
     color: colors.text,
     fontFamily: typography.uiSemiBold,
@@ -423,11 +423,11 @@ const styles = StyleSheet.create({
     minHeight: 80,
     textAlignVertical: 'top',
   },
-  personCardBypass: {
+  zoneCardBypass: {
     opacity: 0.75,
     borderStyle: 'dashed',
   },
-  personBadgeBypass: {
+  zoneBadgeBypass: {
     backgroundColor: colors.textDisabled,
   },
   bypassRow: {
@@ -447,18 +447,18 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.xs,
     lineHeight: 18,
   },
-  personDenoiseRow: {
+  zoneDenoiseRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing.sm,
   },
-  personDenoiseLabel: {
+  zoneDenoiseLabel: {
     color: colors.textMuted,
     fontFamily: typography.uiMedium,
     fontSize: typography.sizes.sm,
   },
-  personDenoiseInput: {
+  zoneDenoiseInput: {
     minWidth: 88,
     minHeight: MIN_TOUCH_TARGET,
     borderRadius: radii.md,

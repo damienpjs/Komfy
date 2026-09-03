@@ -15,11 +15,11 @@ import type {
   ModelSourceField,
   ModelSourceValue,
   PatchTarget,
-  PersonsField,
-  PersonsValue,
-  PersonValue,
   SelectOption,
   WorkflowManifest,
+  ZoneValue,
+  ZonesField,
+  ZonesValue,
 } from './types';
 
 /**
@@ -109,33 +109,33 @@ export function validate(
         errors[field.key] = i18n.t('validation.dimStep', { step: DIMENSION_STEP });
       }
     }
-    if (field.kind === 'persons') {
-      const v = value as PersonsValue | undefined;
-      // allFaces: only persons[0] is patched — the others are dormant, so
+    if (field.kind === 'zones') {
+      const v = value as ZonesValue | undefined;
+      // allZones: only zones[0] is patched — the others are dormant, so
       // neither bypass nor the count constrain anything.
-      const active: PersonValue[] = v?.allFaces
-        ? v.persons.slice(0, 1)
-        : v?.persons.filter((p) => !p.bypass) ?? [];
-      // Per-character LoRA cap: the global setting (null = no limit).
+      const active: ZoneValue[] = v?.allZones
+        ? v.zones.slice(0, 1)
+        : v?.zones.filter((z) => !z.bypass) ?? [];
+      // Per-zone LoRA cap: the global setting (null = no limit).
       const loraCap = getLoraMaxCount();
-      if (!v || v.persons.length === 0) {
-        errors[field.key] = i18n.t('validation.atLeastOnePerson');
+      if (!v || v.zones.length === 0) {
+        errors[field.key] = i18n.t('validation.atLeastOneZone');
       } else if (active.length === 0) {
         errors[field.key] = i18n.t('validation.allBypassed');
       } else if (
-        !v.allFaces &&
-        field.maxPersons != null &&
-        v.persons.length > field.maxPersons
+        !v.allZones &&
+        field.maxZones != null &&
+        v.zones.length > field.maxZones
       ) {
-        errors[field.key] = i18n.t('persons.maxPersons', { count: field.maxPersons });
-      } else if (active.some((p) => p.prompt.trim() === '')) {
-        errors[field.key] = i18n.t('validation.identityRequired');
-      } else if (loraCap != null && active.some((p) => p.loras.length > loraCap)) {
-        errors[field.key] = i18n.t('validation.maxLorasPerPerson', { count: loraCap });
+        errors[field.key] = i18n.t('zones.maxZones', { count: field.maxZones });
+      } else if (active.some((z) => z.prompt.trim() === '')) {
+        errors[field.key] = i18n.t('validation.promptRequired');
+      } else if (loraCap != null && active.some((z) => z.loras.length > loraCap)) {
+        errors[field.key] = i18n.t('validation.maxLorasPerZone', { count: loraCap });
       } else if (
         active.some(
-          (p) =>
-            !Number.isFinite(p.denoise) || p.denoise < 0.05 || p.denoise > 1,
+          (z) =>
+            !Number.isFinite(z.denoise) || z.denoise < 0.05 || z.denoise > 1,
         )
       ) {
         errors[field.key] = i18n.t('validation.denoiseRange');
@@ -314,15 +314,15 @@ export function sanitizeOutputDir(dir: string): string {
 }
 
 /**
- * Inserts one character's pass: identity prompt + LoRA chain →
+ * Inserts one zone's pass: prompt + LoRA chain →
  * DetailerForEach over `segs`, applied on top of `image`. Returns the
  * detailer's IMAGE output. DetailerForEach parameters taken from a proven
  * FaceDetailer workflow (cfg 1, euler/simple, feather 5…).
  */
-function insertPersonPass(
+function insertZonePass(
   graph: PromptGraph,
-  field: PersonsField,
-  person: PersonValue,
+  field: ZonesField,
+  zone: ZoneValue,
   opts: {
     prefix: string;
     segs: [string, number];
@@ -341,17 +341,17 @@ function insertPersonPass(
     class_type: 'CLIPTextEncode',
     inputs: {
       clip: [field.clipSource.nodeId, field.clipSource.output],
-      text: person.prompt,
+      text: zone.prompt,
     },
-    _meta: { title: `${opts.title} identity` },
+    _meta: { title: `${opts.title} prompt` },
   };
 
-  // Character-specific LoRA chain.
+  // Zone-specific LoRA chain.
   let model: [string, number] = [
     field.modelSource.nodeId,
     field.modelSource.output,
   ];
-  person.loras.forEach((lora, j) => {
+  zone.loras.forEach((lora, j) => {
     const id = `${prefix}_lora_${j + 1}`;
     graph[id] = {
       class_type: 'LoraLoaderModelOnly',
@@ -367,7 +367,7 @@ function insertPersonPass(
 
   // Detail level: the crop is regenerated at guide_size; max_size
   // (anti-overflow ceiling) follows at 2× to leave room for elongated crops.
-  const guideSize = person.guideSize ?? DEFAULT_GUIDE_SIZE;
+  const guideSize = zone.guideSize ?? DEFAULT_GUIDE_SIZE;
 
   graph[`${prefix}_detailer`] = {
     class_type: 'DetailerForEach',
@@ -387,7 +387,7 @@ function insertPersonPass(
       scheduler: 'simple',
       positive: [`${prefix}_prompt`, 0],
       negative: [field.negativeSource.nodeId, field.negativeSource.output],
-      denoise: person.denoise,
+      denoise: zone.denoise,
       feather: 5,
       noise_mask: true,
       force_inpaint: true,
@@ -396,24 +396,25 @@ function insertPersonPass(
       inpaint_model: false,
       noise_mask_feather: 20,
     },
-    _meta: { title: `${opts.title} FaceSwap` },
+    _meta: { title: `${opts.title} — detect & replace` },
   };
   return [`${prefix}_detailer`, 0];
 }
 
 /**
- * Inserts the FaceSwap passes and rewires the imageTargets to the last one.
- *  - allFaces: a single pass fed the raw SEGS. DetailerForEach loops over
- *    every seg of the batch (seed + i per face), so any number of faces is
- *    covered by one identity — no filter node, nothing to enumerate.
- *  - otherwise: one pass per character, each behind an ordered SEGS filter
- *    (take_start = face number, ascending x1 = left → right), chained in
+ * Inserts the Detect & Replace passes and rewires the imageTargets to the
+ * last one.
+ *  - allZones: a single pass fed the raw SEGS. DetailerForEach loops over
+ *    every seg of the batch (seed + i per zone), so any number of zones is
+ *    covered by one pass — no filter node, nothing to enumerate.
+ *  - otherwise: one pass per zone, each behind an ordered SEGS filter
+ *    (take_start = zone number, ascending x1 = left → right), chained in
  *    series on the image.
  */
-function insertPersonsChain(
+function insertZonesChain(
   graph: PromptGraph,
-  field: PersonsField,
-  value: PersonsValue,
+  field: ZonesField,
+  value: ZonesValue,
 ): void {
   const seedBase =
     value.seed === 'random' || value.seed == null
@@ -425,40 +426,40 @@ function insertPersonsChain(
     field.imageSource.output,
   ];
 
-  if (value.allFaces) {
-    previousImage = insertPersonPass(graph, field, value.persons[0], {
-      prefix: 'komfy_faces',
+  if (value.allZones) {
+    previousImage = insertZonePass(graph, field, value.zones[0], {
+      prefix: 'komfy_all_zones',
       segs: [field.segsSource.nodeId, field.segsSource.output],
       image: previousImage,
       seed: seedBase,
       steps: value.steps,
-      title: 'Every face',
+      title: 'Every zone',
     });
   } else {
-    value.persons.forEach((person, i) => {
-      // Bypass: face i keeps its number but no pass is inserted.
-      if (person.bypass) return;
-      const prefix = `komfy_person_${i + 1}`;
+    value.zones.forEach((zone, i) => {
+      // Bypass: zone i keeps its number but no pass is inserted.
+      if (zone.bypass) return;
+      const prefix = `komfy_zone_${i + 1}`;
 
-      graph[`${prefix}_face`] = {
+      graph[`${prefix}_filter`] = {
         class_type: 'ImpactSEGSOrderedFilter',
         inputs: {
           segs: [field.segsSource.nodeId, field.segsSource.output],
           target: 'x1',
-          order: false, // ascending → faces numbered left to right
+          order: false, // ascending → zones numbered left to right
           take_start: i,
           take_count: 1,
         },
-        _meta: { title: `Face #${i + 1} (left → right)` },
+        _meta: { title: `Zone #${i + 1} (left → right)` },
       };
 
-      previousImage = insertPersonPass(graph, field, person, {
+      previousImage = insertZonePass(graph, field, zone, {
         prefix,
-        segs: [`${prefix}_face`, 0],
+        segs: [`${prefix}_filter`, 0],
         image: previousImage,
         seed: seedBase + i,
         steps: value.steps,
-        title: `Character ${i + 1}`,
+        title: `Zone ${i + 1}`,
       });
     });
   }
@@ -608,8 +609,8 @@ export function patchGraph(
       case 'loras':
         insertLoraChain(graph, field, Array.isArray(value) ? value : []);
         break;
-      case 'persons':
-        insertPersonsChain(graph, field, value as PersonsValue);
+      case 'zones':
+        insertZonesChain(graph, field, value as ZonesValue);
         break;
       case 'select': {
         const index =

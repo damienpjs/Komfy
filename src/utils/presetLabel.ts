@@ -1,14 +1,14 @@
 /**
  * Readable label for a set of settings, for the prompt history.
  * Prefers the first non-empty text field (usually the positive prompt),
- * then the first character prompt (FaceSwap), then a generic label.
+ * then the first zone prompt (Detect & Replace), then a generic label.
  */
 
 import i18n from '../i18n';
 import type {
   FieldValues,
-  PersonsValue,
   WorkflowField,
+  ZonesValue,
 } from '../workflows/types';
 
 const MAX_LEN = 48;
@@ -29,9 +29,9 @@ export function presetLabel(
     }
   }
   for (const f of fields) {
-    if (f.kind === 'persons') {
-      const pv = values[f.key] as PersonsValue | undefined;
-      const withPrompt = pv?.persons.find((p) => p.prompt.trim());
+    if (f.kind === 'zones') {
+      const zv = values[f.key] as ZonesValue | undefined;
+      const withPrompt = zv?.zones.find((z) => z.prompt.trim());
       if (withPrompt) return truncate(withPrompt.prompt);
     }
   }

@@ -30,10 +30,10 @@ import { LoraField } from '../../components/LoraField';
 import { ModelField } from '../../components/ModelField';
 import { ModelSourceField } from '../../components/ModelSourceField';
 import { OutputDirPicker } from '../../components/OutputDirPicker';
-import { PersonsField } from '../../components/PersonsField';
 import { PresetBar } from '../../components/PresetBar';
 import { PromptField } from '../../components/PromptField';
 import { SourceSeedChip } from '../../components/SourceSeedChip';
+import { ZonesField } from '../../components/ZonesField';
 import { useBatchPrefs } from '../../store/batchPrefs';
 import { useFieldPrefs } from '../../store/fieldPrefs';
 import { useGeneratedPrompts } from '../../store/generatedPrompts';
@@ -71,7 +71,7 @@ import {
   modelSourceOptions,
 } from '../../workflows/requirements';
 import {
-  ALL_FACES_SEED_STRIDE,
+  ALL_ZONES_SEED_STRIDE,
   DEFAULT_GUIDE_SIZE,
 } from '../../workflows/types';
 import type {
@@ -79,8 +79,8 @@ import type {
   FieldValues,
   LoraSelection,
   ModelSourceValue,
-  PersonsValue,
   WorkflowField,
+  ZonesValue,
 } from '../../workflows/types';
 
 
@@ -165,9 +165,9 @@ function initialValues(
     if (field.kind === 'image' || field.kind === 'mask') values[field.key] = '';
     if (field.kind === 'dimensions')
       values[field.key] = { ...field.default, inverted: false, custom: false };
-    if (field.kind === 'persons')
+    if (field.kind === 'zones')
       values[field.key] = {
-        persons: [
+        zones: [
           {
             prompt: '',
             loras: [],
@@ -386,20 +386,20 @@ export default function WorkflowLaunchScreen() {
         if (seedField && runValues[seedField.key] !== 'random' && i > 0) {
           runValues[seedField.key] = Number(runValues[seedField.key]) + i;
         }
-        const personsField = manifest.fields.find((f) => f.kind === 'persons');
-        if (personsField && i > 0) {
-          const pv = runValues[personsField.key] as PersonsValue;
-          if (pv.seed !== 'random') {
-            // Each character pass consumes seed..seed+n → shift by the
-            // number of characters to keep the jobs distinct. In allFaces
-            // mode the single pass consumes one seed per DETECTED face, a
-            // count unknown until the detector runs: stride by the ceiling.
-            const stride = pv.allFaces
-              ? ALL_FACES_SEED_STRIDE
-              : Math.max(1, pv.persons.length);
-            runValues[personsField.key] = {
-              ...pv,
-              seed: Number(pv.seed) + i * stride,
+        const zonesField = manifest.fields.find((f) => f.kind === 'zones');
+        if (zonesField && i > 0) {
+          const zv = runValues[zonesField.key] as ZonesValue;
+          if (zv.seed !== 'random') {
+            // Each zone pass consumes seed..seed+n → shift by the number of
+            // zones to keep the jobs distinct. In allZones mode the single
+            // pass consumes one seed per DETECTED zone, a count unknown
+            // until the detector runs: stride by the ceiling.
+            const stride = zv.allZones
+              ? ALL_ZONES_SEED_STRIDE
+              : Math.max(1, zv.zones.length);
+            runValues[zonesField.key] = {
+              ...zv,
+              seed: Number(zv.seed) + i * stride,
             };
           }
         }
@@ -455,10 +455,10 @@ export default function WorkflowLaunchScreen() {
           <View key={field.key} style={styles.fieldBlock}>
             <Text style={styles.label}>{t(field.label)}</Text>
 
-            {field.kind === 'persons' && (
-              <PersonsField
+            {field.kind === 'zones' && (
+              <ZonesField
                 field={field}
-                value={values[field.key] as PersonsValue}
+                value={values[field.key] as ZonesValue}
                 onChange={(v) => setValue(field.key, v)}
                 sourceSeed={sourceSeeds[field.key]}
               />
@@ -533,7 +533,7 @@ export default function WorkflowLaunchScreen() {
                     onChangeText={(text) =>
                       setValue(field.key, text.trim() === '' ? 'random' : text)
                     }
-                    placeholder={t('persons.randomSeed')}
+                    placeholder={t('zones.randomSeed')}
                     placeholderTextColor={colors.textDisabled}
                     keyboardType="numeric"
                     inputAccessoryViewID={accessoryId}

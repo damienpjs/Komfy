@@ -2,8 +2,8 @@
 
 import { inpaintDraw } from './inpaint-draw';
 import { krea2Depth } from './krea2-depth';
+import { krea2DetectReplace } from './krea2-detect-replace';
 import { krea2Edit } from './krea2-edit';
-import { krea2FaceSwap } from './krea2-faceswap';
 import { krea2Img2Img } from './krea2-img2img';
 import { krea2Img2Prompt } from './krea2-img2prompt';
 import { krea2Text2Img } from './krea2-text2img';
@@ -22,7 +22,7 @@ export const workflows: WorkflowManifest[] = [
   krea2Img2Prompt,
   text2Prompt,
   inpaintDraw,
-  krea2FaceSwap,
+  krea2DetectReplace,
 ];
 
 export function getWorkflow(id: string): WorkflowManifest | undefined {

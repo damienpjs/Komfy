@@ -3,8 +3,8 @@
  * seed by default (the whole point of a variant); this chip carries the seed
  * the remixed image was actually drawn with, one tap away — for iterating on
  * a prompt while freezing the noise. Shared between the seed field of the
- * launch screen and the FaceSwap shared seed (PersonsField), so any workflow
- * with a seed gets it for free.
+ * launch screen and the Detect & Replace shared seed (ZonesField), so any
+ * workflow with a seed gets it for free.
  */
 
 import { Ionicons } from '@expo/vector-icons';

@@ -4,8 +4,8 @@
  * (class_type fingerprint + wiring, node IDs may differ). Two kinds of
  * dynamic chains are absorbed and restored as form values:
  *  - LoraLoaderModelOnly (loras field);
- *  - per-character SEGS filter + DetailerForEach, or a lone DetailerForEach
- *    on the raw SEGS (persons field, FaceSwap — see PersonsValue.allFaces).
+ *  - per-zone SEGS filter + DetailerForEach, or a lone DetailerForEach
+ *    on the raw SEGS (zones field, Detect & Replace — see ZonesValue.allZones).
  * On a match → pre-filled form (seed reset to "random", the source image's
  * own seed carried aside as `sourceSeeds` so the form can offer to reuse it).
  */
@@ -16,10 +16,10 @@ import type {
   FieldValues,
   LoraSelection,
   ModelSourceField,
-  PersonsField,
-  PersonValue,
   SelectField,
   WorkflowManifest,
+  ZoneValue,
+  ZonesField,
 } from './types';
 
 type Conn = [string, number];
@@ -35,7 +35,7 @@ function isConn(v: unknown): v is Conn {
 
 /**
  * Seed the matched image was drawn with, per seed-carrying field key
- * (kind 'seed' and the persons field's shared seed). Empty when the graph
+ * (kind 'seed' and the zones field's shared seed). Empty when the graph
  * wires its seeds instead of holding literals. Kept OUT of the values so a
  * variant stays a variant by default — the form only offers to reuse it.
  */
@@ -50,8 +50,8 @@ export type MatchOutcome =
     }
   | { status: 'unknown-workflow' };
 
-interface RawPerson extends PersonValue {
-  /** Face number (take_start), or null when the pass covers every face. */
+interface RawZone extends ZoneValue {
+  /** Zone number (take_start), or null when the pass covers every zone. */
   index: number | null;
   denoise: number;
   steps: number;
@@ -74,12 +74,12 @@ function literalSeed(value: unknown): number | undefined {
 }
 
 /**
- * Remix guard: face numbers come from the `take_start` of an untrusted PNG,
+ * Remix guard: zone numbers come from the `take_start` of an untrusted PNG,
  * and the numbered mode rebuilds `maxIndex + 1` cards (holes = bypassed
- * faces). Without a bound, an absurd take_start would expand into a huge
+ * zones). Without a bound, an absurd take_start would expand into a huge
  * card list. Only used when the field itself declares no cap.
  */
-const MAX_REMIXABLE_FACES = 64;
+const MAX_REMIXABLE_ZONES = 64;
 
 interface WalkState {
   /** manifest node id → extracted node id. */
@@ -91,12 +91,12 @@ interface WalkState {
    * each chain on its own field instead of merging them into one list.
    */
   loras: Map<string, LoraSelection[]>;
-  /** Absorbed characters (persons field, FaceSwap). */
-  persons: RawPerson[];
+  /** Absorbed zones (zones field, Detect & Replace). */
+  zones: RawZone[];
   /** Visited extracted-graph nodes (whole structure = covered). */
   visited: Set<string>;
-  /** Persons field config of the tested manifest, if any. */
-  personsField?: PersonsField;
+  /** Zones field config of the tested manifest, if any. */
+  zonesField?: ZonesField;
   /** modelSource field config of the tested manifest, if any. */
   modelSourceField?: ModelSourceField;
   /**
@@ -161,7 +161,7 @@ function absorbDetailer(
   detailerId: string,
   state: WalkState,
 ): Conn | null {
-  const field = state.personsField!;
+  const field = state.zonesField!;
   const detailer = extracted[detailerId];
   state.visited.add(detailerId);
 
@@ -176,8 +176,8 @@ function absorbDetailer(
     return mapShared(state, sourceNodeId, conn[0]);
   };
 
-  // SEGS: either the filter of the targeted face (numbered mode), or the
-  // detection itself (allFaces — DetailerForEach iterates the whole batch).
+  // SEGS: either the filter of the targeted zone (numbered mode), or the
+  // detection itself (allZones — DetailerForEach iterates the whole batch).
   const segsConn = detailer.inputs.segs;
   if (!isConn(segsConn)) return null;
   const segsNode = extracted[segsConn[0]];
@@ -210,7 +210,7 @@ function absorbDetailer(
       return null;
   }
 
-  // Identity prompt.
+  // Zone prompt.
   const posConn = detailer.inputs.positive;
   if (!isConn(posConn)) return null;
   const promptNode = extracted[posConn[0]];
@@ -228,7 +228,7 @@ function absorbDetailer(
   )
     return null;
 
-  // Model: the character's LoRA chain then the shared source.
+  // Model: the zone's LoRA chain then the shared source.
   let loras: LoraSelection[] = [];
   let modelConn: Conn | null = null;
   if (isConn(detailer.inputs.model)) {
@@ -243,7 +243,7 @@ function absorbDetailer(
   if (!checkShared(field.vaeSource.nodeId, detailer.inputs.vae)) return null;
 
   const guideSize = Number(detailer.inputs.guide_size);
-  state.persons.push({
+  state.zones.push({
     index,
     prompt: String(promptNode.inputs.text ?? ''),
     loras,
@@ -259,7 +259,7 @@ function absorbDetailer(
 
 /**
  * Resolves an extracted-graph connection by absorbing the dynamic chains
- * (root LoRAs, character passes). null = incompatible shape.
+ * (root LoRAs, zone passes). null = incompatible shape.
  */
 function resolveConnection(
   extracted: PromptGraph,
@@ -283,7 +283,7 @@ function resolveConnection(
       if (resolved.loras.length) state.loras.set(current[0], resolved.loras);
     } else if (
       node.class_type === 'DetailerForEach' &&
-      state.personsField != null
+      state.zonesField != null
     ) {
       const next = absorbDetailer(extracted, manifest, current[0], state);
       if (!next) return null;
@@ -396,8 +396,8 @@ function matchVariant(
   );
   if (sinks.length !== 1) return null;
 
-  const personsField = manifest.fields.find(
-    (f): f is PersonsField => f.kind === 'persons',
+  const zonesField = manifest.fields.find(
+    (f): f is ZonesField => f.kind === 'zones',
   );
   const modelSourceField = manifest.fields.find(
     (f): f is ModelSourceField => f.kind === 'modelSource',
@@ -405,9 +405,9 @@ function matchVariant(
   const state: WalkState = {
     map: new Map(),
     loras: new Map(),
-    persons: [],
+    zones: [],
     visited: new Set(),
-    personsField,
+    zonesField,
     modelSourceField,
   };
   if (!walk(extracted, graph, sinks[0], manifest.saveNodeId, state)) {
@@ -454,23 +454,23 @@ function matchVariant(
   // Whole structure covered: no unknown extra nodes.
   if (state.visited.size !== Object.keys(extracted).length) return null;
 
-  // Persons field: either a single all-faces pass, or unique and plausible
-  // face numbers (holes are possible — bypassed faces generate no pass).
-  const allFaces = state.persons.some((p) => p.index == null);
-  if (personsField) {
-    if (state.persons.length === 0) return null;
-    if (allFaces) {
-      // An all-faces pass consumes every face: it cannot coexist with
+  // Zones field: either a single all-zones pass, or unique and plausible
+  // zone numbers (holes are possible — bypassed zones generate no pass).
+  const allZones = state.zones.some((z) => z.index == null);
+  if (zonesField) {
+    if (state.zones.length === 0) return null;
+    if (allZones) {
+      // An all-zones pass consumes every zone: it cannot coexist with
       // numbered ones (nothing in Komfy emits such a graph).
-      if (state.persons.length !== 1) return null;
+      if (state.zones.length !== 1) return null;
     } else {
-      state.persons.sort((a, b) => a.index! - b.index!);
-      const indexes = new Set(state.persons.map((p) => p.index));
+      state.zones.sort((a, b) => a.index! - b.index!);
+      const indexes = new Set(state.zones.map((z) => z.index));
       if (
-        indexes.size !== state.persons.length ||
-        state.persons.some((p) => p.index! < 0) ||
-        state.persons[state.persons.length - 1].index! >=
-          (personsField.maxPersons ?? MAX_REMIXABLE_FACES)
+        indexes.size !== state.zones.length ||
+        state.zones.some((z) => z.index! < 0) ||
+        state.zones[state.zones.length - 1].index! >=
+          (zonesField.maxZones ?? MAX_REMIXABLE_ZONES)
       ) {
         return null;
       }
@@ -631,17 +631,17 @@ function matchVariant(
         values[field.key] = opensWithFixed ? absorbed.slice(fixed.length) : absorbed;
         break;
       }
-      case 'persons': {
+      case 'zones': {
         // Shared seed: patch.ts gives pass i the seed `base + index`, so the
-        // base is recovered from any pass (allFaces = a single pass, base as is).
-        const first = state.persons[0];
+        // base is recovered from any pass (allZones = a single pass, base as is).
+        const first = state.zones[0];
         if (first?.seed != null) {
           sourceSeeds[field.key] = first.seed - (first.index ?? 0);
         }
-        if (allFaces) {
-          const raw = state.persons[0];
+        if (allZones) {
+          const raw = state.zones[0];
           values[field.key] = {
-            persons: [
+            zones: [
               {
                 prompt: raw.prompt,
                 loras: raw.loras,
@@ -649,17 +649,17 @@ function matchVariant(
                 guideSize: raw.guideSize,
               },
             ],
-            allFaces: true,
+            allZones: true,
             steps: raw.steps,
             seed: 'random', // variant = new seed
           };
           break;
         }
         // Rebuilds the full list: numbers missing from the passes were
-        // bypassed faces.
-        const count = state.persons[state.persons.length - 1].index! + 1;
-        const persons: PersonValue[] = Array.from({ length: count }, (_, i) => {
-          const raw = state.persons.find((p) => p.index === i);
+        // bypassed zones.
+        const count = state.zones[state.zones.length - 1].index! + 1;
+        const zones: ZoneValue[] = Array.from({ length: count }, (_, i) => {
+          const raw = state.zones.find((z) => z.index === i);
           return raw
             ? {
                 prompt: raw.prompt,
@@ -676,8 +676,8 @@ function matchVariant(
               };
         });
         values[field.key] = {
-          persons,
-          steps: state.persons[0].steps,
+          zones,
+          steps: state.zones[0].steps,
           seed: 'random', // variant = new seed
         };
         break;

@@ -11,8 +11,8 @@
  *  - some custom nodes serialize numbers as strings ("8", "1.0");
  *  - a prompt's text can live under `string`/`value`/`populated_text`
  *    (String Literal, PrimitiveStringMultiline, Impact wildcards);
- *  - detailer-only workflows (faceswap) have no KSampler: the sampling node
- *    is the one carrying steps+cfg+seed (DetailerForEach);
+ *  - detailer-only workflows (detect & replace) have no KSampler: the
+ *    sampling node is the one carrying steps+cfg+seed (DetailerForEach);
  *  - a negative wired to ConditioningZeroOut = no negative (following it
  *    would climb back to the positive prompt).
  */
@@ -128,7 +128,7 @@ export function describeJob(graph: PromptGraph): JobSummary {
   const nodes = Object.values(graph) as PromptNode[];
 
   // Sampling node: KSampler & co, otherwise any node carrying
-  // steps + cfg + seed (DetailerForEach in the faceswap workflows).
+  // steps + cfg + seed (DetailerForEach in the detect & replace workflows).
   const sampler =
     nodes.find((n) => n.class_type.includes('KSampler')) ??
     nodes.find(
