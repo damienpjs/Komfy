@@ -118,6 +118,15 @@ export const krea2DetectReplace: WorkflowManifest = {
       required: true,
     },
     {
+      kind: 'model',
+      key: 'detector',
+      label: 'wf.detectReplace.detector',
+      hint: 'wf.detectReplace.detectorHint',
+      target: { nodeId: '6', input: 'model_name' },
+      default: 'bbox/face_yolov8m.pt',
+      remember: true,
+    },
+    {
       kind: 'number',
       key: 'dilation',
       label: 'wf.detectReplace.dilation',

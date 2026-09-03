@@ -270,6 +270,9 @@ export default {
       name: 'Détecter & Remplacer (KREA2)',
       description:
         'Remplace les zones détectées — un même contenu pour toutes, ou un par zone',
+      detector: 'Quoi détecter',
+      detectorHint:
+        'Le modèle qui repère les zones à remplacer — les visages par défaut, mais n’importe quel détecteur installé sur le serveur (mains, personne entière…) fonctionne pareil',
       dilation: 'Zone modifiée (autour de la détection)',
       dilationHint:
         'Agrandit la zone régénérée à partir de la zone détectée (en pixels). ~10 = zone serrée · 80–150 = alentours larges. Si la zone est coupée, augmenter le « Cadrage ».',

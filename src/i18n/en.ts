@@ -266,6 +266,9 @@ export default {
       name: 'Detect & Replace (KREA2)',
       description:
         'Replaces the detected zones — one content for all, or one per zone',
+      detector: 'What to detect',
+      detectorHint:
+        'The model that finds the zones to replace — faces by default, but any detector installed on the server (hands, whole person…) works the same way',
       dilation: 'Modified area (around the zone)',
       dilationHint:
         'Grows the regenerated area from the detected zone (in pixels). ~10 = tight crop · 80–150 = wide surroundings. If the area gets cut off, increase the "Framing".',
