@@ -7,7 +7,7 @@
 
 import * as Clipboard from 'expo-clipboard';
 import { Link, type Href } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
@@ -59,6 +59,12 @@ export function ServerPowerCard() {
   const [tokenDraft, setTokenDraft] = useState(supervisorToken);
   const [busy, setBusy] = useState(false);
   const [scanning, setScanning] = useState(false);
+
+  // Keep the drafts in sync with the store when it changes from outside this
+  // card — e.g. the OS deep link (`komfy://setup`) applies pairing in
+  // src/app/_layout.tsx while this screen is already mounted.
+  useEffect(() => setUrlDraft(supervisorUrl), [supervisorUrl]);
+  useEffect(() => setTokenDraft(supervisorToken), [supervisorToken]);
 
   const applyAndSync = (result: PairingResult) => {
     applyPairing(result);

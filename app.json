@@ -13,9 +13,9 @@
       "buildNumber": "1",
       "infoPlist": {
         "NSAppTransportSecurity": {
-          "NSAllowsArbitraryLoads": true,
-          "NSAllowsLocalNetworking": true
-        }
+          "NSAllowsArbitraryLoads": true
+        },
+        "NSLocalNetworkUsageDescription": "Komfy communique avec le serveur ComfyUI et son superviseur sur votre réseau local ou via Tailscale."
       }
     },
     "android": {
