@@ -6,7 +6,7 @@ gallery, remix an image from its recipe. UI in English and French
 (selector in Settings).
 
 > Personal project: the embedded workflows are tailored to a specific
-> setup (KREA2 models, Impact Pack detectors, local Ollama). The code —
+> setup (KREA2 models, LTX 2.3 video, Impact Pack detectors, local Ollama). The code —
 > API client, graph patching, remix, gallery — is generic and reusable
 > for other workflows.
 
@@ -32,17 +32,33 @@ themselves (`docs/api-notes.md`) are local working files, not published.
 Server side:
 
 - **ComfyUI** installed, with the models referenced by the manifests in
-  `src/workflows/` (KREA2 Turbo checkpoint, Qwen VAE/CLIP, Ultralytics
-  detectors, ESRGAN-family upscalers — see each workflow file);
-- **Custom nodes**: [ComfyUI-Impact-Pack](https://github.com/ltdrdata/ComfyUI-Impact-Pack)
-  and [Impact-Subpack](https://github.com/ltdrdata/ComfyUI-Impact-Subpack)
-  (detection, DetailerForEach), [comfyui-ollama](https://github.com/stavsap/comfyui-ollama)
-  and [ComfyUI-Custom-Scripts](https://github.com/pythongosssss/ComfyUI-Custom-Scripts)
-  ("→ Prompt" workflows),
-  [ComfyUI_UltimateSDUpscale](https://github.com/ssitu/ComfyUI_UltimateSDUpscale)
-  (Upscale workflow), comfyui-krea2edit (Krea2 Edit nodes) and
-  [ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes)
-  (Edit workflow — the latter sizes the output canvas from the source image);
+  `src/workflows/` (KREA2 Turbo diffusion model, Qwen VAE/CLIP, depth-control
+  LoRA, Ultralytics detectors, ESRGAN-family upscalers, LTX 2.3 GGUF models +
+  audio VAE — see each workflow file);
+- **Custom nodes** (the Workflows screen flags any that are missing):
+  - [ComfyUI-Impact-Pack](https://github.com/ltdrdata/ComfyUI-Impact-Pack)
+    and [Impact-Subpack](https://github.com/ltdrdata/ComfyUI-Impact-Subpack)
+    — Detect & Replace and Inpaint (detection, DetailerForEach, mask blur);
+  - [comfyui-ollama](https://github.com/stavsap/comfyui-ollama) and
+    [ComfyUI-Custom-Scripts](https://github.com/pythongosssss/ComfyUI-Custom-Scripts)
+    — "→ Prompt" workflows;
+  - [ComfyUI_UltimateSDUpscale](https://github.com/ssitu/ComfyUI_UltimateSDUpscale)
+    — Upscale;
+  - comfyui-krea2edit and [ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes)
+    — Edit (KJNodes sizes the output canvas from the source image);
+  - comfyui-krea2-controlnet and
+    [comfyui_controlnet_aux](https://github.com/Fannovel16/comfyui_controlnet_aux)
+    — Depth (Depth Anything V2 preprocessor);
+  - Image → Video (LTX 2.3):
+    [ComfyUI-LTXVideo](https://github.com/Lightricks/ComfyUI-LTXVideo),
+    [ComfyUI-GGUF](https://github.com/city96/ComfyUI-GGUF), ComfyUI-KJNodes,
+    [rgthree-comfy](https://github.com/rgthree/rgthree-comfy),
+    [ComfyUI-VideoHelperSuite](https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite),
+    [ComfyUI-Frame-Interpolation](https://github.com/Fannovel16/ComfyUI-Frame-Interpolation),
+    [ComfyUI-Easy-Use](https://github.com/yolain/ComfyUI-Easy-Use),
+    [ComfyUI-mxToolkit](https://github.com/Smirnov75/ComfyUI-mxToolkit),
+    [ComfyMath](https://github.com/evanspearman/ComfyMath) and 10S_Nodes
+    (reference conditioning);
 - **Ollama** running locally (`127.0.0.1:11434`, never exposed on the
   tailnet) with a vision model tagged `gemma4-vision:latest` — only for the
   "→ Prompt" workflows. Any Gemma-class vision model works; alias yours
@@ -52,9 +68,12 @@ Server side:
 Development / phone side:
 
 - **Node 20+** and npm;
-- **Expo Go** (SDK 54 build) on the phone, **Tailscale** connected to the
-  same tailnet as the server;
-- an Expo account (free) only for EAS Update publishing.
+- **Expo Go** (SDK 54 build) on the phone — or a native build (see
+  [Native build](#native-build-standalone-app)) — and **Tailscale** connected
+  to the same tailnet as the server;
+- an Expo account (free) only for EAS Update publishing;
+- for a native build only: **Xcode + CocoaPods** (iOS, macOS host) or the
+  **Android SDK** (Android).
 
 ## Server setup (once)
 
@@ -194,9 +213,46 @@ Then on the iPhone: open the URL printed by the command once (or
 `exp://u.expo.dev/<projectId>?channel-name=main`) — it then stays in Expo
 Go's history. On every change: `eas update --branch main`.
 
-Moving later to a real installed app (Komfy icon, TestFlight): paid Apple
-Developer account + `eas build --profile preview --platform ios` — no code
-changes.
+To install Komfy as a real app instead (own icon, no Expo Go), see the next
+section.
+
+## Native build (standalone app)
+
+The same code also builds as a standalone app with the JS bundle embedded.
+`ios/` and `android/` are generated from `app.json` by `expo prebuild` and
+git-ignored — change `app.json` (or a config plugin in `plugins/`), never the
+native folders.
+
+**iOS** (macOS host, Xcode + CocoaPods, device paired in Xcode):
+
+```bash
+npm run ios            # debug build (expo run:ios), JS served by Metro
+npm run ios:release    # Release build on a physical device, bundle embedded
+```
+
+`ios:release` prompts for the device name as shown in Xcode ▸ Devices (it is
+personal, so it is never committed), regenerates `ios/` with
+`expo prebuild --clean` so `app.json` changes always reach the build, then
+runs `expo run:ios --configuration Release --no-bundler`. The raw xcodebuild
+output goes to `<tmpdir>/komfy-ios-build.log`; only its tail is printed.
+
+A **free personal Apple team** is enough: the
+[`withoutPushEntitlement`](./plugins/withoutPushEntitlement.js) config plugin
+strips the `aps-environment` entitlement that expo-notifications adds — Komfy
+only schedules local notifications, and personal teams cannot provision
+Push. (Personal-team builds expire after 7 days; rebuild to renew.)
+
+**Android** (Android SDK, device with USB debugging):
+
+```bash
+npm run android        # expo run:android — package com.dagobert.komfy
+```
+
+The runtime permissions (media library, camera for the pairing QR, audio) are
+declared in `app.json`.
+
+The native app registers the `komfy://` scheme: scanning the pairing QR with
+the OS camera opens it and applies the setup directly.
 
 ## Adding a workflow
 
@@ -220,7 +276,7 @@ into Import on another phone transfers the workflow as-is.
    (name, icon, description, `saveNodeId`, patchable fields — see
    [krea2-text2img.ts](./src/workflows/krea2-text2img.ts) as a model).
    Field kinds: `text`, `number`, `seed`, `select`, `model`, `modelSource`,
-   `dimensions`, `image`, `mask`, `loras`, `persons`. A `model` field offers
+   `dimensions`, `image`, `mask`, `loras`, `zones`. A `model` field offers
    the files actually installed on the server (its target's `/object_info`
    enum, optional family `filter` regex) instead of freezing a filename;
    `modelSource` generalizes it to a whole model (checkpoint, or diffusion
@@ -248,6 +304,10 @@ control, provided by Tailscale (WireGuard, explicitly enrolled devices).
   exposure (router, ngrok…).
 - Tailnet restricted to the server + phone(s); optional: ACL on port 8188.
 - No secret in the repo or the app; the server URL lives in AsyncStorage.
+- The native iOS build allows plain HTTP (`NSAllowsArbitraryLoads`), because
+  ComfyUI and the supervisor are reached as `http://<tailscale-ip>`: the
+  traffic is encrypted by the WireGuard tunnel, not by TLS — one more reason
+  never to point the app at a server outside the tailnet.
 - The `komfy-listing` extension makes no outgoing calls. Deletion is soft
   (move to a per-root `.komfy-trash`); the only permanent removal is the
   explicit, confirmed "Empty trash" action in Settings.
@@ -279,14 +339,16 @@ komfy/
 ├── src/app/              # screens (Expo Router): (tabs)/queue·workflows·library·settings, workflow/[id]·import·edit·text-result, prompts, ws-log, comfy-console
 ├── src/api/              # client.ts, supervisor.ts, ws.ts (WebSocket), types.ts, queryClient.ts
 ├── src/i18n/             # i18next setup + en/fr dictionaries (default: English)
-├── src/workflows/        # manifests + frozen API graphs, patch.ts, match.ts (remix), requirements.ts (availability), infer.ts + registry.ts (runtime import)
-├── src/components/       # UI (queue cards, pickers, viewer, SetupWizard, ServerPowerCard, PairingScanner…)
-├── src/store/            # Zustand: settings, connection, supervisor, execution, toast, outputPrefs, customWorkflows, generatedPrompts (phone-local prompt library)
+├── src/workflows/        # manifests + frozen API graphs, patch.ts, match.ts (remix), requeue.ts, requirements.ts (availability), infer.ts + registry.ts (runtime import)
+├── src/components/       # UI (queue cards, pickers, viewer, MaskEditor, ZonesField, SetupWizard, ServerPowerCard, PairingScanner…)
+├── src/store/            # Zustand: settings, connection, supervisor, execution, toast, output/field/batch prefs, customWorkflows + importDraft, generatedPrompts + promptHistory (phone-local prompt library)
 ├── src/hooks/            # useQueue, useGallery, useLoras, useRemix, useHealthCheck, useSupervisor(+Logs), useAvailability, usePendingPrompts
-├── src/utils/            # pathTree (explorer), pngMetadata (tEXt chunks), pairing (QR/deep-link setup code), maskRaster + png (JS mask rasterizer/PNG encoder)
+├── src/utils/            # pathTree (explorer), pngMetadata (tEXt chunks), pairing (QR/deep-link setup code), maskRaster + png (JS mask rasterizer/PNG encoder), describeJob, saveToPhotos…
 ├── src/theme/tokens.ts   # style guide — no hardcoded styles elsewhere
 ├── server/komfy-listing/ # ComfyUI extension (recursive output+input listing, trash)
 ├── server/supervisor/    # standalone Node service: remote ComfyUI on/off + live console
+├── scripts/              # start-comfy.sh/.ps1 + comfy.js (launch), expo-start.js (Metro on Tailscale), pair.js (QR), ios-release.js
+├── plugins/              # Expo config plugins (withoutPushEntitlement — free Apple team builds)
 └── docs/architecture.*   # architecture diagram: Excalidraw source + PNG exports
                           # (rest of docs/ = local notes, git-ignored)
 ```
