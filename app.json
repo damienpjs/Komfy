@@ -8,7 +8,15 @@
     "scheme": "komfy",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/images/icon.png"
+      "icon": "./assets/images/icon.png",
+      "bundleIdentifier": "com.dagobert.komfy",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true,
+          "NSAllowsLocalNetworking": true
+        }
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -25,6 +33,7 @@
     },
     "plugins": [
       "expo-router",
+      "./plugins/withoutPushEntitlement",
       [
         "expo-media-library",
         {
