@@ -5,7 +5,8 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
-import { useState } from 'react';
+import * as Haptics from 'expo-haptics';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSettings } from '../store/settings';
@@ -29,6 +30,10 @@ interface Props {
 const STRENGTH_MIN = -10;
 const STRENGTH_MAX = 10;
 const STRENGTH_STEP = 0.05;
+// A full sweep of [-10, 10] at a 0.05 step crosses 400 values: one pulse per
+// step saturates the motor and the ticks end up lagging behind the thumb.
+// Spacing them keeps the feedback in sync with the finger.
+const HAPTIC_MIN_INTERVAL_MS = 45;
 
 export function LoraField({ field, value, onChange }: Props) {
   const { t } = useTranslation();
@@ -39,6 +44,16 @@ export function LoraField({ field, value, onChange }: Props) {
   // release, but the user sees where they are).
   const [liveStrength, setLiveStrength] = useState<Record<string, number>>({});
   const defaultStrength = field.defaultStrength ?? 1.0;
+  // Timestamp of the last tick, shared by the cards: only one slider can be
+  // dragged at a time.
+  const lastHapticAt = useRef(0);
+
+  const tickHaptic = () => {
+    const now = Date.now();
+    if (now - lastHapticAt.current < HAPTIC_MIN_INTERVAL_MS) return;
+    lastHapticAt.current = now;
+    Haptics.selectionAsync();
+  };
 
   const toggle = (path: string) => {
     if (value.some((l) => l.name === path)) {
@@ -126,10 +141,13 @@ export function LoraField({ field, value, onChange }: Props) {
               maximumValue={STRENGTH_MAX}
               step={STRENGTH_STEP}
               value={lora.strength}
-              onValueChange={(v) =>
-                setLiveStrength((s) => ({ ...s, [lora.name]: v }))
-              }
+              onValueChange={(v) => {
+                tickHaptic();
+                setLiveStrength((s) => ({ ...s, [lora.name]: v }));
+              }}
               onSlidingComplete={(v) => {
+                // Distinct from the sliding ticks: marks the committed value.
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 setStrength(lora.name, v);
                 setLiveStrength((s) => {
                   const { [lora.name]: _, ...rest } = s;
