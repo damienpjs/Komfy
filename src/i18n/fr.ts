@@ -396,6 +396,8 @@ export default {
     promptRequired: 'Prompt requis pour chaque zone active',
     maxLorasPerZone: 'Maximum {{count}} LoRAs par zone',
     denoiseRange: 'Denoise entre 0,05 et 1 pour chaque zone active',
+    dilationRange:
+      'Zone modifiée entre {{min}} et {{max}} px pour chaque zone active',
     stepsRange: 'Steps entre 1 et 30',
     invalidStrength: 'Force invalide',
     invalidNumber: 'Nombre invalide',
@@ -474,6 +476,14 @@ export default {
     promptPlaceholder: 'Contenu de la zone (ex. a man’s face…)',
     denoiseLabel: 'Denoise de cette zone',
     denoiseLabelAll: 'Denoise de chaque zone',
+    dilationLabel: 'Zone modifiée',
+    dilationInherit: 'Vide = réglage partagé ({{value}} px)',
+    dragHandle: 'Déplacer la zone {{number}}',
+    dropTarget: 'Dépôt ici : zone n°{{number}}',
+    dragEmpty: 'Contenu vide',
+    collapse: 'Réduire la zone n°{{number}}',
+    expand: 'Déplier la zone n°{{number}}',
+    dragBanner: 'Zone n°{{from}} → zone n°{{to}}',
     detailLabel: 'Niveau de détail',
     detailHint:
       'Résolution à laquelle la zone est régénérée. À augmenter (768–1280) pour plus de détail sur les images haute résolution ; plus lent et plus gourmand en VRAM.',

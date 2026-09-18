@@ -319,6 +319,13 @@ export interface ZoneValue {
    */
   guideSize?: number;
   /**
+   * Modified area for THIS zone (px), overriding the shared dilation field.
+   * Absent ⇒ the shared value is used as-is. A per-zone value is applied as a
+   * delta on the detected SEGS (ImpactDilateMaskInSEGS), never by re-running
+   * the detector: the numbering stays the one detection everyone shares.
+   */
+  dilation?: number;
+  /**
    * Bypass: the zone keeps its place in the numbering (left → right) but
    * NO pass is generated — it is not altered at all.
    */
@@ -361,6 +368,21 @@ export interface ZonesField extends FieldBase {
   negativeSource: { nodeId: string; output: number };
   /** IMAGE inputs rewired to the last detailer's output (SaveImage.images). */
   imageTargets: PatchTarget[];
+  /**
+   * Shared dilation (modified area around the detection) a zone may override.
+   * `fieldKey` is the number field carrying it — the form reads it to show the
+   * inherited value; `nodeId`/`input` is where that field lands in the graph,
+   * read back at patch time as the base a per-zone value is a delta of. The
+   * number field MUST come before the zones field in `fields` (patching runs
+   * in order). Absent ⇒ no per-zone override offered.
+   */
+  dilation?: {
+    fieldKey: string;
+    nodeId: string;
+    input: string;
+    min: number;
+    max: number;
+  };
   /** Absent = no cap: one pass per zone, the cost is linear. */
   maxZones?: number;
   defaultStrength?: number;

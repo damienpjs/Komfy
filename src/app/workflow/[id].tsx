@@ -34,6 +34,7 @@ import { PresetBar } from '../../components/PresetBar';
 import { PromptField } from '../../components/PromptField';
 import { SourceSeedChip } from '../../components/SourceSeedChip';
 import { ZonesField } from '../../components/ZonesField';
+import type { ZoneDragScroller } from '../../components/ZonesField';
 import { useBatchPrefs } from '../../store/batchPrefs';
 import { useFieldPrefs } from '../../store/fieldPrefs';
 import { useGeneratedPrompts } from '../../store/generatedPrompts';
@@ -61,6 +62,7 @@ import {
   DEFAULT_OUTPUT_DIR,
   DIMENSION_STEP,
   effectiveDimensions,
+  parseNumber,
   patchGraph,
   randomSeed,
   resolveModelSource,
@@ -237,6 +239,44 @@ export default function WorkflowLaunchScreen() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [dirPickerOpen, setDirPickerOpen] = useState(false);
+  // A zone card is being dragged: the page must hold still under it, or the
+  // scroll and the card would follow the same finger. It scrolls again, but
+  // driven by the card itself once it reaches an edge (zoneScroller).
+  const [zoneDrag, setZoneDrag] = useState<{ from: number; to: number } | null>(
+    null,
+  );
+  const scrollRef = useRef<ScrollView>(null);
+  const pageRef = useRef<View>(null);
+  /**
+   * What the zone drag needs to scroll the page itself: where the scrollable
+   * area sits on screen (the gesture reports window coordinates), how far it
+   * is scrolled and how far it can go.
+   */
+  const scrollInfo = useRef({ offset: 0, content: 0, layout: 0, top: 0, bottom: 0 });
+  const measureViewport = () => {
+    pageRef.current?.measureInWindow((_x, y, _w, h) => {
+      scrollInfo.current.top = y;
+      scrollInfo.current.bottom = y + h;
+    });
+  };
+  const zoneScroller = useMemo<ZoneDragScroller>(
+    () => ({
+      viewport: () => ({
+        top: scrollInfo.current.top,
+        bottom: scrollInfo.current.bottom,
+      }),
+      offset: () => scrollInfo.current.offset,
+      max: () =>
+        Math.max(0, scrollInfo.current.content - scrollInfo.current.layout),
+      scrollTo: (y) => {
+        // Kept in sync here as well: onScroll may lag a tick behind, and the
+        // next tick computes its step from this offset.
+        scrollInfo.current.offset = y;
+        scrollRef.current?.scrollTo({ y, animated: false });
+      },
+    }),
+    [],
+  );
 
   // Remix: seed(s) of the source image, offered under the seed fields
   // (SourceSeedChip) — never applied on their own, a variant keeps its new
@@ -427,13 +467,29 @@ export default function WorkflowLaunchScreen() {
   };
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1 }} ref={pageRef} onLayout={measureViewport}>
       <Stack.Screen options={{ title: t(manifest.name) }} />
       <ScrollView
+        ref={scrollRef}
         style={styles.container}
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
+        // The page holds still under a dragged zone card, but the card may
+        // still drive it from the edges (zoneScroller) — hence the offset
+        // and content-size tracking below.
+        scrollEnabled={zoneDrag == null}
+        scrollEventThrottle={16}
+        onScroll={(e) => {
+          scrollInfo.current.offset = e.nativeEvent.contentOffset.y;
+        }}
+        onContentSizeChange={(_w, h) => {
+          scrollInfo.current.content = h;
+        }}
+        onLayout={(e) => {
+          scrollInfo.current.layout = e.nativeEvent.layout.height;
+          measureViewport();
+        }}
         // The keyboard "docks" under the active field: the scrollable area
         // shrinks when the keyboard opens and scrolls to the field (iOS).
         automaticallyAdjustKeyboardInsets
@@ -461,6 +517,13 @@ export default function WorkflowLaunchScreen() {
                 value={values[field.key] as ZonesValue}
                 onChange={(v) => setValue(field.key, v)}
                 sourceSeed={sourceSeeds[field.key]}
+                baseDilation={
+                  field.dilation
+                    ? parseNumber(values[field.dilation.fieldKey])
+                    : undefined
+                }
+                onDragChange={setZoneDrag}
+                scroller={zoneScroller}
               />
             )}
 
@@ -892,6 +955,19 @@ export default function WorkflowLaunchScreen() {
         />
       </ScrollView>
 
+      {/* Dragged zone card: where it stands, pinned to the screen — the list
+          under the finger scrolls, this does not. */}
+      {zoneDrag && (
+        <View pointerEvents="none" style={styles.zoneDragBanner}>
+          <Text style={styles.zoneDragBannerText}>
+            {t('zones.dragBanner', {
+              from: zoneDrag.from + 1,
+              to: zoneDrag.to + 1,
+            })}
+          </Text>
+        </View>
+      )}
+
       {Platform.OS === 'ios' && (
         <InputAccessoryView nativeID={KEYBOARD_ACCESSORY_ID}>
           <View style={styles.accessoryBar}>
@@ -913,6 +989,27 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.bg,
+  },
+  // Sits above the page, out of the scroll, low enough to stay clear of the
+  // card being dragged around the middle of the screen.
+  zoneDragBanner: {
+    position: 'absolute',
+    left: spacing.md,
+    right: spacing.md,
+    bottom: spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: MIN_TOUCH_TARGET,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.md,
+    borderColor: colors.accent,
+    borderWidth: 1,
+    backgroundColor: colors.bgElevated,
+  },
+  zoneDragBannerText: {
+    color: colors.text,
+    fontFamily: typography.uiSemiBold,
+    fontSize: typography.sizes.sm,
   },
   content: {
     padding: spacing.md,

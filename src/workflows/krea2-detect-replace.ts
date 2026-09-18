@@ -21,7 +21,9 @@
  * dilation grows the regenerated area from the detected zone. It is a
  * rectangle (not a silhouette) — segm detectors feed the same bbox node
  * (their SEGM_DETECTOR output is unused), so detection quality follows the
- * chosen model, not a silhouette mask.
+ * chosen model, not a silhouette mask. The field value is the shared base;
+ * a zone may override it (ZoneValue.dilation), applied as a delta on its own
+ * SEGS so the single detection — and the numbering it carries — is untouched.
  */
 
 import type { PromptGraph } from '../api/types';
@@ -189,6 +191,9 @@ export const krea2DetectReplace: WorkflowManifest = {
       vaeSource: { nodeId: '3', output: 0 },
       negativeSource: { nodeId: '5', output: 0 },
       imageTargets: [{ nodeId: '8', input: 'images' }],
+      // Shared modified area, overridable zone by zone (bounds mirroring the
+      // `dilation` field above — the override goes through the same UI range).
+      dilation: { fieldKey: 'dilation', nodeId: '7', input: 'dilation', min: 0, max: 400 },
       defaultStrength: 0.9,
       defaultDenoise: 0.45,
       defaultSteps: 8,

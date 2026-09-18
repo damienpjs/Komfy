@@ -387,6 +387,8 @@ export default {
     promptRequired: 'Prompt required for every active zone',
     maxLorasPerZone: 'Maximum {{count}} LoRAs per zone',
     denoiseRange: 'Denoise between 0.05 and 1 for every active zone',
+    dilationRange:
+      'Modified area between {{min}} and {{max}} px for every active zone',
     stepsRange: 'Steps between 1 and 30',
     invalidStrength: 'Invalid strength',
     invalidNumber: 'Invalid number',
@@ -465,6 +467,14 @@ export default {
     promptPlaceholder: "Zone content (e.g. a man's face…)",
     denoiseLabel: 'Denoise for this zone',
     denoiseLabelAll: 'Denoise for every zone',
+    dilationLabel: 'Modified area',
+    dilationInherit: 'Empty = shared setting ({{value}} px)',
+    dragHandle: 'Move zone {{number}}',
+    dropTarget: 'Drops here: zone #{{number}}',
+    dragEmpty: 'No content yet',
+    collapse: 'Fold zone {{number}}',
+    expand: 'Unfold zone {{number}}',
+    dragBanner: 'Zone #{{from}} → zone #{{to}}',
     detailLabel: 'Detail level',
     detailHint:
       'Resolution at which the zone is regenerated. Increase it (768–1280) for more detail on high-resolution images; slower and more VRAM-hungry.',
