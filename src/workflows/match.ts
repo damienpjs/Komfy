@@ -150,6 +150,25 @@ function resolveThroughLoras(
 }
 
 /**
+ * Per-zone modified area rebuilt from its delta: the graph holds the
+ * difference against the shared dilation (cf. patch.ts), the form wants the
+ * absolute value. No delta node, or an unreadable shared value ⇒ undefined,
+ * i.e. the zone simply inherits the shared field.
+ */
+function absoluteDilation(
+  extracted: PromptGraph,
+  state: WalkState,
+  field: ZonesField,
+  delta: number | null,
+): number | undefined {
+  if (delta == null || !field.dilation) return undefined;
+  const nodeId = state.map.get(field.dilation.nodeId);
+  if (!nodeId) return undefined;
+  const base = Number(extracted[nodeId]?.inputs[field.dilation.input]);
+  return Number.isFinite(base) ? Math.round(base) + delta : undefined;
+}
+
+/**
  * Absorbs a character pass (DetailerForEach + SEGS filter + prompt +
  * LoRAs) and checks that its shared nodes (model/clip/vae/segs/negative)
  * indeed point at the manifest sources. Returns the upstream image
@@ -177,9 +196,22 @@ function absorbDetailer(
   };
 
   // SEGS: either the filter of the targeted zone (numbered mode), or the
-  // detection itself (allZones — DetailerForEach iterates the whole batch).
-  const segsConn = detailer.inputs.segs;
-  if (!isConn(segsConn)) return null;
+  // detection itself (allZones — DetailerForEach iterates the whole batch),
+  // possibly behind this zone's own dilation (delta on the shared value).
+  const rawSegs = detailer.inputs.segs;
+  if (!isConn(rawSegs)) return null;
+  let segsConn: Conn = rawSegs;
+  let dilationDelta: number | null = null;
+  const dilateNode = extracted[segsConn[0]];
+  if (dilateNode?.class_type === 'ImpactDilateMaskInSEGS') {
+    const delta = Number(dilateNode.inputs.dilation);
+    if (!Number.isInteger(delta)) return null;
+    state.visited.add(segsConn[0]);
+    dilationDelta = delta;
+    const upstream = dilateNode.inputs.segs;
+    if (!isConn(upstream)) return null;
+    segsConn = upstream;
+  }
   const segsNode = extracted[segsConn[0]];
   let index: number | null;
   if (segsNode?.class_type === 'ImpactSEGSOrderedFilter') {
@@ -245,6 +277,7 @@ function absorbDetailer(
   const guideSize = Number(detailer.inputs.guide_size);
   state.zones.push({
     index,
+    dilation: absoluteDilation(extracted, state, field, dilationDelta),
     prompt: String(promptNode.inputs.text ?? ''),
     loras,
     denoise: Number(detailer.inputs.denoise),
@@ -666,6 +699,7 @@ function matchVariant(
                 loras: raw.loras,
                 denoise: raw.denoise,
                 guideSize: raw.guideSize,
+                dilation: raw.dilation,
                 bypass: false,
               }
             : {

@@ -139,6 +139,20 @@ export function validate(
         )
       ) {
         errors[field.key] = i18n.t('validation.denoiseRange');
+      } else if (
+        field.dilation != null &&
+        active.some(
+          (z) =>
+            z.dilation != null &&
+            (!Number.isInteger(z.dilation) ||
+              z.dilation < field.dilation!.min ||
+              z.dilation > field.dilation!.max),
+        )
+      ) {
+        errors[field.key] = i18n.t('validation.dilationRange', {
+          min: field.dilation.min,
+          max: field.dilation.max,
+        });
       } else if (!Number.isInteger(v.steps) || v.steps < 1 || v.steps > 30) {
         errors[field.key] = i18n.t('validation.stepsRange');
       }
@@ -402,14 +416,70 @@ function insertZonePass(
 }
 
 /**
+ * Shared dilation actually patched into the graph — the base a per-zone
+ * value is expressed as a delta of. Read back from the node rather than from
+ * the form, so the two can never disagree (the number field driving it is
+ * patched first, cf. ZonesField.dilation). Absent or unreadable ⇒ null: no
+ * base, so no per-zone override is inserted.
+ */
+function sharedDilation(graph: PromptGraph, field: ZonesField): number | null {
+  if (!field.dilation) return null;
+  const node = graph[field.dilation.nodeId];
+  if (!node) return null;
+  const n = Number(node.inputs[field.dilation.input]);
+  return Number.isFinite(n) ? Math.round(n) : null;
+}
+
+/**
+ * Per-zone modified area. ImpactDilateMaskInSEGS dilates (or erodes, on a
+ * negative value) the mask of each SEG without touching its bbox or its crop
+ * region — exactly what BboxDetectorSEGS.dilation does at detection time
+ * (verified in Impact Pack: `dilate_masks` rewrites the mask only, the bbox
+ * the crop is derived from is passed through). So applying the difference
+ * here is equivalent to having detected that zone with its own dilation,
+ * minus the re-detection: one detection still feeds every zone, and the
+ * left → right numbering stays shared. The regenerated area is still bounded
+ * by the crop region (crop_factor), as it already was.
+ */
+const SEGS_DILATION_LIMIT = 512;
+
+function insertZoneDilation(
+  graph: PromptGraph,
+  prefix: string,
+  segs: [string, number],
+  zone: ZoneValue,
+  base: number | null,
+  title: string,
+): [string, number] {
+  if (zone.dilation == null || base == null) return segs;
+  const delta = Math.round(zone.dilation) - base;
+  if (delta === 0) return segs;
+  const id = `${prefix}_dilate`;
+  graph[id] = {
+    class_type: 'ImpactDilateMaskInSEGS',
+    inputs: {
+      segs,
+      dilation: Math.max(
+        -SEGS_DILATION_LIMIT,
+        Math.min(SEGS_DILATION_LIMIT, delta),
+      ),
+    },
+    _meta: { title: `${title} — modified area ${zone.dilation}px` },
+  };
+  return [id, 0];
+}
+
+/**
  * Inserts the Detect & Replace passes and rewires the imageTargets to the
  * last one.
  *  - allZones: a single pass fed the raw SEGS. DetailerForEach loops over
  *    every seg of the batch (seed + i per zone), so any number of zones is
- *    covered by one pass — no filter node, nothing to enumerate.
+ *    covered by one pass — no filter node, nothing to enumerate. The shared
+ *    dilation applies as-is: a per-zone override would have nothing to
+ *    single out, so it is ignored here (the form hides it in this mode).
  *  - otherwise: one pass per zone, each behind an ordered SEGS filter
- *    (take_start = zone number, ascending x1 = left → right), chained in
- *    series on the image.
+ *    (take_start = zone number, ascending x1 = left → right), optionally
+ *    followed by its own dilation, chained in series on the image.
  */
 function insertZonesChain(
   graph: PromptGraph,
@@ -455,7 +525,14 @@ function insertZonesChain(
 
       previousImage = insertZonePass(graph, field, zone, {
         prefix,
-        segs: [`${prefix}_filter`, 0],
+        segs: insertZoneDilation(
+          graph,
+          prefix,
+          [`${prefix}_filter`, 0],
+          zone,
+          sharedDilation(graph, field),
+          `Zone ${i + 1}`,
+        ),
         image: previousImage,
         seed: seedBase + i,
         steps: value.steps,
