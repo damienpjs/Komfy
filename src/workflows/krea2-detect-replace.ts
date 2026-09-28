@@ -102,9 +102,9 @@ const graph: PromptGraph = {
 };
 
 export const krea2DetectReplace: WorkflowManifest = {
-  // Frozen persistence key (fieldPrefs/outputPrefs/promptHistory/batchPrefs
-  // are keyed by it) — kept as-is across the rename so past preferences and
-  // prompt history survive.
+  // Frozen persistence key (fieldPrefs/outputPrefs/presets/batchPrefs are
+  // keyed by it): kept as-is across the rename so past preferences and saved
+  // presets survive.
   id: 'krea2-faceswap',
   name: 'wf.detectReplace.name',
   description: 'wf.detectReplace.description',

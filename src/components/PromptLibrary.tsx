@@ -6,8 +6,7 @@
  *
  * What a tap *means* is the caller's business (`onUse`): the Library tab
  * opens text2img prefilled, the picker hands the text back to the form it
- * was opened from. Long press (or ⋯) = pin / copy / delete, the PresetBar
- * idiom.
+ * was opened from. Long press (or ⋯) = pin / copy / delete.
  */
 
 import { Ionicons } from '@expo/vector-icons';
@@ -71,7 +70,7 @@ export function PromptLibrary({ onUse }: Props) {
   // /history — fill them in now that the list is being looked at.
   usePendingPromptCatchUp();
 
-  // Pinned first, each group by recency — same ordering as the PresetBar.
+  // Pinned first, each group by recency.
   const ordered = useMemo(() => {
     const needle = search.trim().toLowerCase();
     // A pending entry has no text to match on — searching hides it.

@@ -32,6 +32,8 @@ export const colors = {
   danger: '#e08b84', // corail pastel — interrompre / vider / supprimer
   dangerPressed: '#d0756d', // pressed coral (destructive button background)
   warning: '#d29922', // output folder unavailable on the server
+
+  overlay: 'rgba(0, 0, 0, 0.6)', // backdrop behind a centred dialog
 } as const;
 
 export const spacing = {

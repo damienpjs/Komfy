@@ -6,9 +6,8 @@
  * other stores), never synced to the cloud, never sent back to the ComfyUI
  * server, never committed.
  *
- * Mirrors promptHistory — recents cap + pinning — but keeps the *output*
- * (the generated text) where promptHistory keeps the form *inputs*. The
- * text otherwise only lives in the server's /history (wiped on restart) and
+ * Recents cap + pinning, keeping the *output* (the generated text); named
+ * form presets live in presets.ts. The text otherwise only lives in the server's /history (wiped on restart) and
  * on a result screen that is navigated to with `replace`: recording it is
  * what makes it survive leaving that screen.
  *

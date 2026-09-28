@@ -31,6 +31,7 @@ import { ModelField } from '../../components/ModelField';
 import { ModelSourceField } from '../../components/ModelSourceField';
 import { OutputDirPicker } from '../../components/OutputDirPicker';
 import { PresetBar } from '../../components/PresetBar';
+import { PresetNameDialog } from '../../components/PresetNameDialog';
 import { PromptField } from '../../components/PromptField';
 import { SourceSeedChip } from '../../components/SourceSeedChip';
 import { ZonesField } from '../../components/ZonesField';
@@ -39,11 +40,15 @@ import { useBatchPrefs } from '../../store/batchPrefs';
 import { useFieldPrefs } from '../../store/fieldPrefs';
 import { useGeneratedPrompts } from '../../store/generatedPrompts';
 import { useOutputPrefs } from '../../store/outputPrefs';
-import { usePromptHistory } from '../../store/promptHistory';
+import { type Preset, sameName, usePresets } from '../../store/presets';
 import { usePromptPick } from '../../store/promptPick';
 import { useSettings } from '../../store/settings';
 import { useToast } from '../../store/toast';
-import { presetLabel } from '../../utils/presetLabel';
+import {
+  applyPresetValues,
+  presetValues,
+  suggestPresetName,
+} from '../../utils/presets';
 import {
   colors,
   MIN_TOUCH_TARGET,
@@ -239,6 +244,7 @@ export default function WorkflowLaunchScreen() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [dirPickerOpen, setDirPickerOpen] = useState(false);
+  const [savingPreset, setSavingPreset] = useState(false);
   // A zone card is being dragged: the page must hold still under it, or the
   // scroll and the card would follow the same finger. It scrolls again, but
   // driven by the card itself once it reaches an edge (zoneScroller).
@@ -367,18 +373,37 @@ export default function WorkflowLaunchScreen() {
     }
   };
 
-  // Re-applies a setting from history: only overwrites fields known to the
-  // current manifest (a preset from another workflow stays inert).
-  const applyPreset = (preset: FieldValues) => {
-    setValues((cur) => {
-      const next = { ...cur };
-      for (const field of manifest.fields) {
-        if (preset[field.key] != null) next[field.key] = preset[field.key];
-      }
-      return next;
-    });
+  // Saved preset → form. The source image and mask stay as they are: a
+  // preset is a way of working, reused on the next photo.
+  const applyPreset = (preset: Preset) => {
+    setValues((cur) => applyPresetValues(manifest.fields, cur, preset.values));
     setErrors({});
-    showToast(t('launch.applied'));
+    showToast(t('presets.applied', { name: preset.name }));
+  };
+
+  const capturePreset = () => presetValues(manifest.fields, values);
+
+  const savePreset = (name: string) => {
+    const store = usePresets.getState();
+    const snapshot = capturePreset();
+    const commit = () => {
+      store.save(manifest.id, name, snapshot);
+      setSavingPreset(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast(t('presets.saved', { name }));
+    };
+    const taken = (store.byWorkflow[manifest.id] ?? []).find((p) =>
+      sameName(p.name, name),
+    );
+    if (!taken) return commit();
+    Alert.alert(
+      t('presets.overwriteTitle', { name: taken.name }),
+      t('presets.overwriteBody'),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('presets.replace'), onPress: commit },
+      ],
+    );
   };
 
   const launch = async () => {
@@ -403,9 +428,6 @@ export default function WorkflowLaunchScreen() {
           promptId: res.prompt_id,
           nodeId: manifest.textNodeId!,
         });
-        usePromptHistory
-          .getState()
-          .record(manifest.id, values, presetLabel(manifest.fields, values));
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         router.replace(
           `/workflow/text-result?promptId=${encodeURIComponent(
@@ -447,11 +469,6 @@ export default function WorkflowLaunchScreen() {
         const res = await client.postPrompt(graph, clientId);
         firstNumber ??= res.number;
       }
-      // Local settings history (base values, without the batch seed
-      // increments): deduplicated and moved to the top.
-      usePromptHistory
-        .getState()
-        .record(manifest.id, values, presetLabel(manifest.fields, values));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast(
         batchCount > 1
@@ -468,7 +485,22 @@ export default function WorkflowLaunchScreen() {
 
   return (
     <View style={{ flex: 1 }} ref={pageRef} onLayout={measureViewport}>
-      <Stack.Screen options={{ title: t(manifest.name) }} />
+      <Stack.Screen
+        options={{
+          title: t(manifest.name),
+          headerRight: () => (
+            <Pressable
+              onPress={() => setSavingPreset(true)}
+              hitSlop={{ top: 14, bottom: 14, left: 24, right: 12 }}
+              accessibilityRole="button"
+              accessibilityLabel={t('presets.save')}
+              style={({ pressed }) => pressed && { opacity: 0.55 }}
+            >
+              <Ionicons name="bookmark-outline" size={22} color={colors.text} />
+            </Pressable>
+          ),
+        }}
+      />
       <ScrollView
         ref={scrollRef}
         style={styles.container}
@@ -496,7 +528,11 @@ export default function WorkflowLaunchScreen() {
       >
         <Text style={styles.description}>{t(manifest.description)}</Text>
 
-        <PresetBar workflowId={manifest.id} onApply={applyPreset} />
+        <PresetBar
+          workflowId={manifest.id}
+          onApply={applyPreset}
+          capture={capturePreset}
+        />
 
         {manifest.fields.map((field) => {
           // Conditional field: hidden until its controlling field matches
@@ -946,6 +982,17 @@ export default function WorkflowLaunchScreen() {
                 : t('launch.launch')}
           </Text>
         </Pressable>
+
+        <PresetNameDialog
+          visible={savingPreset}
+          title={t('presets.saveTitle')}
+          initialName={
+            savingPreset ? suggestPresetName(manifest.fields, values) : ''
+          }
+          note={t('presets.localNote')}
+          onCancel={() => setSavingPreset(false)}
+          onSubmit={savePreset}
+        />
 
         <OutputDirPicker
           visible={dirPickerOpen}
