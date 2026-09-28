@@ -341,7 +341,7 @@ komfy/
 ├── src/i18n/             # i18next setup + en/fr dictionaries (default: English)
 ├── src/workflows/        # manifests + frozen API graphs, patch.ts, match.ts (remix), requeue.ts, requirements.ts (availability), infer.ts + registry.ts (runtime import)
 ├── src/components/       # UI (queue cards, pickers, viewer, MaskEditor, ZonesField, SetupWizard, ServerPowerCard, PairingScanner…)
-├── src/store/            # Zustand: settings, connection, supervisor, execution, toast, output/field/batch prefs, customWorkflows + importDraft, generatedPrompts + promptHistory (phone-local prompt library)
+├── src/store/            # Zustand: settings, connection, supervisor, execution, toast, output/field/batch prefs, customWorkflows + importDraft, generatedPrompts (phone-local prompt library) + presets (named per-workflow form presets, phone-local)
 ├── src/hooks/            # useQueue, useGallery, useLoras, useRemix, useHealthCheck, useSupervisor(+Logs), useAvailability, usePendingPrompts
 ├── src/utils/            # pathTree (explorer), pngMetadata (tEXt chunks), pairing (QR/deep-link setup code), maskRaster + png (JS mask rasterizer/PNG encoder), describeJob, saveToPhotos…
 ├── src/theme/tokens.ts   # style guide — no hardcoded styles elsewhere

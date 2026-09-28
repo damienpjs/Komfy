@@ -7,6 +7,7 @@
 
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { usePresets } from './presets';
 import { ssrSafeAsyncStorage } from './ssrSafeStorage';
 import type { WorkflowManifest } from '../workflows/types';
 
@@ -32,8 +33,12 @@ export const useCustomWorkflows = create<CustomWorkflowsState>()(
             m.id === manifest.id ? manifest : m,
           ),
         })),
-      remove: (id) =>
-        set((s) => ({ manifests: s.manifests.filter((m) => m.id !== id) })),
+      remove: (id) => {
+        // A later import under the same name gets the same id back: it must
+        // not inherit presets saved for a different graph.
+        usePresets.getState().clear(id);
+        set((s) => ({ manifests: s.manifests.filter((m) => m.id !== id) }));
+      },
     }),
     {
       name: 'komfy-custom-workflows',
