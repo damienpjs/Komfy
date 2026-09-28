@@ -483,6 +483,12 @@ export default {
     collapse: 'Réduire la zone n°{{number}}',
     expand: 'Déplier la zone n°{{number}}',
     dragBanner: 'Zone n°{{from}} → zone n°{{to}}',
+    collapseAll: 'Tout replier',
+    expandAll: 'Tout déplier',
+    moveUp: 'Monter',
+    moveDown: 'Descendre',
+    position: 'Position {{number}} sur {{count}}',
+    movedTo: 'Zone déplacée en position {{number}}',
     detailLabel: 'Niveau de détail',
     detailHint:
       'Résolution à laquelle la zone est régénérée. À augmenter (768–1280) pour plus de détail sur les images haute résolution ; plus lent et plus gourmand en VRAM.',

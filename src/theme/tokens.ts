@@ -22,6 +22,11 @@ export const colors = {
   // Everyday accent — sober slate/steel (icons, links, active states, buttons)
   accent: '#3d5163',
   accentPressed: '#2f3f4d',
+  // Accent readable as a line or text on the dark backgrounds (6.6:1 on bg,
+  // 5.7:1 on accentSoft): drop outlines, a card in the air or just landed.
+  accentStrong: '#7f97ab',
+  // Accent tint filling an area (a drop slot) without passing for a card.
+  accentSoft: '#131b21',
 
   // Signature yellow — reserved (main CTA, progress, active tab)
   brand: '#e2e34f',

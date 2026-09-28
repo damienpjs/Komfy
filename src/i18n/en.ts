@@ -474,6 +474,12 @@ export default {
     collapse: 'Fold zone {{number}}',
     expand: 'Unfold zone {{number}}',
     dragBanner: 'Zone #{{from}} → zone #{{to}}',
+    collapseAll: 'Fold all',
+    expandAll: 'Unfold all',
+    moveUp: 'Move up',
+    moveDown: 'Move down',
+    position: 'Position {{number}} of {{count}}',
+    movedTo: 'Zone moved to position {{number}}',
     detailLabel: 'Detail level',
     detailHint:
       'Resolution at which the zone is regenerated. Increase it (768–1280) for more detail on high-resolution images; slower and more VRAM-hungry.',

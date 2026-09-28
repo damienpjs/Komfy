@@ -9,22 +9,37 @@
  * In numbered mode a card is draggable by its handle: the card number is a
  * position, so moving a card moves its whole setup (prompt, LoRAs, denoise,
  * detail level, modified area and bypass) onto another detected zone —
- * cheaper than deleting it and typing everything back. The drag is held by
- * the handle alone so the page keeps scrolling everywhere else; the parent
- * is told through `onDragChange` to freeze its scroll while a card is in the
- * air, to scroll it back from the edges (ZoneDragScroller) and to show which
- * zone the card is headed for. The card in the air folds down to its header,
- * and its landing slot is outlined in the list. The chevron at the other end
- * of that header folds a card by hand, the same way and just as harmlessly:
- * folding only stops rendering the editor, the zone's setup lives in the form
- * value throughout.
+ * cheaper than deleting it and typing everything back.
+ *
+ * Holding the handle switches the list to a compact reorder view: every card
+ * folds down to its header and a one-line summary, all of the same fixed
+ * height (FOLDED_HEIGHT), so the whole list fits on screen and a slot is a
+ * plain multiple of one step. The page is scrolled up by what the cards above
+ * lost, so the card held stays under the finger; the reverse happens on
+ * release, around the card that landed. While the card is in the air its
+ * neighbours slide out of its way, every badge shows the number the card is
+ * about to take, and the landing slot is a tinted block. On release the card
+ * glides into that slot before the list unfolds, then keeps an accent outline
+ * for a moment: the eye can follow where it went.
+ *
+ * The drag is held by the handle alone so the page keeps scrolling everywhere
+ * else; the parent is told through `onDragChange` to freeze its scroll while
+ * a card is in the air, to scroll it back from the edges (ZoneDragScroller)
+ * and to show which zone the card is headed for. VoiceOver moves a card
+ * without dragging: the handle is adjustable, one swipe per position. The
+ * chevron at the other end of the header folds a card by hand: folding only
+ * stops rendering the editor, the zone's setup lives in the form value
+ * throughout.
  */
 
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  AccessibilityInfo,
+  Platform,
   Pressable,
   StyleSheet,
   Switch,
@@ -32,12 +47,21 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import type { LayoutChangeEvent } from 'react-native';
+import type { LayoutChangeEvent, StyleProp, ViewStyle } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
+  FadeIn,
+  interpolateColor,
+  LayoutAnimationConfig,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
+  withDelay,
+  withSequence,
+  withSpring,
+  withTiming,
 } from 'react-native-reanimated';
+import type { SharedValue } from 'react-native-reanimated';
 import {
   colors,
   MIN_TOUCH_TARGET,
@@ -80,8 +104,35 @@ interface Props {
   scroller?: ZoneDragScroller;
 }
 
-/** Vertical gap between two cards — the drag maths needs it (styles.wrap). */
+/** Vertical gap between two cards (styles.zoneList). */
 const CARD_GAP = spacing.md;
+/** Header height, set by the drag handle and the fold button (styles). */
+const HEADER_HEIGHT = MIN_TOUCH_TARGET - 12;
+/** Line height of the summary a folded card shows (styles.foldedSummary). */
+const SUMMARY_LINE = 18;
+/** Card border width (styles.zoneCard). */
+const CARD_BORDER = 1;
+/**
+ * Height of a folded card, fixed rather than measured: during a drag every
+ * card is folded, so each slot is exactly one step high and the drag maths
+ * needs no measurement to know where anything sits.
+ */
+const FOLDED_HEIGHT =
+  2 * CARD_BORDER + 2 * spacing.md + HEADER_HEIGHT + spacing.sm + SUMMARY_LINE;
+const ROW_STEP = FOLDED_HEIGHT + CARD_GAP;
+
+/** Neighbours stepping aside, drop slot following them. */
+const SHIFT_MS = 160;
+/** Released card gliding into its slot before the list unfolds. */
+const LANDING_MS = 180;
+/** Accent outline kept by a card that just landed, then faded out. */
+const LANDED_HOLD_MS = 450;
+const LANDED_FADE_MS = 500;
+/** Content of a card appearing (unfold, new card). */
+const BODY_FADE_MS = 180;
+/** Slight lift of the card in the air — its outline does the rest. */
+const LIFT_SCALE = 0.02;
+const LIFT_SPRING = { damping: 18, stiffness: 260 };
 
 /**
  * Page scroller a dragged card drives when it reaches an edge of the screen.
@@ -129,6 +180,142 @@ function remapIndexed<T>(
   return moved;
 }
 
+/**
+ * Drops card `removed` from an index-keyed map and moves the cards after it
+ * up one place: the cards that remain keep their state, measured heights
+ * included (a surviving row keeps its frame, so it would not be re-measured).
+ */
+function dropIndexed<T>(
+  source: Record<number, T>,
+  removed: number,
+): Record<number, T> {
+  const kept: Record<number, T> = {};
+  for (const [key, entry] of Object.entries(source)) {
+    const i = Number(key);
+    if (i !== removed) kept[i > removed ? i - 1 : i] = entry;
+  }
+  return kept;
+}
+
+interface ZoneRowProps {
+  /** Held under the finger: follows `dragY` instead of its own shift. */
+  dragged: boolean;
+  /** Held and not yet released: slightly scaled up. */
+  lifted: boolean;
+  /** Offset to step aside by while another card flies over it (px). */
+  shift: number;
+  dragY: SharedValue<number>;
+  /** Non-zero, and new, when the card has just landed: outline it. */
+  landedKey: number;
+  reduceMotion: boolean;
+  onLayout: (e: LayoutChangeEvent) => void;
+  cardStyle: StyleProp<ViewStyle>;
+  children: ReactNode;
+}
+
+/**
+ * One card of the numbered list, with the motion that lets a reorder be
+ * followed by eye. Every offset here is a transform on top of the flow
+ * layout, and the list remounts its rows when a drag ends (ZonesField
+ * `epoch`): the new rows start from zero, so no leftover offset has to be
+ * cleared in step with the reorder that makes it obsolete.
+ */
+function ZoneRow({
+  dragged,
+  lifted,
+  shift,
+  dragY,
+  landedKey,
+  reduceMotion,
+  onLayout,
+  cardStyle,
+  children,
+}: ZoneRowProps) {
+  const shiftY = useSharedValue(0);
+  const lift = useSharedValue(0);
+  const glow = useSharedValue(landedKey ? 1 : 0);
+
+  useEffect(() => {
+    shiftY.value = reduceMotion
+      ? shift
+      : withTiming(shift, { duration: SHIFT_MS });
+  }, [shift, reduceMotion, shiftY]);
+
+  useEffect(() => {
+    lift.value = reduceMotion ? 0 : withSpring(lifted ? 1 : 0, LIFT_SPRING);
+  }, [lifted, reduceMotion, lift]);
+
+  useEffect(() => {
+    if (!landedKey) return;
+    glow.value = withSequence(
+      withTiming(1, { duration: 0 }),
+      withDelay(
+        LANDED_HOLD_MS,
+        withTiming(0, { duration: reduceMotion ? 0 : LANDED_FADE_MS }),
+      ),
+    );
+  }, [landedKey, reduceMotion, glow]);
+
+  const rowStyle = useAnimatedStyle(
+    () => ({
+      transform: [
+        { translateY: dragged ? dragY.value : shiftY.value },
+        { scale: 1 + LIFT_SCALE * lift.value },
+      ],
+    }),
+    [dragged],
+  );
+
+  const restColor = dragged ? colors.accentStrong : colors.border;
+  const glowColor = colors.accentStrong;
+  const outlineStyle = useAnimatedStyle(
+    () => ({
+      borderColor: interpolateColor(glow.value, [0, 1], [restColor, glowColor]),
+    }),
+    [restColor],
+  );
+
+  return (
+    <Animated.View
+      onLayout={onLayout}
+      style={[dragged && styles.zoneSlotDragging, rowStyle]}
+    >
+      <Animated.View style={[cardStyle, outlineStyle]}>{children}</Animated.View>
+    </Animated.View>
+  );
+}
+
+/**
+ * Where the card in the air lands on release: a tinted block the height of a
+ * folded card, following the neighbours as they step aside. Filled rather
+ * than dashed, so it cannot pass for a bypassed card.
+ */
+function DropSlot({
+  index,
+  label,
+  reduceMotion,
+}: {
+  index: number;
+  label: string;
+  reduceMotion: boolean;
+}) {
+  const y = useSharedValue(index * ROW_STEP);
+  useEffect(() => {
+    const top = index * ROW_STEP;
+    y.value = reduceMotion ? top : withTiming(top, { duration: SHIFT_MS });
+  }, [index, reduceMotion, y]);
+  const style = useAnimatedStyle(() => ({
+    transform: [{ translateY: y.value }],
+  }));
+  return (
+    <Animated.View pointerEvents="none" style={[styles.dropSlot, style]}>
+      <Text style={styles.dropSlotText} numberOfLines={1}>
+        {label}
+      </Text>
+    </Animated.View>
+  );
+}
+
 export function ZonesField({
   field,
   value,
@@ -139,10 +326,11 @@ export function ZonesField({
   scroller,
 }: Props) {
   const { t } = useTranslation();
+  const reduceMotion = useReducedMotion();
   // Per-zone denoise text being edited (intermediate states like "0,"
   // tolerated; numeric commit on the fly).
   const [denoiseTexts, setDenoiseTexts] = useState<Record<number, string>>({});
-  // Cards folded by hand (same folded look as a card in the air): the setup
+  // Cards folded by hand (same folded look as during a drag): the setup
   // survives untouched, only the editor is out of the way.
   const [collapsed, setCollapsed] = useState<Record<number, boolean>>({});
   // "Detail level" panel (guide_size): collapsed by default, per zone.
@@ -151,17 +339,46 @@ export function ZonesField({
   // field, which is also what an absent `dilation` means).
   const [dilationTexts, setDilationTexts] = useState<Record<number, string>>({});
 
-  // Drag & drop: measured card heights (index = position in the list), the
+  // The latest value, for the drop that lands a timer tick after the release.
+  const valueRef = useRef(value);
+  valueRef.current = value;
+
+  // Stable identity per card, whatever its position: the key React tracks a
+  // card by, so a card moved from VoiceOver keeps its own instance (and the
+  // editor state inside) instead of every card staying put and swapping
+  // contents. Grown or trimmed here when the value changes from outside
+  // (preset, remix, added zone).
+  const ids = useRef<number[]>([]);
+  const nextId = useRef(0);
+  while (ids.current.length < value.zones.length) {
+    ids.current.push(nextId.current);
+    nextId.current += 1;
+  }
+  if (ids.current.length > value.zones.length) {
+    ids.current.length = value.zones.length;
+  }
+  // Bumped when a drag ends: every row remounts with no offset left (ZoneRow).
+  const [epoch, setEpoch] = useState(0);
+
+  // Drag & drop: unfolded card heights (index = position in the list), the
   // card in the air and the slot it currently targets.
   const heights = useRef<Record<number, number>>({});
   const [drag, setDrag] = useState<{ from: number; to: number } | null>(null);
   // Same state, readable from the gesture callbacks without waiting for the
   // render that follows setDrag.
   const dragRef = useRef<{ from: number; to: number } | null>(null);
+  // Released card gliding into its slot: the list stays compact meanwhile.
+  const [landing, setLanding] = useState(false);
+  const landingRef = useRef(false);
+  const landingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dragY = useSharedValue(0);
-  const dragStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: dragY.value }],
-  }));
+  // Card that just landed, outlined for a moment (`key` restarts the outline
+  // when the same card lands twice in a row).
+  const [landed, setLanded] = useState<{ id: number; key: number } | null>(
+    null,
+  );
+  const landedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const landedCount = useRef(0);
 
   // Per-zone LoRA config: reuses the existing editor (the LoRA count
   // cap comes from the global setting, applied inside LoraField).
@@ -181,49 +398,102 @@ export function ZonesField({
     });
 
   const removeZone = (i: number) => {
-    // indexes shift: restart from the committed values
-    setDenoiseTexts({});
-    setDilationTexts({});
-    setCollapsed({});
-    heights.current = {};
+    setDenoiseTexts((s) => dropIndexed(s, i));
+    setDilationTexts((s) => dropIndexed(s, i));
+    setDetailOpen((s) => dropIndexed(s, i));
+    setCollapsed((s) => dropIndexed(s, i));
+    heights.current = dropIndexed(heights.current, i);
+    ids.current = ids.current.filter((_, j) => j !== i);
     onChange({ ...value, zones: value.zones.filter((_, j) => j !== i) });
   };
 
   const moveZone = (from: number, to: number) => {
-    const zones = value.zones.slice();
+    const current = valueRef.current;
+    const zones = current.zones.slice();
     const [moved] = zones.splice(from, 1);
     zones.splice(to, 0, moved);
+    const order = ids.current.slice();
+    const [id] = order.splice(from, 1);
+    order.splice(to, 0, id);
+    ids.current = order;
     setDenoiseTexts((s) => remapIndexed(s, from, to));
     setDilationTexts((s) => remapIndexed(s, from, to));
     setDetailOpen((s) => remapIndexed(s, from, to));
     setCollapsed((s) => remapIndexed(s, from, to));
     heights.current = remapIndexed(heights.current, from, to);
-    onChange({ ...value, zones });
+    onChange({ ...current, zones });
+  };
+
+  const markLanded = (id: number) => {
+    landedCount.current += 1;
+    setLanded({ id, key: landedCount.current });
+    if (landedTimer.current != null) clearTimeout(landedTimer.current);
+    landedTimer.current = setTimeout(() => {
+      landedTimer.current = null;
+      setLanded(null);
+    }, LANDED_HOLD_MS + LANDED_FADE_MS);
+  };
+
+  /** VoiceOver move, one position at a time (the handle is adjustable). */
+  const nudgeZone = (from: number, to: number) => {
+    if (dragRef.current || landingRef.current) return;
+    if (to < 0 || to >= value.zones.length) return;
+    moveZone(from, to);
+    markLanded(ids.current[to]);
+    Haptics.selectionAsync().catch(() => {});
+    // iOS reads the new accessibilityValue on its own after an adjustment;
+    // announcing it as well would say the same thing twice.
+    if (Platform.OS === 'android') {
+      AccessibilityInfo.announceForAccessibility(
+        t('zones.movedTo', { number: to + 1 }),
+      );
+    }
   };
 
   /**
-   * Slot the dragged card would land on, walking neighbour by neighbour: a
-   * card is taken over once the finger has passed half of its height, which
-   * keeps the swap honest with cards of very different sizes (a bypassed card
-   * is a fraction of the height of one carrying four LoRAs).
+   * Slot the dragged card would land on: every card is folded to the same
+   * height during a drag, so a neighbour is taken over once the card has
+   * travelled half a step past it.
    */
-  const targetIndex = (from: number, translation: number) => {
-    let to = from;
-    let rest = translation;
-    while (rest > 0 && to < value.zones.length - 1) {
-      const step = (heights.current[to + 1] ?? 0) + CARD_GAP;
-      if (rest <= step / 2) break;
-      rest -= step;
-      to += 1;
+  const targetIndex = (from: number, translation: number) =>
+    Math.min(
+      value.zones.length - 1,
+      Math.max(0, from + Math.round(translation / ROW_STEP)),
+    );
+
+  /** Top of card `index` in the unfolded list, from the measured heights. */
+  const unfoldedTop = (index: number, measured: Record<number, number>) => {
+    let top = 0;
+    for (let j = 0; j < index; j += 1) {
+      top += (measured[j] ?? FOLDED_HEIGHT) + CARD_GAP;
     }
-    while (rest < 0 && to > 0) {
-      const step = (heights.current[to - 1] ?? 0) + CARD_GAP;
-      if (-rest <= step / 2) break;
-      rest += step;
-      to -= 1;
-    }
-    return to;
+    return top;
   };
+
+  // Page offset owed to a fold or unfold of the whole list (drag start and
+  // drop): set along with the state change, applied right after its commit
+  // rather than before, so the page does not jump ahead of the layout it
+  // compensates.
+  const pendingScroll = useRef<number | null>(null);
+  const scrollFrame = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    const y = pendingScroll.current;
+    if (y == null || scrollFrame.current != null) return;
+    scroller?.scrollTo(y);
+    // Android runs view commands ahead of the mount they follow, so a scroll
+    // past the end of the old content (the drop, which unfolds the list) is
+    // clamped: issued again once the new layout is on screen. Until then the
+    // offset stays pending, which is what the drag maths reads.
+    scrollFrame.current = requestAnimationFrame(() => {
+      scrollFrame.current = requestAnimationFrame(() => {
+        scrollFrame.current = null;
+        if (pendingScroll.current !== y) return;
+        scroller?.scrollTo(y);
+        pendingScroll.current = null;
+      });
+    });
+  });
+  const pageOffset = () => pendingScroll.current ?? scroller?.offset() ?? 0;
 
   // Finger position (window coordinates) and raw finger travel, kept for the
   // auto-scroll ticks: while the page slides under a motionless finger, the
@@ -239,8 +509,16 @@ export function ZonesField({
     edgeTimer.current = null;
   };
   // A drag interrupted by a screen change (navigation, remix) would otherwise
-  // leave its ticker behind.
-  useEffect(() => stopEdgeScroll, []);
+  // leave its timers behind.
+  useEffect(
+    () => () => {
+      stopEdgeScroll();
+      if (landingTimer.current != null) clearTimeout(landingTimer.current);
+      if (landedTimer.current != null) clearTimeout(landedTimer.current);
+      if (scrollFrame.current != null) cancelAnimationFrame(scrollFrame.current);
+    },
+    [],
+  );
 
   /**
    * Places the dragged card and picks the slot it targets. The card travels in
@@ -251,7 +529,7 @@ export function ZonesField({
   const applyDrag = () => {
     const current = dragRef.current;
     if (!current) return;
-    const scrolled = (scroller?.offset() ?? 0) - scrollAtStart.current;
+    const scrolled = pageOffset() - scrollAtStart.current;
     const travel = rawTravel.current + scrolled;
     dragY.value = travel;
     const to = targetIndex(current.from, travel);
@@ -268,7 +546,7 @@ export function ZonesField({
    * its own at either end of the page (scrollTo would clamp anyway).
    */
   const edgeScrollTick = () => {
-    if (!scroller || !dragRef.current) return;
+    if (!scroller || !dragRef.current || pendingScroll.current != null) return;
     const { top, bottom } = scroller.viewport();
     const y = fingerY.current;
     let step = 0;
@@ -286,65 +564,101 @@ export function ZonesField({
   };
 
   const beginDrag = (i: number, absoluteY: number) => {
+    // One card at a time, and not while the previous one is still landing.
+    if (dragRef.current || landingRef.current) return;
+    // The outline of the previous landing would replay on the remount.
+    if (landedTimer.current != null) clearTimeout(landedTimer.current);
+    landedTimer.current = null;
+    setLanded(null);
     dragY.value = 0;
     rawTravel.current = 0;
     fingerY.current = absoluteY;
-    scrollAtStart.current = scroller?.offset() ?? 0;
+    if (scroller) {
+      // The cards above fold: the page goes up by what they lose, so the card
+      // held stays under the finger — unless the page cannot go that far: not
+      // above its top, nor past the bottom of the folded page (every card
+      // folds, the one held and those below included). Either way the card
+      // then starts a little off the finger rather than on a wrong slot.
+      const n = value.zones.length;
+      const lost = unfoldedTop(i, heights.current) - i * ROW_STEP;
+      const lostInAll = unfoldedTop(n, heights.current) - n * ROW_STEP;
+      const foldedMax = Math.max(0, scroller.max() - lostInAll);
+      const target = Math.min(
+        foldedMax,
+        Math.max(0, scroller.offset() - lost),
+      );
+      pendingScroll.current = target;
+      scrollAtStart.current = target;
+    } else {
+      scrollAtStart.current = 0;
+    }
     dragRef.current = { from: i, to: i };
     setDrag(dragRef.current);
     onDragChange?.(dragRef.current);
-    Haptics.selectionAsync().catch(() => {});
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     if (scroller) {
       stopEdgeScroll();
       edgeTimer.current = setInterval(edgeScrollTick, EDGE_TICK_MS);
     }
   };
 
-  const updateDrag = (translation: number, absoluteY: number) => {
-    if (!dragRef.current) return;
+  const updateDrag = (i: number, translation: number, absoluteY: number) => {
+    if (dragRef.current?.from !== i) return;
     rawTravel.current = translation;
     fingerY.current = absoluteY;
     applyDrag();
   };
 
-  const endDrag = (commit: boolean) => {
-    stopEdgeScroll();
-    const current = dragRef.current;
-    dragRef.current = null;
-    dragY.value = 0;
-    if (!current) return;
-    setDrag(null);
-    onDragChange?.(null);
-    if (commit && current.to !== current.from) {
-      moveZone(current.from, current.to);
-    }
-  };
-
-  /** Top of card `index` in the list, as laid out before any drag. */
-  const slotTop = (index: number) => {
-    let top = 0;
-    for (let j = 0; j < index; j += 1) top += (heights.current[j] ?? 0) + CARD_GAP;
-    return top;
-  };
-
   /**
-   * The hole the shifted cards leave open, i.e. where the dragged card lands
-   * on release — drawn as a dashed outline so the drop is not a guess. Moving
-   * DOWN frees the bottom of the block that stepped up (hence the target
-   * card's own height in the offset); moving UP frees its top.
+   * The list unfolds and the card lands for good: the reorder is committed
+   * with fresh rows (epoch), and the page scrolled down by what the cards
+   * above the landed one gain, so it stays where it was dropped.
    */
-  const placeholder = (() => {
-    if (!drag) return null;
-    const height = heights.current[drag.from] ?? 0;
-    if (drag.to === drag.from) return { top: slotTop(drag.from), height };
-    if (drag.to > drag.from) {
-      return {
-        top: slotTop(drag.to) + (heights.current[drag.to] ?? 0) - height,
-        height,
-      };
+  const finishDrop = (from: number, to: number) => {
+    landingTimer.current = null;
+    landingRef.current = false;
+    const unfolded =
+      to !== from ? remapIndexed(heights.current, from, to) : heights.current;
+    if (scroller) {
+      pendingScroll.current = Math.max(
+        0,
+        scroller.offset() + unfoldedTop(to, unfolded) - to * ROW_STEP,
+      );
     }
-    return { top: slotTop(drag.to), height };
-  })();
+    setLanding(false);
+    setDrag(null);
+    setEpoch((e) => e + 1);
+    onDragChange?.(null);
+    if (to !== from) {
+      moveZone(from, to);
+      markLanded(ids.current[to]);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    }
+  };
+
+  const endDrag = (i: number, commit: boolean) => {
+    // Another handle grabbed by a second finger does not end this drag.
+    const current = dragRef.current;
+    if (!current || current.from !== i) return;
+    stopEdgeScroll();
+    dragRef.current = null;
+    // A cancelled drag (the system took the touch) flies back home.
+    const to = commit ? current.to : current.from;
+    if (to !== current.to) {
+      setDrag({ from: current.from, to });
+      onDragChange?.({ from: current.from, to });
+    }
+    landingRef.current = true;
+    setLanding(true);
+    const target = (to - current.from) * ROW_STEP;
+    dragY.value = reduceMotion
+      ? target
+      : withTiming(target, { duration: LANDING_MS });
+    landingTimer.current = setTimeout(
+      () => finishDrop(current.from, to),
+      reduceMotion ? 0 : LANDING_MS,
+    );
+  };
 
   /**
    * Where a card that is NOT the dragged one sits while the drag lasts: the
@@ -352,13 +666,22 @@ export function ZonesField({
    */
   const shiftFor = (i: number) => {
     if (!drag || drag.from === drag.to || i === drag.from) return 0;
-    const step = (heights.current[drag.from] ?? 0) + CARD_GAP;
-    if (drag.from < drag.to && i > drag.from && i <= drag.to) return -step;
-    if (drag.from > drag.to && i >= drag.to && i < drag.from) return step;
+    if (drag.from < drag.to && i > drag.from && i <= drag.to) return -ROW_STEP;
+    if (drag.from > drag.to && i >= drag.to && i < drag.from) return ROW_STEP;
     return 0;
   };
 
+  /** Number a card shows: during a drag, the one it is about to take. */
+  const shownNumber = (i: number) => {
+    if (!drag) return i + 1;
+    if (i === drag.from) return drag.to + 1;
+    return i + 1 + Math.sign(shiftFor(i));
+  };
+
   const measure = (i: number) => (e: LayoutChangeEvent) => {
+    // Only the unfolded layout is kept: during a drag every card is folded,
+    // and these heights are what the page is scrolled back by on release.
+    if (dragRef.current || landingRef.current) return;
     heights.current[i] = e.nativeEvent.layout.height;
   };
 
@@ -370,9 +693,9 @@ export function ZonesField({
       .runOnJS(true)
       .activateAfterLongPress(150)
       .onStart((e) => beginDrag(i, e.absoluteY))
-      .onUpdate((e) => updateDrag(e.translationY, e.absoluteY))
-      .onEnd(() => endDrag(true))
-      .onFinalize(() => endDrag(false));
+      .onUpdate((e) => updateDrag(i, e.translationY, e.absoluteY))
+      .onEnd(() => endDrag(i, true))
+      .onFinalize(() => endDrag(i, false));
 
   const addZone = () =>
     onChange({
@@ -391,6 +714,14 @@ export function ZonesField({
   const allZones = !!value.allZones;
   const atMax =
     field.maxZones != null && value.zones.length >= field.maxZones;
+  const allFolded =
+    value.zones.length > 0 && value.zones.every((_, i) => collapsed[i]);
+  const toggleAllFolded = () =>
+    setCollapsed(
+      allFolded
+        ? {}
+        : Object.fromEntries(value.zones.map((_, i) => [i, true])),
+    );
 
   // Prompt + LoRAs + denoise + detail level: identical in both modes.
   const zoneBody = (zone: ZonesValue['zones'][0], i: number) => (
@@ -527,6 +858,8 @@ export function ZonesField({
         <Switch
           value={allZones}
           onValueChange={(v) => onChange({ ...value, allZones: v })}
+          // Switching mode unmounts the list, and a card held in it.
+          disabled={drag != null}
           trackColor={{ false: colors.bgElevated, true: colors.accent }}
           thumbColor={colors.text}
         />
@@ -545,164 +878,231 @@ export function ZonesField({
         </View>
       ) : (
         <>
-          {/* The cards get their own layer so the drop outline can be placed
-              against them (absolute, measured from the first card). */}
-          <View style={styles.zoneList}>
-            {placeholder && (
-              <View
-                pointerEvents="none"
-                style={[
-                  styles.dropSlot,
-                  { top: placeholder.top, height: placeholder.height },
+          {value.zones.length > 1 && (
+            <View style={styles.listToolbar}>
+              <Pressable
+                onPress={toggleAllFolded}
+                disabled={drag != null}
+                hitSlop={6}
+                accessibilityRole="button"
+                style={({ pressed }) => [
+                  styles.foldAllBtn,
+                  pressed && { opacity: 0.6 },
                 ]}
               >
-                <Text style={styles.dropSlotText} numberOfLines={1}>
-                  {t('zones.dropTarget', { number: (drag?.to ?? 0) + 1 })}
+                <Ionicons
+                  name={
+                    allFolded ? 'chevron-expand-outline' : 'chevron-collapse-outline'
+                  }
+                  size={16}
+                  color={colors.textMuted}
+                />
+                <Text style={styles.foldAllText}>
+                  {t(allFolded ? 'zones.expandAll' : 'zones.collapseAll')}
                 </Text>
-              </View>
-            )}
-            {value.zones.map((zone, i) => {
-              // Card in the air: it folds down to its header so it stops
-              // covering the list, while its slot keeps the height it had —
-              // freezing that height is what leaves the layout (and the drop
-              // maths, expressed in it) untouched by the folding. Nothing is
-              // unmounted, least of all the handle holding the gesture: the
-              // body is simply not rendered until the card lands.
-              const dragged = drag?.from === i;
-              const folded = dragged || !!collapsed[i];
-              return (
-              <Animated.View
-                key={i}
-                onLayout={measure(i)}
-                style={[
-                  dragged
-                    ? [
-                        styles.zoneSlotDragging,
-                        { height: heights.current[i] },
-                        dragStyle,
-                      ]
-                    : { transform: [{ translateY: shiftFor(i) }] },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.zoneCard,
-                    zone.bypass && styles.zoneCardBypass,
-                    dragged && styles.zoneCardDragging,
-                  ]}
-                >
-                <View style={styles.zoneHeader}>
-                  {value.zones.length > 1 && (
-                    <GestureDetector gesture={dragGesture(i)}>
-                      <View
-                        style={styles.dragHandle}
-                        accessible
-                        accessibilityRole="adjustable"
-                        accessibilityLabel={t('zones.dragHandle', {
-                          number: i + 1,
-                        })}
+              </Pressable>
+            </View>
+          )}
+
+          {/* Content fades in when a card unfolds or appears, but not on the
+              first render of the list: the screen opening is not news. */}
+          <LayoutAnimationConfig skipEntering>
+            {/* The cards get their own layer so the drop slot can be placed
+                against them (absolute, one step per slot from the first). */}
+            <View style={styles.zoneList}>
+              {drag && (
+                <DropSlot
+                  index={drag.to}
+                  label={t('zones.dropTarget', { number: drag.to + 1 })}
+                  reduceMotion={reduceMotion}
+                />
+              )}
+              {value.zones.map((zone, i) => {
+                // During a drag every card is folded to its fixed height, the
+                // one held included. Nothing is unmounted then, least of all
+                // the handle holding the gesture: the bodies are simply not
+                // rendered until the card lands.
+                const dragged = drag?.from === i;
+                const folded = drag != null || !!collapsed[i];
+                const number = shownNumber(i);
+                const id = ids.current[i];
+                return (
+                  <ZoneRow
+                    key={`${id}:${epoch}`}
+                    dragged={dragged}
+                    lifted={dragged && !landing}
+                    shift={shiftFor(i)}
+                    dragY={dragY}
+                    landedKey={landed?.id === id ? landed.key : 0}
+                    reduceMotion={reduceMotion}
+                    onLayout={measure(i)}
+                    cardStyle={[
+                      styles.zoneCard,
+                      // Fixed height only while the drag maths needs it: a
+                      // card folded by hand sizes itself (large text).
+                      drag != null && styles.zoneCardFolded,
+                      zone.bypass && styles.zoneCardBypass,
+                      dragged && styles.zoneCardDragging,
+                    ]}
+                  >
+                    <View style={styles.zoneHeader}>
+                      {value.zones.length > 1 && (
+                        <GestureDetector gesture={dragGesture(i)}>
+                          <View
+                            style={styles.dragHandle}
+                            accessible
+                            accessibilityRole="adjustable"
+                            accessibilityLabel={t('zones.dragHandle', {
+                              number: i + 1,
+                            })}
+                            accessibilityValue={{
+                              text: t('zones.position', {
+                                number: i + 1,
+                                count: value.zones.length,
+                              }),
+                            }}
+                            accessibilityActions={[
+                              { name: 'increment', label: t('zones.moveDown') },
+                              { name: 'decrement', label: t('zones.moveUp') },
+                            ]}
+                            onAccessibilityAction={(e) => {
+                              if (e.nativeEvent.actionName === 'increment') {
+                                nudgeZone(i, i + 1);
+                              } else if (
+                                e.nativeEvent.actionName === 'decrement'
+                              ) {
+                                nudgeZone(i, i - 1);
+                              }
+                            }}
+                            hitSlop={6}
+                          >
+                            <Ionicons
+                              name="reorder-three-outline"
+                              size={20}
+                              color={
+                                dragged ? colors.accentStrong : colors.textMuted
+                              }
+                            />
+                          </View>
+                        </GestureDetector>
+                      )}
+                      <Pressable
+                        onPress={() =>
+                          setCollapsed((s) => ({ ...s, [i]: !s[i] }))
+                        }
+                        disabled={drag != null}
                         hitSlop={6}
+                        accessibilityRole="button"
+                        accessibilityLabel={t(
+                          folded ? 'zones.expand' : 'zones.collapse',
+                          { number: i + 1 },
+                        )}
+                        style={({ pressed }) => [
+                          styles.foldBtn,
+                          pressed && { opacity: 0.6 },
+                        ]}
                       >
                         <Ionicons
-                          name="reorder-three-outline"
-                          size={20}
-                          color={dragged ? colors.accent : colors.textMuted}
+                          name={folded ? 'chevron-down' : 'chevron-up'}
+                          size={18}
+                          color={colors.textMuted}
                         />
+                      </Pressable>
+                      <View
+                        style={[
+                          styles.zoneBadge,
+                          zone.bypass && styles.zoneBadgeBypass,
+                        ]}
+                      >
+                        {/* Keyed by the number: a card renumbered by the drag
+                            fades its new number in. Not when the row itself
+                            mounts (drop, new card): the number is not news. */}
+                        <LayoutAnimationConfig skipEntering>
+                          <Animated.Text
+                            key={number}
+                            entering={
+                              reduceMotion
+                                ? undefined
+                                : FadeIn.duration(SHIFT_MS)
+                            }
+                            style={styles.zoneBadgeText}
+                          >
+                            {number}
+                          </Animated.Text>
+                        </LayoutAnimationConfig>
                       </View>
-                    </GestureDetector>
-                  )}
-                  <Pressable
-                    onPress={() =>
-                      setCollapsed((s) => ({ ...s, [i]: !s[i] }))
-                    }
-                    hitSlop={6}
-                    accessibilityRole="button"
-                    accessibilityLabel={t(
-                      folded ? 'zones.expand' : 'zones.collapse',
-                      { number: i + 1 },
-                    )}
-                    style={({ pressed }) => [
-                      styles.foldBtn,
-                      pressed && { opacity: 0.6 },
-                    ]}
-                  >
-                    <Ionicons
-                      name={folded ? 'chevron-down' : 'chevron-up'}
-                      size={18}
-                      color={colors.textMuted}
-                    />
-                  </Pressable>
-                  <View
-                    style={[
-                      styles.zoneBadge,
-                      zone.bypass && styles.zoneBadgeBypass,
-                    ]}
-                  >
-                    <Text style={styles.zoneBadgeText}>{i + 1}</Text>
-                  </View>
-                  <Text
-                    style={[
-                      styles.zoneTitle,
-                      zone.bypass && { color: colors.textMuted },
-                    ]}
-                  >
-                    {t('zones.zoneTitle', { number: i + 1 })}
-                  </Text>
-                  {value.zones.length > 1 && (
-                    <Pressable
-                      onPress={() => removeZone(i)}
-                      hitSlop={8}
-                      style={({ pressed }) => [
-                        styles.removeBtn,
-                        pressed && { opacity: 0.6 },
-                      ]}
-                    >
-                      <Ionicons
-                        name="close-circle"
-                        size={22}
-                        color={colors.textMuted}
-                      />
-                    </Pressable>
-                  )}
-                </View>
-
-                {folded ? (
-                  <Text style={styles.dragSummary} numberOfLines={1}>
-                    {zone.bypass
-                      ? t('zones.bypassLabel')
-                      : zone.prompt.trim() || t('zones.dragEmpty')}
-                  </Text>
-                ) : (
-                  <>
-                    <View style={styles.bypassRow}>
-                      <Text style={styles.bypassLabel}>
-                        {t('zones.bypassLabel')}
+                      <Text
+                        style={[
+                          styles.zoneTitle,
+                          zone.bypass && { color: colors.textMuted },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {t('zones.zoneTitle', { number })}
                       </Text>
-                      <Switch
-                        value={!!zone.bypass}
-                        onValueChange={(bypass) => setZone(i, { bypass })}
-                        trackColor={{
-                          false: colors.bgElevated,
-                          true: colors.warning,
-                        }}
-                        thumbColor={colors.text}
-                      />
+                      {value.zones.length > 1 && (
+                        <Pressable
+                          onPress={() => removeZone(i)}
+                          disabled={drag != null}
+                          hitSlop={8}
+                          style={({ pressed }) => [
+                            styles.removeBtn,
+                            pressed && { opacity: 0.6 },
+                          ]}
+                        >
+                          <Ionicons
+                            name="close-circle"
+                            size={22}
+                            color={colors.textMuted}
+                          />
+                        </Pressable>
+                      )}
                     </View>
 
-                    {zone.bypass ? (
-                      <Text style={styles.bypassNote}>
-                        {t('zones.bypassNote')}
+                    {folded ? (
+                      <Text style={styles.foldedSummary} numberOfLines={1}>
+                        {zone.bypass
+                          ? t('zones.bypassLabel')
+                          : zone.prompt.trim() || t('zones.dragEmpty')}
                       </Text>
                     ) : (
-                      zoneBody(zone, i)
+                      <Animated.View
+                        entering={
+                          reduceMotion
+                            ? undefined
+                            : FadeIn.duration(BODY_FADE_MS)
+                        }
+                        style={styles.zoneBody}
+                      >
+                        <View style={styles.bypassRow}>
+                          <Text style={styles.bypassLabel}>
+                            {t('zones.bypassLabel')}
+                          </Text>
+                          <Switch
+                            value={!!zone.bypass}
+                            onValueChange={(bypass) => setZone(i, { bypass })}
+                            trackColor={{
+                              false: colors.bgElevated,
+                              true: colors.warning,
+                            }}
+                            thumbColor={colors.text}
+                          />
+                        </View>
+
+                        {zone.bypass ? (
+                          <Text style={styles.bypassNote}>
+                            {t('zones.bypassNote')}
+                          </Text>
+                        ) : (
+                          zoneBody(zone, i)
+                        )}
+                      </Animated.View>
                     )}
-                  </>
-                )}
-                </View>
-              </Animated.View>
-              );
-            })}
-          </View>
+                  </ZoneRow>
+                );
+              })}
+            </View>
+          </LayoutAnimationConfig>
 
           <Pressable
             style={({ pressed }) => [
@@ -711,7 +1111,7 @@ export function ZonesField({
               atMax && { opacity: 0.4 },
             ]}
             onPress={addZone}
-            disabled={atMax}
+            disabled={atMax || drag != null}
           >
             <Ionicons
               name="add-circle-outline"
@@ -813,40 +1213,71 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.xs,
     lineHeight: 18,
   },
-  zoneList: {
-    gap: spacing.md,
+  listToolbar: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    // Tucked under the gap above: the toolbar belongs to the list below.
+    marginBottom: -spacing.sm,
   },
-  // Drop outline: the slot the dragged card would take, dashed so it reads as
-  // a hole rather than another card.
+  foldAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    minHeight: MIN_TOUCH_TARGET,
+    paddingHorizontal: spacing.xs,
+  },
+  foldAllText: {
+    color: colors.textMuted,
+    fontFamily: typography.uiMedium,
+    fontSize: typography.sizes.xs,
+  },
+  zoneList: {
+    gap: CARD_GAP,
+  },
+  // Drop slot: the place the dragged card lands on, the height of a folded
+  // card. A tinted block with a solid edge, so it reads as a place rather
+  // than as another card, and never as a bypassed one (dashed).
   dropSlot: {
     position: 'absolute',
+    top: 0,
     left: 0,
     right: 0,
-    borderColor: colors.accent,
-    borderWidth: 1,
-    borderStyle: 'dashed',
+    height: FOLDED_HEIGHT,
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accentStrong,
+    borderWidth: CARD_BORDER,
     borderRadius: radii.lg,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: spacing.md,
+    paddingHorizontal: spacing.md,
   },
   dropSlotText: {
-    color: colors.accent,
+    color: colors.accentStrong,
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.sm,
   },
   zoneCard: {
     backgroundColor: colors.bgElevated,
     borderColor: colors.border,
-    borderWidth: 1,
+    borderWidth: CARD_BORDER,
     borderRadius: radii.lg,
     padding: spacing.md,
+    gap: spacing.sm,
+  },
+  // Card folded for a drag: header and one summary line, at the fixed height
+  // the drag maths relies on (FOLDED_HEIGHT).
+  zoneCardFolded: {
+    height: FOLDED_HEIGHT,
+    overflow: 'hidden',
+  },
+  zoneBody: {
     gap: spacing.sm,
   },
   zoneHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+    minHeight: HEADER_HEIGHT,
   },
   zoneBadge: {
     width: 24,
@@ -884,27 +1315,27 @@ const styles = StyleSheet.create({
     opacity: 0.75,
     borderStyle: 'dashed',
   },
-  // Card in the air: an accent outline, no floating shadow — the border alone
-  // reads on both themes.
+  // Card in the air: its accent outline is animated (ZoneRow, which owns the
+  // border colour), no floating shadow — the border alone reads on the dark
+  // background.
   zoneCardDragging: {
-    borderColor: colors.accent,
     backgroundColor: colors.surfacePressed,
   },
-  // Its slot: keeps the full height the card had (set inline) so the list
-  // holds still, and stacks above the neighbours it flies over.
+  // Its row stacks above the neighbours it flies over.
   zoneSlotDragging: {
     zIndex: 2,
     elevation: 2,
   },
   /** Folded card: what it carries, in one line. */
-  dragSummary: {
+  foldedSummary: {
     color: colors.textMuted,
     fontFamily: typography.ui,
     fontSize: typography.sizes.xs,
+    lineHeight: SUMMARY_LINE,
   },
   dragHandle: {
-    width: MIN_TOUCH_TARGET - 12,
-    height: MIN_TOUCH_TARGET - 12,
+    width: HEADER_HEIGHT,
+    height: HEADER_HEIGHT,
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: -spacing.xs,
@@ -914,7 +1345,7 @@ const styles = StyleSheet.create({
   // either — losing a zone card costs a whole setup.
   foldBtn: {
     width: MIN_TOUCH_TARGET - 16,
-    height: MIN_TOUCH_TARGET - 12,
+    height: HEADER_HEIGHT,
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: -spacing.xs,
