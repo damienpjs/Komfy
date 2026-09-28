@@ -485,22 +485,7 @@ export default function WorkflowLaunchScreen() {
 
   return (
     <View style={{ flex: 1 }} ref={pageRef} onLayout={measureViewport}>
-      <Stack.Screen
-        options={{
-          title: t(manifest.name),
-          headerRight: () => (
-            <Pressable
-              onPress={() => setSavingPreset(true)}
-              hitSlop={{ top: 14, bottom: 14, left: 24, right: 12 }}
-              accessibilityRole="button"
-              accessibilityLabel={t('presets.save')}
-              style={({ pressed }) => pressed && { opacity: 0.55 }}
-            >
-              <Ionicons name="bookmark-outline" size={22} color={colors.text} />
-            </Pressable>
-          ),
-        }}
-      />
+      <Stack.Screen options={{ title: t(manifest.name) }} />
       <ScrollView
         ref={scrollRef}
         style={styles.container}
@@ -964,6 +949,20 @@ export default function WorkflowLaunchScreen() {
         </View>
         )}
 
+        {/* In the form, not the header: the connection badge (AppShell) owns
+            the top-right corner of every screen. */}
+        <Pressable
+          style={({ pressed }) => [
+            styles.presetBtn,
+            pressed && { backgroundColor: colors.surfacePressed },
+          ]}
+          onPress={() => setSavingPreset(true)}
+          accessibilityRole="button"
+        >
+          <Ionicons name="bookmark-outline" size={18} color={colors.text} />
+          <Text style={styles.presetBtnText}>{t('presets.save')}</Text>
+        </Pressable>
+
         <Pressable
           style={({ pressed }) => [
             styles.launchBtn,
@@ -1317,6 +1316,23 @@ const styles = StyleSheet.create({
     flex: 1,
     color: colors.text,
     fontFamily: typography.mono,
+    fontSize: typography.sizes.sm,
+  },
+  presetBtn: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    minHeight: MIN_TOUCH_TARGET,
+    borderRadius: radii.md,
+    borderColor: colors.border,
+    borderWidth: 1,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing.sm,
+  },
+  presetBtnText: {
+    color: colors.text,
+    fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.sm,
   },
   launchBtn: {
