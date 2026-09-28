@@ -24,7 +24,10 @@ import { HeaderBackButton } from '../components/HeaderBackButton';
 import { SetupWizard } from '../components/SetupWizard';
 import { StatusDot } from '../components/StatusDot';
 import { Toast } from '../components/Toast';
-import { VolumeBanner } from '../components/VolumeBanner';
+import {
+  VolumeBanner,
+  useVolumeBannerVisible,
+} from '../components/VolumeBanner';
 import { useHealthCheck } from '../hooks/useHealthCheck';
 import { useSettings } from '../store/settings';
 import { applyPairing, parsePairingCode } from '../utils/pairing';
@@ -40,6 +43,7 @@ function AppShell() {
   const { t } = useTranslation();
   const hydrated = useSettings((s) => s.hydrated);
   const serverUrl = useSettings((s) => s.serverUrl);
+  const bannerVisible = useVolumeBannerVisible();
 
   useEffect(() => {
     ensureNotificationSetup();
@@ -65,53 +69,57 @@ function AppShell() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <VolumeBanner />
-      <Stack
-        screenOptions={{
-          headerStyle: { backgroundColor: colors.bgElevated },
-          headerTintColor: colors.text,
-          headerTitleStyle: { fontFamily: typography.uiSemiBold },
-          contentStyle: { backgroundColor: colors.bg },
-          // Explicit back button ("Back" + 44 pt target) everywhere outside
-          // the tabs: the native one showed "(tabs)" and missed taps.
-          headerLeft: () => <HeaderBackButton />,
-        }}
-      >
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen
-          name="workflow/[id]"
-          options={{ title: t('nav.workflow') }}
-        />
-        <Stack.Screen
-          name="workflow/text-result"
-          options={{ title: t('nav.textResult') }}
-        />
-        <Stack.Screen
-          name="workflow/import"
-          options={{ title: t('nav.importWorkflow') }}
-        />
-        <Stack.Screen
-          name="workflow/edit"
-          options={{ title: t('nav.editWorkflow') }}
-        />
-        <Stack.Screen name="prompts" options={{ title: t('nav.prompts') }} />
-        <Stack.Screen name="ws-log" options={{ title: t('nav.wsLog') }} />
-        <Stack.Screen
-          name="comfy-console"
-          options={{ title: t('nav.console') }}
-        />
-      </Stack>
-      {/* Single status dot, outside the native headers (identical rendering
-          on every view, without the iOS "glass" capsule). */}
-      <View
-        pointerEvents="none"
-        style={{
-          position: 'absolute',
-          top: insets.top + 12,
-          right: spacing.md,
-          zIndex: 20,
-        }}
-      >
-        <StatusDot />
+      <View style={{ flex: 1 }}>
+        <Stack
+          screenOptions={{
+            headerStyle: { backgroundColor: colors.bgElevated },
+            headerTintColor: colors.text,
+            headerTitleStyle: { fontFamily: typography.uiSemiBold },
+            contentStyle: { backgroundColor: colors.bg },
+            // Explicit back button ("Back" + 44 pt target) everywhere outside
+            // the tabs: the native one showed "(tabs)" and missed taps.
+            headerLeft: () => <HeaderBackButton />,
+          }}
+        >
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="workflow/[id]"
+            options={{ title: t('nav.workflow') }}
+          />
+          <Stack.Screen
+            name="workflow/text-result"
+            options={{ title: t('nav.textResult') }}
+          />
+          <Stack.Screen
+            name="workflow/import"
+            options={{ title: t('nav.importWorkflow') }}
+          />
+          <Stack.Screen
+            name="workflow/edit"
+            options={{ title: t('nav.editWorkflow') }}
+          />
+          <Stack.Screen name="prompts" options={{ title: t('nav.prompts') }} />
+          <Stack.Screen name="ws-log" options={{ title: t('nav.wsLog') }} />
+          <Stack.Screen
+            name="comfy-console"
+            options={{ title: t('nav.console') }}
+          />
+        </Stack>
+        {/* Single status dot, outside the native headers (identical rendering
+          on every view, without the iOS "glass" capsule). Anchored to the
+          navigator area, so it follows the header down when the volume
+          banner takes over the status bar. */}
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: (bannerVisible ? 0 : insets.top) + 12,
+            right: spacing.md,
+            zIndex: 20,
+          }}
+        >
+          <StatusDot />
+        </View>
       </View>
       <Toast />
     </View>

@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { useVolumeBannerVisible } from '../../components/VolumeBanner';
 import { useQueue } from '../../hooks/useQueue';
 import { useConnection } from '../../store/connection';
 import { colors, typography } from '../../theme/tokens';
@@ -11,6 +12,9 @@ export default function TabsLayout() {
   const { query } = useQueue();
   const queueRemaining = useConnection((s) => s.queueRemaining);
   const pendingCount = query.data?.queue_pending.length ?? queueRemaining ?? 0;
+  // The volume banner already covers the status bar: the JS header must not
+  // add its own status bar padding on top of it.
+  const bannerVisible = useVolumeBannerVisible();
 
   return (
     <Tabs
@@ -18,6 +22,7 @@ export default function TabsLayout() {
         headerStyle: { backgroundColor: colors.bgElevated },
         headerTintColor: colors.text,
         headerTitleStyle: { fontFamily: typography.uiSemiBold },
+        headerStatusBarHeight: bannerVisible ? 0 : undefined,
         sceneStyle: { backgroundColor: colors.bg },
         tabBarStyle: {
           backgroundColor: colors.bgElevated,
