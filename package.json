@@ -44,6 +44,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@clack/prompts": "^1.8.1",
     "@types/react": "~19.1.10",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~10.0.0",

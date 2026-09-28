@@ -230,11 +230,14 @@ npm run ios            # debug build (expo run:ios), JS served by Metro
 npm run ios:release    # Release build on a physical device, bundle embedded
 ```
 
-`ios:release` prompts for the device name as shown in Xcode ▸ Devices (it is
-personal, so it is never committed), regenerates `ios/` with
-`expo prebuild --clean` so `app.json` changes always reach the build, then
-runs `expo run:ios --configuration Release --no-bundler`. The raw xcodebuild
-output goes to `<tmpdir>/komfy-ios-build.log`; only its tail is printed.
+`ios:release` lists the iPhones connected over USB or Wi-Fi
+(`xcrun devicectl`, Xcode 15+) in an arrow-key picker; with none detected, or
+through its "type a name" entry, it asks for the name as shown in
+Xcode ▸ Devices (it is personal, so it is never committed). It then
+regenerates `ios/` with `expo prebuild --clean` so `app.json` changes always
+reach the build, then runs `expo run:ios --configuration Release --no-bundler`.
+The raw xcodebuild output goes to `<tmpdir>/komfy-ios-build.log` behind a
+spinner; its tail is printed only on failure.
 
 A **free personal Apple team** is enough: the
 [`withoutPushEntitlement`](./plugins/withoutPushEntitlement.js) config plugin
