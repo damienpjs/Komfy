@@ -285,6 +285,28 @@ export default {
       zonesHint:
         'Un même contenu pour toutes les zones, ou un par zone (numérotées de gauche à droite sur la photo)',
     },
+    drawReplace: {
+      name: 'Dessiner & Remplacer (KREA2)',
+      description:
+        'Peindre une zone : elle est recadrée, régénérée seule puis recollée',
+      mask: 'Zone à remplacer',
+      maskHint:
+        "Peindre sur l'image. Les traits séparés sont recadrés et régénérés un par un",
+      promptPlaceholder: 'Ce qui doit apparaître dans la zone peinte…',
+      promptHint:
+        "Décrire uniquement la zone peinte : le modèle ne voit plus le reste de l'image",
+      grow: 'Élargir',
+      growHint:
+        "Élargit (ou rétrécit, si négatif) la zone peinte de ce nombre de pixels. Quelques pixels évitent un halo de l'ancien contenu",
+      cropFactor: 'Cadrage autour de la zone',
+      cropFactorHint:
+        'Contexte fourni au re-générateur (× la zone peinte). Trop serré (~1), la lumière et la perspective ne raccordent plus ; trop large, le prompt se dilue à nouveau. 2–3 pour commencer',
+      detail: 'Résolution de détail',
+      detailHint:
+        "Le recadrage est régénéré à cette taille avant d'être recollé. 1024 = échelle native de Krea 2 ; plus bas = plus rapide",
+      denoiseHint:
+        "1 = remplacement complet, 0,5–0,7 = retouche qui garde les formes et couleurs d'origine",
+    },
     t2p: {
       name: 'Texte → Prompt',
       description:
