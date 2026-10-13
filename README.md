@@ -38,7 +38,8 @@ Server side:
 - **Custom nodes** (the Workflows screen flags any that are missing):
   - [ComfyUI-Impact-Pack](https://github.com/ltdrdata/ComfyUI-Impact-Pack)
     and [Impact-Subpack](https://github.com/ltdrdata/ComfyUI-Impact-Subpack)
-    — Detect & Replace and Inpaint (detection, DetailerForEach, mask blur);
+    — Detect & Replace, Draw & Replace and Inpaint (detection,
+    MaskToSEGS, DetailerForEach, mask blur);
   - [comfyui-ollama](https://github.com/stavsap/comfyui-ollama) and
     [ComfyUI-Custom-Scripts](https://github.com/pythongosssss/ComfyUI-Custom-Scripts)
     — "→ Prompt" workflows;

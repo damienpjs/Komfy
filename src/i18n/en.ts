@@ -281,6 +281,28 @@ export default {
       zonesHint:
         'One content for every zone, or one per zone (numbered left to right on the photo)',
     },
+    drawReplace: {
+      name: 'Draw & Replace (KREA2)',
+      description:
+        'Paint an area: it is cropped, regenerated on its own and pasted back',
+      mask: 'Area to replace',
+      maskHint:
+        'Paint over the image. Separate strokes are cropped and regenerated one by one',
+      promptPlaceholder: 'What should appear in the painted area…',
+      promptHint:
+        'Describe only the painted area: the model no longer sees the rest of the image',
+      grow: 'Grow',
+      growHint:
+        'Widens (or shrinks, if negative) the painted area by this many pixels. A few pixels avoid a halo of the old content',
+      cropFactor: 'Framing around the area',
+      cropFactorHint:
+        'Context given to the regenerator (× the painted area). Too tight (~1) and lighting or perspective no longer match; too wide and the prompt gets diluted again. 2–3 is a good start',
+      detail: 'Detail resolution',
+      detailHint:
+        'The crop is regenerated at this size before being pasted back. 1024 = Krea 2 native scale; lower is faster',
+      denoiseHint:
+        '1 = full replacement, 0.5–0.7 = retouch that keeps the original shapes and colors',
+    },
     t2p: {
       name: 'Text → Prompt',
       description:
