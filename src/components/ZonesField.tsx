@@ -73,7 +73,7 @@ import { accessoryId } from '../utils/formAccessory';
 import { randomSeed } from '../workflows/patch';
 import {
   DEFAULT_GUIDE_SIZE,
-  GUIDE_SIZE_OPTIONS,
+  ZONE_GUIDE_SIZE_OPTIONS,
 } from '../workflows/types';
 import type {
   LorasField,
@@ -821,7 +821,7 @@ export function ZonesField({
         {detailOpen[i] && (
           <>
             <View style={styles.detailOptions}>
-              {GUIDE_SIZE_OPTIONS.map((size) => {
+              {ZONE_GUIDE_SIZE_OPTIONS.map((size) => {
                 const active = (zone.guideSize ?? DEFAULT_GUIDE_SIZE) === size;
                 return (
                   <Pressable

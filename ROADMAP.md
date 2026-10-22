@@ -193,6 +193,7 @@ Related (2026-08-05): the file details sheet (swipe up in the full-screen viewer
 | Workflows | Embedded (API JSON + manifest)                                                              |
 | Gallery   | Read via `/internal/files` + `/view` (+ komfy-listing extension) — Images half of the Library tab |
 | Prompts   | Generated prompts kept phone-side (AsyncStorage), never sent to the server. Sibling of the gallery under the Library tab, never a fake root inside its file tree: that tree mirrors real server folders and blanks out when the server is unreachable, which would take the local prompts down with it |
+| Video (LTX 2.5) | Run through MLX out of process: the `komfy-ltx-mlx` custom node calls the `ltx-2-mlx` CLI, so ComfyUI stays the single backend (queue, history, gallery, remix). LTX 2.5 on PyTorch MPS is ~16× slower. The LTX 2.3 GGUF workflow stays alongside until 2.5 is validated (2026-10-22) |
 
 ## Repo structure
 

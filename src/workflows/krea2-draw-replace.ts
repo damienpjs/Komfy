@@ -24,9 +24,11 @@
  *
  * DetailerForEach parameters mirror the zone pass of Detect & Replace
  * (patch.ts insertZonePass: euler/simple, feather 5, noise_mask_feather 20),
- * except that steps/cfg/denoise are fields here and the detail resolution
- * defaults to 1024 (Krea 2's native scale) rather than the 512 tuned for
- * faces. The `detail` select patches guide_size and max_size (2×) together.
+ * except that steps/cfg/denoise are fields here. The detail resolution
+ * defaults to 512 like the zones: guide_size is the target for the painted
+ * area's short side, so at 1024 a small area came back far denser in detail
+ * than the rest of the image. 1024 (Krea 2's native scale) stays one tap
+ * away. The `detail` select patches guide_size and max_size (2×) together.
  *
  * MaskToSEGS signature taken from ComfyUI-Impact-Pack (segs_nodes.py); the
  * other class_types and DetailerForEach inputs are those already validated
@@ -37,7 +39,7 @@ import type { PromptGraph } from '../api/types';
 import { GUIDE_SIZE_OPTIONS } from './types';
 import type { SelectOption, WorkflowManifest } from './types';
 
-const DEFAULT_DETAIL = 1024;
+const DEFAULT_DETAIL = 512;
 
 const graph: PromptGraph = {
   '1': {

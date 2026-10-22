@@ -10,6 +10,9 @@ import { krea2Img2Prompt } from './krea2-img2prompt';
 import { krea2Text2Img } from './krea2-text2img';
 import { krea2Upscale } from './krea2-upscale';
 import { ltxI2v } from './ltx-i2v';
+import { ltx25Flf } from './ltx25-flf';
+import { ltx25I2v } from './ltx25-i2v';
+import { ltx25T2v } from './ltx25-t2v';
 import { text2Prompt } from './text2prompt';
 import type { WorkflowManifest } from './types';
 
@@ -18,6 +21,9 @@ export const workflows: WorkflowManifest[] = [
   krea2Img2Img,
   krea2Edit,
   ltxI2v,
+  ltx25T2v,
+  ltx25I2v,
+  ltx25Flf,
   krea2Upscale,
   krea2Depth,
   krea2Img2Prompt,

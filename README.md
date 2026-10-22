@@ -6,7 +6,7 @@ gallery, remix an image from its recipe. UI in English and French
 (selector in Settings).
 
 > Personal project: the embedded workflows are tailored to a specific
-> setup (KREA2 models, LTX 2.3 video, Impact Pack detectors, local Ollama). The code —
+> setup (KREA2 models, LTX 2.3 and 2.5 video, Impact Pack detectors, local Ollama). The code —
 > API client, graph patching, remix, gallery — is generic and reusable
 > for other workflows.
 
@@ -60,6 +60,10 @@ Server side:
     [ComfyUI-mxToolkit](https://github.com/Smirnov75/ComfyUI-mxToolkit),
     [ComfyMath](https://github.com/evanspearman/ComfyMath) and 10S_Nodes
     (reference conditioning);
+  - Text / Image / First-last frame → Video (LTX 2.5, Apple Silicon only):
+    the bundled [`server/komfy-ltx-mlx`](./server/komfy-ltx-mlx) node plus
+    [ltx-2-mlx](https://github.com/dgrauet/ltx-2-mlx) 0.16+ and an LTX 2.5
+    MLX pack (`dgrauet/ltx-2.5-mlx-q8` on 64 GB), see step 5 below;
 - **Ollama** running locally (`127.0.0.1:11434`, never exposed on the
   tailnet) with a vision model tagged `gemma4-vision:latest` — only for the
   "→ Prompt" workflows. Any Gemma-class vision model works; alias yours
@@ -170,6 +174,23 @@ nothing below assumes a Mac.
    launch, and streams `<BASE_DIR>/logs/comfyui.log` to the in-app console.
    Details: [server/supervisor/README.md](./server/supervisor/README.md).
 
+5. **LTX 2.5 through MLX** (optional, Apple Silicon): the three LTX 2.5
+   workflows run the MLX port out of process (about 16× faster than LTX 2.5
+   on PyTorch MPS). Install the runtime and a pack, then symlink the node and
+   restart ComfyUI:
+
+   ```bash
+   git clone https://github.com/dgrauet/ltx-2-mlx ~/ltx-2-mlx
+   (cd ~/ltx-2-mlx && uv sync --all-extras)
+   hf download dgrauet/ltx-2.5-mlx-q8 --local-dir ~/models/ltx/ltx-2.5-mlx-q8
+   ln -s "<repo>/server/komfy-ltx-mlx" <comfy-data-dir>/custom_nodes/komfy-ltx-mlx
+   ```
+
+   The node unloads ComfyUI's models before each render, streams the CLI's
+   progress into the queue and writes the `.mp4` to the output folder.
+   Details (pack discovery, env overrides, memory levers):
+   [server/komfy-ltx-mlx/README.md](./server/komfy-ltx-mlx/README.md).
+
 ## App setup (development)
 
 ```bash
@@ -224,21 +245,37 @@ The same code also builds as a standalone app with the JS bundle embedded.
 git-ignored — change `app.json` (or a config plugin in `plugins/`), never the
 native folders.
 
-**iOS** (macOS host, Xcode + CocoaPods, device paired in Xcode):
+**iOS** (macOS host, Xcode + CocoaPods, iPhone paired with the Mac once by
+cable):
 
 ```bash
 npm run ios            # debug build (expo run:ios), JS served by Metro
-npm run ios:release    # Release build on a physical device, bundle embedded
+npm run native         # Release build installed and launched on the iPhone
+npm run native:check   # only list what npm run native still needs
 ```
 
-`ios:release` lists the iPhones connected over USB or Wi-Fi
-(`xcrun devicectl`, Xcode 15+) in an arrow-key picker; with none detected, or
-through its "type a name" entry, it asks for the name as shown in
-Xcode ▸ Devices (it is personal, so it is never committed). It then
-regenerates `ios/` with `expo prebuild --clean` so `app.json` changes always
-reach the build, then runs `expo run:ios --configuration Release --no-bundler`.
-The raw xcodebuild output goes to `<tmpdir>/komfy-ios-build.log` behind a
-spinner; its tail is printed only on failure.
+`native` first checks everything the build needs (Xcode, its licence and iOS
+SDK, CocoaPods, a signing certificate, the Apple account signed into Xcode,
+the iPhone: paired, reachable, Developer Mode on) and stops with the list of
+fixes when something is missing, rather than failing minutes into
+xcodebuild. It then runs the chain `expo run:ios` hides, one step per line
+with its own progress: `expo prebuild`, `pod install`, `xcodebuild` (signed
+for your team), `devicectl` install and launch, over Wi-Fi once paired. A
+failed step prints its error lines and, for known failures (free-team app
+limit, untrusted certificate, locked iPhone, missing team…), what to do.
+
+- `ios/` is regenerated only when what it comes from changed: `app.json`
+  and the files it points at, `plugins/`, `package.json`, the lockfile. An
+  unchanged project rebuilds incrementally; `-- --clean` forces it.
+- Signing team: the only one in Xcode is used as is; with several, it asks
+  once and remembers the choice in `.expo/native-ios/team` (or pass
+  `-- --team <ID>`, or set `APPLE_TEAM_ID`). Nothing personal is committed.
+- iPhone: with several reachable, it asks; `-- --device <name or UDID>`
+  picks one directly.
+- `-- --mode debug` builds Debug instead, which loads the JS from Metro
+  (`npm start`).
+
+Logs of every step land in `.expo/native-ios/logs/`.
 
 A **free personal Apple team** is enough: the
 [`withoutPushEntitlement`](./plugins/withoutPushEntitlement.js) config plugin
@@ -351,7 +388,8 @@ komfy/
 ├── src/theme/tokens.ts   # style guide — no hardcoded styles elsewhere
 ├── server/komfy-listing/ # ComfyUI extension (recursive output+input listing, trash)
 ├── server/supervisor/    # standalone Node service: remote ComfyUI on/off + live console
-├── scripts/              # start-comfy.sh/.ps1 + comfy.js (launch), expo-start.js (Metro on Tailscale), pair.js (QR), ios-release.js
+├── server/komfy-ltx-mlx/ # ComfyUI node: LTX 2.5 video through the ltx-2-mlx CLI (Apple Silicon)
+├── scripts/              # start-comfy.sh/.ps1 + comfy.js (launch), expo-start.js (Metro on Tailscale), pair.js (QR), native-ios.js (npm run native)
 ├── plugins/              # Expo config plugins (withoutPushEntitlement — free Apple team builds)
 └── docs/architecture.*   # architecture diagram: Excalidraw source + PNG exports
                           # (rest of docs/ = local notes, git-ignored)

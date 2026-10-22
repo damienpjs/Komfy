@@ -299,6 +299,18 @@ export const GUIDE_SIZE_OPTIONS = [512, 768, 1024, 1280] as const;
 export const DEFAULT_GUIDE_SIZE = 512;
 
 /**
+ * Detail levels offered per Detect & Replace zone: GUIDE_SIZE_OPTIONS plus
+ * two lower steps for distant elements. guide_size is the target for the
+ * bbox's short side, so a far, small zone regenerated at 512 comes back much
+ * denser in detail than its surroundings. With max_size at 2×, the sampled
+ * crop is capped at 512 px (256) or 768 px (384) on its long side.
+ * Kept separate from GUIDE_SIZE_OPTIONS on purpose: Draw & Replace exposes
+ * that list as a select whose value (and saved presets) is an index, which
+ * prepending would shift. A zone stores the value in px.
+ */
+export const ZONE_GUIDE_SIZE_OPTIONS = [256, 384, ...GUIDE_SIZE_OPTIONS] as const;
+
+/**
  * Seed stride between two batch jobs in allZones mode. DetailerForEach
  * derives `seed + i` for each seg it iterates over, so a single pass burns
  * one seed per detected zone — a count only known once the detector has
@@ -315,7 +327,7 @@ export interface ZoneValue {
   denoise: number;
   /**
    * Detail level = DetailerForEach guide_size for THIS zone (px).
-   * Absent ⇒ DEFAULT_GUIDE_SIZE. See GUIDE_SIZE_OPTIONS.
+   * Absent ⇒ DEFAULT_GUIDE_SIZE. See ZONE_GUIDE_SIZE_OPTIONS.
    */
   guideSize?: number;
   /**
