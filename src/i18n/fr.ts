@@ -513,7 +513,7 @@ export default {
     movedTo: 'Zone déplacée en position {{number}}',
     detailLabel: 'Niveau de détail',
     detailHint:
-      'Résolution à laquelle la zone est régénérée. À augmenter (768–1280) pour plus de détail sur les images haute résolution ; plus lent et plus gourmand en VRAM.',
+      'Résolution à laquelle la zone est régénérée. À baisser (256–384) pour les éléments lointains, afin que le remplacement ne soit pas plus net que son entourage. À augmenter (768–1280) pour plus de détail sur les images haute résolution ; plus lent et plus gourmand en VRAM.',
     addZone: 'Ajouter un remplacement',
     maxZones: 'Maximum {{count}} zones',
     steps: 'Steps',
