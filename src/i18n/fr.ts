@@ -113,7 +113,7 @@ export default {
         'Un modèle de diffusion a besoin de son encodeur CLIP et de son VAE — présélectionnés d’après le nom, à ajuster si besoin',
     },
     t2i: {
-      name: 'Créer une image',
+      name: 'Créer une image (Krea 2)',
       description:
         'Text-to-image avec KREA2 Turbo, en version standard ou GGUF (plus légère)',
       variantHint:
@@ -124,13 +124,13 @@ export default {
       vaeHint: 'Décode l’image finale ; KREA2 utilise le VAE Qwen Image',
     },
     i2i: {
-      name: 'Image → Image (KREA2)',
+      name: 'Image → Image (Krea 2)',
       description: 'Retravaille une image existante — denoise réglable',
       promptPlaceholder: 'Décrire le résultat attendu…',
       denoiseHint: 'Faible = fidèle à la source · 1 = régénération complète',
     },
     edit: {
-      name: 'Éditer une image (KREA2)',
+      name: 'Éditer une image (Krea 2)',
       description:
         'Décrit la modification à faire — identité et scène sont préservées, sans masque',
       promptPlaceholder:
@@ -266,7 +266,7 @@ export default {
       off: "Désactivé",
     },
     upscale: {
-      name: 'Upscale (KREA2)',
+      name: 'Upscale (Krea 2)',
       description:
         'Agrandissement non destructif — détails affinés, visages préservés',
       mode: 'Mode',
@@ -295,7 +295,7 @@ export default {
         'Le raffinement se fait tuile par tuile. Plus grand = moins de raccords et visages plus cohérents, mais plus de mémoire par tuile',
     },
     depth: {
-      name: 'ControlNet Depth (KREA2)',
+      name: 'ControlNet Depth (Krea 2)',
       description:
         'Génère depuis un prompt en gardant la structure de profondeur d’une photo source',
       imageHint:
@@ -323,7 +323,7 @@ export default {
         'Garder l’orientation de la source (« Inverser » pour portrait) — la carte est recadrée au centre à ce format',
     },
     detectReplace: {
-      name: 'Détecter & Remplacer (KREA2)',
+      name: 'Détecter & Remplacer (Krea 2)',
       description:
         'Remplace les zones détectées — un même contenu pour toutes, ou un par zone',
       detector: 'Quoi détecter',
@@ -342,7 +342,7 @@ export default {
         'Un même contenu pour toutes les zones, ou un par zone (numérotées de gauche à droite sur la photo)',
     },
     drawReplace: {
-      name: 'Dessiner & Remplacer (KREA2)',
+      name: 'Dessiner & Remplacer (Krea 2)',
       description:
         'Peindre une zone : elle est recadrée, régénérée seule puis recollée',
       mask: 'Zone à remplacer',

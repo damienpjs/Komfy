@@ -109,7 +109,7 @@ export default {
         'A diffusion model needs its CLIP encoder and VAE — preset from the name, adjust if needed',
     },
     t2i: {
-      name: 'Create image',
+      name: 'Create image (Krea 2)',
       description:
         'Text-to-image with KREA2 Turbo, standard or GGUF (lighter) build',
       variantHint:
@@ -120,13 +120,13 @@ export default {
       vaeHint: 'Decodes the final image; KREA2 uses the Qwen Image VAE',
     },
     i2i: {
-      name: 'Image → Image (KREA2)',
+      name: 'Image → Image (Krea 2)',
       description: 'Reworks an existing image — adjustable denoise',
       promptPlaceholder: 'Describe the expected result…',
       denoiseHint: 'Low = faithful to the source · 1 = full regeneration',
     },
     edit: {
-      name: 'Edit an image (KREA2)',
+      name: 'Edit an image (Krea 2)',
       description:
         'Describes the change to make — identity and scene are preserved, no mask needed',
       promptPlaceholder:
@@ -262,7 +262,7 @@ export default {
       off: "Off",
     },
     upscale: {
-      name: 'Upscale (KREA2)',
+      name: 'Upscale (Krea 2)',
       description:
         'Non-destructive upscale — sharper details, faces preserved',
       mode: 'Mode',
@@ -291,7 +291,7 @@ export default {
         'Refinement runs tile by tile. Larger = fewer seams and better face coherence, but more memory per tile',
     },
     depth: {
-      name: 'ControlNet Depth (KREA2)',
+      name: 'ControlNet Depth (Krea 2)',
       description:
         'Generates from a prompt while keeping the depth structure of a source photo',
       imageHint:
@@ -319,7 +319,7 @@ export default {
         'Keep the source orientation ("Invert" for portrait) — the depth map is center-cropped to this format',
     },
     detectReplace: {
-      name: 'Detect & Replace (KREA2)',
+      name: 'Detect & Replace (Krea 2)',
       description:
         'Replaces the detected zones — one content for all, or one per zone',
       detector: 'What to detect',
@@ -338,7 +338,7 @@ export default {
         'One content for every zone, or one per zone (numbered left to right on the photo)',
     },
     drawReplace: {
-      name: 'Draw & Replace (KREA2)',
+      name: 'Draw & Replace (Krea 2)',
       description:
         'Paint an area: it is cropped, regenerated on its own and pasted back',
       mask: 'Area to replace',
