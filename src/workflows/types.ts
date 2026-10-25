@@ -83,6 +83,17 @@ export interface ModelField extends FieldBase {
    * re-applied as the initial value on subsequent launches.
    */
   remember?: boolean;
+  /**
+   * Also offer the GGUF files of the same folder (ComfyUI-GGUF's
+   * UnetLoaderGGUF enum, merged after the target's own list). Picking a
+   * `.gguf` swaps the target UNETLoader for an UnetLoaderGGUF at patch time
+   * (cf. patch.applyModelValue), and remix accepts either loader in that slot
+   * (cf. match.walk). A Q8_0 GGUF holds about half the memory of a bf16
+   * model (Krea 2 Turbo: 13.7 GB vs 24.4 GB) for a near-identical render —
+   * what keeps a 64 GB Mac out of swap on the heavier workflows. Optional on
+   * the server: without ComfyUI-GGUF the list simply has no GGUF entries.
+   */
+  ggufLoader?: boolean;
 }
 
 /**
@@ -136,6 +147,13 @@ export interface ModelSourceField extends FieldBase {
   defaultCheckpoint: string;
   /** Last full selection is remembered per workflow (fieldPrefs, JSON). */
   remember?: boolean;
+  /**
+   * Same as ModelField.ggufLoader, on the diffusion branch: the GGUF files of
+   * ComfyUI-GGUF's UnetLoaderGGUF are merged after the UNETLoader list, and
+   * picking a `.gguf` swaps the unet loader node for an UnetLoaderGGUF at
+   * patch time (cf. patch.insertModelSource). Checkpoint mode is unaffected.
+   */
+  ggufLoader?: boolean;
 }
 
 /** Value of a modelSource field. */

@@ -6,12 +6,14 @@
 import i18n from '../i18n';
 import type { PromptGraph } from '../api/types';
 import { getLoraMaxCount } from '../store/settings';
+import { GGUF_UNET_LOADER } from './requirements';
 import { DEFAULT_GUIDE_SIZE } from './types';
 import type {
   DimensionsValue,
   FieldValues,
   LoraSelection,
   LorasField,
+  ModelField,
   ModelSourceField,
   ModelSourceValue,
   PatchTarget,
@@ -68,6 +70,25 @@ function applyPatch(
   const node = graph[target.nodeId];
   if (!node) throw new Error(`Node ${target.nodeId} missing from the graph`);
   node.inputs[target.input] = value;
+}
+
+/**
+ * Applies a `model` field value. On a ggufLoader field, a `.gguf` file swaps
+ * the target UNETLoader for ComfyUI-GGUF's UnetLoaderGGUF in place: same node
+ * id, same MODEL output slot, so every consumer stays wired; the GGUF loader
+ * takes no weight_dtype. Any other file keeps the frozen loader.
+ */
+function applyModelValue(
+  graph: PromptGraph,
+  field: ModelField,
+  value: string,
+): void {
+  const node = graph[field.target.nodeId];
+  if (field.ggufLoader && /\.gguf$/i.test(value)) {
+    node.class_type = GGUF_UNET_LOADER;
+    delete node.inputs.weight_dtype;
+  }
+  applyPatch(graph, field.target, value);
 }
 
 /** Validation errors by field.key; empty object = valid form. */
@@ -566,8 +587,9 @@ export function resolveModelSource(
  * Wires the graph to the chosen model source and drops the unused loaders:
  *  - checkpoint mode: CheckpointLoaderSimple feeds MODEL (0) / CLIP (1) /
  *    VAE (2); the separate UNET/CLIP/VAE loaders are removed;
- *  - diffusion mode: the UNET/CLIP/VAE loaders are set and re-wired; the
- *    checkpoint loader is removed.
+ *  - diffusion mode: the UNET/CLIP/VAE loaders are set and re-wired (a
+ *    `.gguf` on a ggufLoader field swaps the UNETLoader for UnetLoaderGGUF);
+ *    the checkpoint loader is removed.
  * Runs before insertLoraChain (manifest field order), which then follows the
  * MODEL output this leaves on the KSampler input.
  */
@@ -603,7 +625,15 @@ function insertModelSource(
     delete graph[field.vaeNodeId];
   } else {
     const unet = graph[field.unetNodeId];
-    if (unet) unet.inputs.unet_name = value.unet;
+    if (unet) {
+      // Same in-place swap as applyModelValue: same node id and MODEL slot,
+      // the GGUF loader takes no weight_dtype.
+      if (field.ggufLoader && /\.gguf$/i.test(value.unet)) {
+        unet.class_type = GGUF_UNET_LOADER;
+        delete unet.inputs.weight_dtype;
+      }
+      unet.inputs.unet_name = value.unet;
+    }
     const clip = graph[field.clipNodeId];
     if (clip) {
       clip.inputs.clip_name = value.clip;
@@ -667,7 +697,7 @@ export function patchGraph(
         // branch an earlier select dropped (the upscale "sans diffusion" mode
         // removes the KREA2 loaders outright).
         if (!graph[field.target.nodeId]) break;
-        applyPatch(graph, field.target, String(value ?? field.default));
+        applyModelValue(graph, field, String(value ?? field.default));
         break;
       case 'modelSource':
         insertModelSource(graph, field, resolveModelSource(field, value));

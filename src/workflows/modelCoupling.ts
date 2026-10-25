@@ -72,6 +72,7 @@ export function guessCompanionFile(
     'scaled',
     'fast',
     'safetensors',
+    'gguf',
     'pruned',
     'turbo',
     'dev',

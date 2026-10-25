@@ -2,7 +2,8 @@
  * Node schemas of the connected server + per-workflow availability.
  *
  * useNodeInfo fetches the /object_info/{NodeName} schema of every class_type
- * required by the workflows — embedded AND runtime-imported (the class-type
+ * required by the workflows, plus the optional ones fetched for their file
+ * enums only (the GGUF loader, cf. requirements.optionalClassTypes), — embedded AND runtime-imported (the class-type
  * list is part of the query key: importing a workflow fetches the missing
  * schemas). Small per-node responses — the full /object_info weighs several
  * MB, cf. api-notes. Consumers: useAvailability (missing nodes/models
@@ -20,7 +21,7 @@ import type { NodeInfo } from '../api/types';
 import { useSettings } from '../store/settings';
 import { useWorkflows } from '../workflows/registry';
 import {
-  allRequiredClassTypes,
+  allFetchedClassTypes,
   checkAvailability,
   type WorkflowAvailability,
 } from '../workflows/requirements';
@@ -30,7 +31,7 @@ export function useNodeInfo(): Record<string, NodeInfo | null> | undefined {
   const hydrated = useSettings((s) => s.hydrated);
   const workflows = useWorkflows();
   const classTypes = useMemo(
-    () => allRequiredClassTypes(workflows),
+    () => allFetchedClassTypes(workflows),
     [workflows],
   );
 

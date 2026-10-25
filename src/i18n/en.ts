@@ -82,6 +82,8 @@ export default {
       sourceImage: 'Source image',
       threshold: 'Detection threshold',
       model: 'Model',
+      modelGgufHint:
+        "Diffusion models installed on the server. A GGUF file (.gguf) needs about half the memory: pick it when renders slow down or the Mac starts swapping. Q8_0 renders almost like the full model",
       modelHint:
         'Diffusion models installed on the server — compatible family only',
       negativePrompt: 'Negative prompt',
@@ -97,6 +99,8 @@ export default {
     },
     modelSource: {
       hint: 'Any checkpoint (self-contained), or a diffusion model with its own CLIP encoder and VAE',
+      hintGguf:
+        'Any checkpoint (self-contained), or a diffusion model with its own CLIP encoder and VAE. A GGUF diffusion model (.gguf) needs about half the memory: pick it when renders slow down or the Mac starts swapping',
       checkpoints: 'Checkpoints',
       diffusion: 'Diffusion models',
       checkpointBadge: 'Checkpoint',
@@ -399,6 +403,7 @@ export default {
     },
   },
   model: {
+    ggufChip: "GGUF · light",
     search: 'Search a model…',
     missing: 'Not found on the server — pick another file',
     noResult: 'No matching model',

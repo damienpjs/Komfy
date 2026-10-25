@@ -41,6 +41,31 @@ export function requiredClassTypes(manifest: WorkflowManifest): string[] {
   return [...types].sort();
 }
 
+/**
+ * Loader of the GGUF files a `model` field may offer (ggufLoader). Fetched
+ * alongside the required types for its file enum, but never required: a
+ * server without ComfyUI-GGUF just offers no GGUF entry.
+ */
+export const GGUF_UNET_LOADER = 'UnetLoaderGGUF';
+
+/** class_types fetched for their enums only, never flagged as missing. */
+export function optionalClassTypes(manifest: WorkflowManifest): string[] {
+  return manifest.fields.some(
+    (f) => (f.kind === 'model' || f.kind === 'modelSource') && f.ggufLoader,
+  )
+    ? [GGUF_UNET_LOADER]
+    : [];
+}
+
+/** Required + optional class_types of a set of manifests (deduplicated). */
+export function allFetchedClassTypes(manifests: WorkflowManifest[]): string[] {
+  const types = new Set(allRequiredClassTypes(manifests));
+  for (const manifest of manifests) {
+    optionalClassTypes(manifest).forEach((t) => types.add(t));
+  }
+  return [...types].sort();
+}
+
 /** Union of the class_types required by a set of manifests (deduplicated). */
 export function allRequiredClassTypes(
   manifests: WorkflowManifest[],
@@ -144,6 +169,7 @@ export function modelFieldOptions(
   const allowed = enumValues(spec);
   if (!allowed) return undefined;
   const files = allowed.filter((v): v is string => typeof v === 'string');
+  if (field.ggufLoader) mergeGgufFiles(files, nodeInfo);
   if (!field.filter) return files;
   try {
     const re = new RegExp(field.filter, 'i');
@@ -152,6 +178,18 @@ export function modelFieldOptions(
   } catch {
     return files;
   }
+}
+
+/**
+ * Appends the UnetLoaderGGUF files (ComfyUI-GGUF) not already listed. No-op
+ * when the node is absent from the server: the list keeps its own entries.
+ */
+function mergeGgufFiles(
+  files: string[],
+  nodeInfo: Record<string, NodeInfo | null> | undefined,
+): void {
+  const gguf = enumFilesByType(GGUF_UNET_LOADER, 'unet_name', nodeInfo);
+  for (const f of gguf ?? []) if (!files.includes(f)) files.push(f);
 }
 
 /** Enum of a class_type's input, filtered to the string files. */
@@ -194,11 +232,20 @@ export function modelSourceOptions(
   field: ModelSourceField,
   nodeInfo: Record<string, NodeInfo | null> | undefined,
 ): ModelSourceOptions {
+  const diffusionModels = enumFilesOf(
+    manifest,
+    field.unetNodeId,
+    'unet_name',
+    nodeInfo,
+  );
+  if (diffusionModels && field.ggufLoader) {
+    mergeGgufFiles(diffusionModels, nodeInfo);
+  }
   return {
     // The checkpoint loader is spliced in at patch time (not in the graph),
     // so its enum is read straight from the node type.
     checkpoints: enumFilesByType('CheckpointLoaderSimple', 'ckpt_name', nodeInfo),
-    diffusionModels: enumFilesOf(manifest, field.unetNodeId, 'unet_name', nodeInfo),
+    diffusionModels,
     clipTypes: enumFilesOf(manifest, field.clipNodeId, 'type', nodeInfo),
     clips: enumFilesOf(manifest, field.clipNodeId, 'clip_name', nodeInfo),
     vaes: enumFilesOf(manifest, field.vaeNodeId, 'vae_name', nodeInfo),
