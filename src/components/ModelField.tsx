@@ -28,6 +28,7 @@ import {
   typography,
 } from '../theme/tokens';
 import { loraDirName, loraDisplayName } from '../utils/pathTree';
+import { isGgufFile } from '../workflows/modelVariant';
 import type { ModelField as ModelFieldSpec } from '../workflows/types';
 
 interface Props {
@@ -38,7 +39,7 @@ interface Props {
   onChange: (value: string) => void;
 }
 
-export const isGguf = (path: string) => /\.gguf$/i.test(path);
+export const isGguf = isGgufFile;
 
 export function GgufChip() {
   const { t } = useTranslation();

@@ -82,6 +82,7 @@ export default {
       sourceImage: 'Source image',
       threshold: 'Detection threshold',
       model: 'Model',
+      modelFile: 'Model file',
       modelGgufHint:
         "Diffusion models installed on the server. A GGUF file (.gguf) needs about half the memory: pick it when renders slow down or the Mac starts swapping. Q8_0 renders almost like the full model",
       modelHint:
@@ -99,8 +100,6 @@ export default {
     },
     modelSource: {
       hint: 'Any checkpoint (self-contained), or a diffusion model with its own CLIP encoder and VAE',
-      hintGguf:
-        'Any checkpoint (self-contained), or a diffusion model with its own CLIP encoder and VAE. A GGUF diffusion model (.gguf) needs about half the memory: pick it when renders slow down or the Mac starts swapping',
       checkpoints: 'Checkpoints',
       diffusion: 'Diffusion models',
       checkpointBadge: 'Checkpoint',
@@ -110,18 +109,24 @@ export default {
         'A diffusion model needs its CLIP encoder and VAE — preset from the name, adjust if needed',
     },
     t2i: {
-      name: 'Create image',
+      name: 'Create image (Krea 2)',
       description:
-        'Text-to-image — pick a checkpoint or a diffusion model (KREA2 Turbo by default)',
+        'Text-to-image with KREA2 Turbo, standard or GGUF (lighter) build',
+      variantHint:
+        'Standard: the bf16 model (24.4 GB in memory). GGUF: the Q8_0, about half as heavy (13.7 GB) for a near-identical render; pick it when renders slow down or the Mac starts swapping',
+      clip: 'Text encoder (CLIP)',
+      clipHint: 'Qwen3-VL, the one KREA2 expects (type krea2)',
+      vae: 'Decoder (VAE)',
+      vaeHint: 'Decodes the final image; KREA2 uses the Qwen Image VAE',
     },
     i2i: {
-      name: 'Image → Image (KREA2)',
+      name: 'Image → Image (Krea 2)',
       description: 'Reworks an existing image — adjustable denoise',
       promptPlaceholder: 'Describe the expected result…',
       denoiseHint: 'Low = faithful to the source · 1 = full regeneration',
     },
     edit: {
-      name: 'Edit an image (KREA2)',
+      name: 'Edit an image (Krea 2)',
       description:
         'Describes the change to make — identity and scene are preserved, no mask needed',
       promptPlaceholder:
@@ -257,7 +262,7 @@ export default {
       off: "Off",
     },
     upscale: {
-      name: 'Upscale (KREA2)',
+      name: 'Upscale (Krea 2)',
       description:
         'Non-destructive upscale — sharper details, faces preserved',
       mode: 'Mode',
@@ -286,7 +291,7 @@ export default {
         'Refinement runs tile by tile. Larger = fewer seams and better face coherence, but more memory per tile',
     },
     depth: {
-      name: 'ControlNet Depth (KREA2)',
+      name: 'ControlNet Depth (Krea 2)',
       description:
         'Generates from a prompt while keeping the depth structure of a source photo',
       imageHint:
@@ -314,7 +319,7 @@ export default {
         'Keep the source orientation ("Invert" for portrait) — the depth map is center-cropped to this format',
     },
     detectReplace: {
-      name: 'Detect & Replace (KREA2)',
+      name: 'Detect & Replace (Krea 2)',
       description:
         'Replaces the detected zones — one content for all, or one per zone',
       detector: 'What to detect',
@@ -333,7 +338,7 @@ export default {
         'One content for every zone, or one per zone (numbered left to right on the photo)',
     },
     drawReplace: {
-      name: 'Draw & Replace (KREA2)',
+      name: 'Draw & Replace (Krea 2)',
       description:
         'Paint an area: it is cropped, regenerated on its own and pasted back',
       mask: 'Area to replace',
@@ -404,6 +409,9 @@ export default {
   },
   model: {
     ggufChip: "GGUF · light",
+    standard: 'Standard',
+    ggufUnavailable:
+      'No GGUF file on the server (models/unet folder), or ComfyUI-GGUF not installed',
     search: 'Search a model…',
     missing: 'Not found on the server — pick another file',
     noResult: 'No matching model',
@@ -476,6 +484,7 @@ export default {
     failedTitle: 'Job failed ✗',
   },
   launch: {
+    advanced: 'Advanced settings',
     notFound: 'Workflow not found',
     launchFailed: 'Launch failed',
     jobQueued: 'Job added to the queue ✓ (#{{number}})',

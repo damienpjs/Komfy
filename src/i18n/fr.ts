@@ -82,6 +82,7 @@ export default {
       sourceImage: 'Image source',
       threshold: 'Seuil de détection',
       model: 'Modèle',
+      modelFile: 'Fichier du modèle',
       modelGgufHint:
         "Modèles de diffusion installés sur le serveur. Un fichier GGUF (.gguf) demande environ deux fois moins de mémoire : choisis-le si les rendus ralentissent ou si le Mac swappe. Le Q8_0 rend presque comme le modèle complet",
       modelHint:
@@ -103,8 +104,6 @@ export default {
     },
     modelSource: {
       hint: 'N’importe quel checkpoint (autonome), ou un modèle de diffusion avec son propre encodeur CLIP et son VAE',
-      hintGguf:
-        'N’importe quel checkpoint (autonome), ou un modèle de diffusion avec son propre encodeur CLIP et son VAE. Un modèle de diffusion GGUF (.gguf) demande environ deux fois moins de mémoire : choisis-le si les rendus ralentissent ou si le Mac swappe',
       checkpoints: 'Checkpoints',
       diffusion: 'Modèles de diffusion',
       checkpointBadge: 'Checkpoint',
@@ -114,18 +113,24 @@ export default {
         'Un modèle de diffusion a besoin de son encodeur CLIP et de son VAE — présélectionnés d’après le nom, à ajuster si besoin',
     },
     t2i: {
-      name: 'Créer une image',
+      name: 'Créer une image (Krea 2)',
       description:
-        'Text-to-image — choisis un checkpoint ou un modèle de diffusion (KREA2 Turbo par défaut)',
+        'Text-to-image avec KREA2 Turbo, en version standard ou GGUF (plus légère)',
+      variantHint:
+        'Standard : le modèle bf16 (24,4 Go en mémoire). GGUF : le Q8_0, environ deux fois plus léger (13,7 Go) pour un rendu presque identique, à choisir si les rendus ralentissent ou si le Mac swappe',
+      clip: 'Encodeur de texte (CLIP)',
+      clipHint: 'Qwen3-VL, celui qu’attend KREA2 (type krea2)',
+      vae: 'Décodeur (VAE)',
+      vaeHint: 'Décode l’image finale ; KREA2 utilise le VAE Qwen Image',
     },
     i2i: {
-      name: 'Image → Image (KREA2)',
+      name: 'Image → Image (Krea 2)',
       description: 'Retravaille une image existante — denoise réglable',
       promptPlaceholder: 'Décrire le résultat attendu…',
       denoiseHint: 'Faible = fidèle à la source · 1 = régénération complète',
     },
     edit: {
-      name: 'Éditer une image (KREA2)',
+      name: 'Éditer une image (Krea 2)',
       description:
         'Décrit la modification à faire — identité et scène sont préservées, sans masque',
       promptPlaceholder:
@@ -261,7 +266,7 @@ export default {
       off: "Désactivé",
     },
     upscale: {
-      name: 'Upscale (KREA2)',
+      name: 'Upscale (Krea 2)',
       description:
         'Agrandissement non destructif — détails affinés, visages préservés',
       mode: 'Mode',
@@ -290,7 +295,7 @@ export default {
         'Le raffinement se fait tuile par tuile. Plus grand = moins de raccords et visages plus cohérents, mais plus de mémoire par tuile',
     },
     depth: {
-      name: 'ControlNet Depth (KREA2)',
+      name: 'ControlNet Depth (Krea 2)',
       description:
         'Génère depuis un prompt en gardant la structure de profondeur d’une photo source',
       imageHint:
@@ -318,7 +323,7 @@ export default {
         'Garder l’orientation de la source (« Inverser » pour portrait) — la carte est recadrée au centre à ce format',
     },
     detectReplace: {
-      name: 'Détecter & Remplacer (KREA2)',
+      name: 'Détecter & Remplacer (Krea 2)',
       description:
         'Remplace les zones détectées — un même contenu pour toutes, ou un par zone',
       detector: 'Quoi détecter',
@@ -337,7 +342,7 @@ export default {
         'Un même contenu pour toutes les zones, ou un par zone (numérotées de gauche à droite sur la photo)',
     },
     drawReplace: {
-      name: 'Dessiner & Remplacer (KREA2)',
+      name: 'Dessiner & Remplacer (Krea 2)',
       description:
         'Peindre une zone : elle est recadrée, régénérée seule puis recollée',
       mask: 'Zone à remplacer',
@@ -412,6 +417,9 @@ export default {
   },
   model: {
     ggufChip: "GGUF · léger",
+    standard: 'Standard',
+    ggufUnavailable:
+      'Aucun fichier GGUF sur le serveur (dossier models/unet), ou ComfyUI-GGUF non installé',
     search: 'Rechercher un modèle…',
     missing: 'Introuvable sur le serveur — choisir un autre fichier',
     noResult: 'Aucun modèle correspondant',
@@ -485,6 +493,7 @@ export default {
     failedTitle: 'Job échoué ✗',
   },
   launch: {
+    advanced: 'Configuration avancée',
     notFound: 'Workflow introuvable',
     launchFailed: 'Échec du lancement',
     jobQueued: 'Job ajouté à la queue ✓ (#{{number}})',

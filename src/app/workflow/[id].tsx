@@ -7,7 +7,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Alert,
@@ -62,6 +62,7 @@ import {
 } from '../../utils/formAccessory';
 import { useNodeInfo } from '../../hooks/useAvailability';
 import type { SourceSeeds } from '../../workflows/match';
+import { pickVariantFile, variantOf } from '../../workflows/modelVariant';
 import { getAnyWorkflow } from '../../workflows/registry';
 import {
   DEFAULT_OUTPUT_DIR,
@@ -245,6 +246,8 @@ export default function WorkflowLaunchScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [dirPickerOpen, setDirPickerOpen] = useState(false);
   const [savingPreset, setSavingPreset] = useState(false);
+  // Advanced settings (fields flagged `advanced`): folded by default.
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   // A zone card is being dragged: the page must hold still under it, or the
   // scroll and the card would follow the same finger. It scrolls again, but
   // driven by the card itself once it reaches an edge (zoneScroller).
@@ -356,6 +359,22 @@ export default function WorkflowLaunchScreen() {
   // Text-result workflow: a single job, no batch or destination, and the
   // result screen replaces the redirect to the Queue.
   const isTextResult = manifest.textNodeId != null;
+
+  // Advanced fields render last, behind a toggle; a validation error in one
+  // of them unfolds the section, or the error would stay out of sight.
+  const advancedFields = manifest.fields.filter((f) => f.advanced);
+  const orderedFields = [
+    ...manifest.fields.filter((f) => !f.advanced),
+    ...advancedFields,
+  ];
+  const firstAdvancedKey = advancedFields[0]?.key;
+  const showAdvanced =
+    advancedOpen || advancedFields.some((f) => !!errors[f.key]);
+  // Standard / GGUF switches: their exact-file picker lives in the advanced
+  // section (only when the form has one).
+  const variantFields = manifest.fields.filter(
+    (f) => f.kind === 'model' && f.variantSwitch,
+  );
 
   const setValue = (key: string, value: FieldValues[string]) => {
     setValues((v) => ({ ...v, [key]: value }));
@@ -519,17 +538,64 @@ export default function WorkflowLaunchScreen() {
           capture={capturePreset}
         />
 
-        {manifest.fields.map((field) => {
+        {orderedFields.map((field) => {
+          const advancedHeader =
+            field.key === firstAdvancedKey ? (
+              <Fragment key="advanced-header">
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.advancedToggle,
+                    pressed && { opacity: 0.6 },
+                  ]}
+                  onPress={() => setAdvancedOpen((o) => !o)}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: showAdvanced }}
+                >
+                  <Ionicons
+                    name={showAdvanced ? 'chevron-down' : 'chevron-forward'}
+                    size={16}
+                    color={colors.accent}
+                  />
+                  <Text style={styles.advancedToggleText}>
+                    {t('launch.advanced')}
+                  </Text>
+                </Pressable>
+                {showAdvanced &&
+                  variantFields.map(
+                    (vf) =>
+                      vf.kind === 'model' && (
+                        <View key={`${vf.key}-file`} style={styles.fieldBlock}>
+                          <Text style={styles.label}>
+                            {t('wf.common.modelFile')}
+                          </Text>
+                          <ModelField
+                            field={vf}
+                            value={
+                              typeof values[vf.key] === 'string'
+                                ? (values[vf.key] as string)
+                                : vf.default
+                            }
+                            options={modelFieldOptions(manifest, vf, nodeInfo)}
+                            onChange={(v) => setValue(vf.key, v)}
+                          />
+                        </View>
+                      ),
+                  )}
+              </Fragment>
+            ) : null;
           // Conditional field: hidden until its controlling field matches
           // (e.g. the distilled strengths appear only when the toggle is On).
           if (
-            field.showWhen &&
-            values[field.showWhen.key] !== field.showWhen.equals
+            (field.advanced && !showAdvanced) ||
+            (field.showWhen &&
+              values[field.showWhen.key] !== field.showWhen.equals)
           ) {
-            return null;
+            return advancedHeader;
           }
           return (
-          <View key={field.key} style={styles.fieldBlock}>
+          <Fragment key={field.key}>
+          {advancedHeader}
+          <View style={styles.fieldBlock}>
             <Text style={styles.label}>{t(field.label)}</Text>
 
             {field.kind === 'zones' && (
@@ -788,7 +854,66 @@ export default function WorkflowLaunchScreen() {
               />
             )}
 
-            {field.kind === 'model' && (
+            {field.kind === 'model' && field.variantSwitch &&
+              (() => {
+                // Standard / GGUF: each side resolves to a server file.
+                const options = modelFieldOptions(manifest, field, nodeInfo);
+                const current =
+                  typeof values[field.key] === 'string'
+                    ? (values[field.key] as string)
+                    : field.default;
+                const active = variantOf(current);
+                const ggufFile = pickVariantFile('gguf', options, current, field.default);
+                const missing = options != null && !options.includes(current);
+                return (
+                  <>
+                    <View style={styles.segmentRow}>
+                      {(['standard', 'gguf'] as const).map((variant) => {
+                        const file = pickVariantFile(
+                          variant,
+                          options,
+                          current,
+                          field.default,
+                        );
+                        const selected = active === variant;
+                        return (
+                          <Pressable
+                            key={variant}
+                            disabled={!file}
+                            style={[
+                              styles.segment,
+                              selected && styles.segmentSelected,
+                              !file && styles.segmentDisabled,
+                            ]}
+                            onPress={() => file && setValue(field.key, file)}
+                          >
+                            <Text
+                              style={[
+                                styles.segmentText,
+                                selected && styles.segmentTextSelected,
+                              ]}
+                            >
+                              {t(
+                                variant === 'gguf'
+                                  ? 'model.ggufChip'
+                                  : 'model.standard',
+                              )}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                    {missing && (
+                      <Text style={styles.fieldError}>{t('model.missing')}</Text>
+                    )}
+                    {options != null && !ggufFile && (
+                      <Text style={styles.hint}>{t('model.ggufUnavailable')}</Text>
+                    )}
+                  </>
+                );
+              })()}
+
+            {field.kind === 'model' && !field.variantSwitch && (
               <ModelField
                 field={field}
                 value={
@@ -844,6 +969,7 @@ export default function WorkflowLaunchScreen() {
               <Text style={styles.fieldError}>{errors[field.key]}</Text>
             )}
           </View>
+          </Fragment>
           );
         })}
 
@@ -1128,6 +1254,20 @@ const styles = StyleSheet.create({
   segmentSelected: {
     borderColor: colors.accent,
     backgroundColor: colors.bgElevated,
+  },
+  segmentDisabled: {
+    opacity: 0.4,
+  },
+  advancedToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    minHeight: MIN_TOUCH_TARGET,
+  },
+  advancedToggleText: {
+    color: colors.accent,
+    fontFamily: typography.uiSemiBold,
+    fontSize: typography.sizes.sm,
   },
   segmentText: {
     color: colors.textMuted,

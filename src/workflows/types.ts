@@ -30,6 +30,12 @@ interface FieldBase {
    * making the value moot (cf. patch.ts passthroughBypass + the number guard).
    */
   showWhen?: { key: string; equals: string | number };
+  /**
+   * Advanced setting: rendered after the other fields, folded behind an
+   * "Advanced settings" toggle (unfolded automatically when one of them
+   * fails validation). Patched at launch like any field, folded or not.
+   */
+  advanced?: boolean;
 }
 
 export interface TextField extends FieldBase {
@@ -94,6 +100,14 @@ export interface ModelField extends FieldBase {
    * the server: without ComfyUI-GGUF the list simply has no GGUF entries.
    */
   ggufLoader?: boolean;
+  /**
+   * Shown as a two-way Standard / GGUF switch instead of the file picker
+   * (requires ggufLoader): each side resolves to a file of the filtered list
+   * (cf. modelVariant.pickVariantFile). When the form has advanced fields,
+   * the regular picker is offered there too, to pick the exact file (e.g.
+   * Q8_0 vs Q4_K_M).
+   */
+  variantSwitch?: boolean;
 }
 
 /**
