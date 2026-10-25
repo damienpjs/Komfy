@@ -4,7 +4,8 @@
  * server's installed files (object_info enum — cf. modelFieldOptions).
  * Degraded mode (no list): the row is inert and keeps the frozen default;
  * a value absent from the loaded list shows a warning (the server would
- * reject it at POST /prompt).
+ * reject it at POST /prompt). GGUF files (offered by ggufLoader fields) carry
+ * a "GGUF · light" chip: same model, about half the memory.
  */
 
 import { Ionicons } from '@expo/vector-icons';
@@ -35,6 +36,20 @@ interface Props {
   /** Server-side files (undefined = list unavailable → row inert). */
   options: string[] | undefined;
   onChange: (value: string) => void;
+}
+
+export const isGguf = (path: string) => /\.gguf$/i.test(path);
+
+export function GgufChip() {
+  const { t } = useTranslation();
+  return (
+    <View style={styles.dirChip}>
+      <Ionicons name="hardware-chip-outline" size={11} color={colors.textMuted} />
+      <Text style={styles.dirChipText} numberOfLines={1}>
+        {t('model.ggufChip')}
+      </Text>
+    </View>
+  );
 }
 
 export function ModelField({ field, value, options, onChange }: Props) {
@@ -81,6 +96,7 @@ export function ModelField({ field, value, options, onChange }: Props) {
               </Text>
             </View>
           )}
+          {isGguf(value) && <GgufChip />}
         </View>
         {missing && (
           <Ionicons name="alert-circle" size={18} color={colors.warning} />
@@ -174,6 +190,7 @@ export function ModelField({ field, value, options, onChange }: Props) {
                         </Text>
                       </View>
                     )}
+                    {isGguf(item) && <GgufChip />}
                   </View>
                   {selected && (
                     <Ionicons

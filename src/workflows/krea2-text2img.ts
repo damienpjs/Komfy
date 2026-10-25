@@ -2,7 +2,8 @@
  * Generalist text-to-image. The user picks any model via the `modelSource`
  * field: a checkpoint (self-contained MODEL/CLIP/VAE — a CheckpointLoaderSimple
  * is spliced in at patch time) or a diffusion model (UNETLoader, node 1 — with
- * its own CLIP encoder + VAE, nodes 2 & 3). At patch time the graph is rewired
+ * its own CLIP encoder + VAE, nodes 2 & 3). A `.gguf` diffusion model swaps
+ * node 1 for an UnetLoaderGGUF (ggufLoader). At patch time the graph is rewired
  * to the chosen loader and the unused ones dropped (cf. insertModelSource); the
  * latent (node 6) switches to 4-channel for a checkpoint.
  * Frozen defaults reproduce the original KREA2 Turbo setup (validated
@@ -149,7 +150,7 @@ export const krea2Text2Img: WorkflowManifest = {
       kind: 'modelSource',
       key: 'model',
       label: 'wf.common.model',
-      hint: 'wf.modelSource.hint',
+      hint: 'wf.modelSource.hintGguf',
       checkpointNodeId: 'komfy_checkpoint',
       unetNodeId: '1',
       clipNodeId: '2',
@@ -167,6 +168,7 @@ export const krea2Text2Img: WorkflowManifest = {
       defaultVae: 'qwen_image_vae.safetensors',
       defaultCheckpoint: '',
       remember: true,
+      ggufLoader: true,
     },
     {
       kind: 'loras',

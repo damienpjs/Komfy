@@ -82,6 +82,8 @@ export default {
       sourceImage: 'Image source',
       threshold: 'Seuil de détection',
       model: 'Modèle',
+      modelGgufHint:
+        "Modèles de diffusion installés sur le serveur. Un fichier GGUF (.gguf) demande environ deux fois moins de mémoire : choisis-le si les rendus ralentissent ou si le Mac swappe. Le Q8_0 rend presque comme le modèle complet",
       modelHint:
         'Modèles de diffusion installés sur le serveur — famille compatible uniquement',
       negativePrompt: 'Prompt négatif',
@@ -101,6 +103,8 @@ export default {
     },
     modelSource: {
       hint: 'N’importe quel checkpoint (autonome), ou un modèle de diffusion avec son propre encodeur CLIP et son VAE',
+      hintGguf:
+        'N’importe quel checkpoint (autonome), ou un modèle de diffusion avec son propre encodeur CLIP et son VAE. Un modèle de diffusion GGUF (.gguf) demande environ deux fois moins de mémoire : choisis-le si les rendus ralentissent ou si le Mac swappe',
       checkpoints: 'Checkpoints',
       diffusion: 'Modèles de diffusion',
       checkpointBadge: 'Checkpoint',
@@ -407,6 +411,7 @@ export default {
     },
   },
   model: {
+    ggufChip: "GGUF · léger",
     search: 'Rechercher un modèle…',
     missing: 'Introuvable sur le serveur — choisir un autre fichier',
     noResult: 'Aucun modèle correspondant',

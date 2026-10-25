@@ -12,9 +12,11 @@
 
 import type { PromptGraph } from '../api/types';
 import { applySelectOption } from './patch';
+import { GGUF_UNET_LOADER } from './requirements';
 import type {
   FieldValues,
   LoraSelection,
+  ModelField,
   ModelSourceField,
   SelectField,
   WorkflowManifest,
@@ -99,6 +101,12 @@ interface WalkState {
   zonesField?: ZonesField;
   /** modelSource field config of the tested manifest, if any. */
   modelSourceField?: ModelSourceField;
+  /**
+   * Manifest UNETLoader nodes a ggufLoader `model` field may have swapped for
+   * an UnetLoaderGGUF at launch (cf. patch.applyModelValue): either loader
+   * matches there.
+   */
+  ggufSlots: Set<string>;
   /**
    * Extracted CheckpointLoaderSimple absorbed in checkpoint mode: it stands
    * in for the frozen graph's separate UNET/CLIP/VAE loaders. Set = the
@@ -392,7 +400,10 @@ function walk(
       mId === state.modelSourceField?.latentNodeId &&
       mNode.class_type === 'EmptySD3LatentImage' &&
       eNode.class_type === 'EmptyLatentImage';
-    if (!latentSwap) return false;
+    // GGUF model picked in a ggufLoader field: same slot, other loader.
+    const ggufSwap =
+      state.ggufSlots.has(mId) && eNode.class_type === GGUF_UNET_LOADER;
+    if (!latentSwap && !ggufSwap) return false;
   }
 
   state.map.set(mId, eId);
@@ -435,6 +446,12 @@ function matchVariant(
   const modelSourceField = manifest.fields.find(
     (f): f is ModelSourceField => f.kind === 'modelSource',
   );
+  const ggufSlots = new Set(
+    manifest.fields
+      .filter((f): f is ModelField => f.kind === 'model' && !!f.ggufLoader)
+      .map((f) => f.target.nodeId),
+  );
+  if (modelSourceField?.ggufLoader) ggufSlots.add(modelSourceField.unetNodeId);
   const state: WalkState = {
     map: new Map(),
     loras: new Map(),
@@ -442,6 +459,7 @@ function matchVariant(
     visited: new Set(),
     zonesField,
     modelSourceField,
+    ggufSlots,
   };
   if (!walk(extracted, graph, sinks[0], manifest.saveNodeId, state)) {
     return null;

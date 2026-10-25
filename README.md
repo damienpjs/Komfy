@@ -32,7 +32,10 @@ themselves (`docs/api-notes.md`) are local working files, not published.
 Server side:
 
 - **ComfyUI** installed, with the models referenced by the manifests in
-  `src/workflows/` (KREA2 Turbo diffusion model, Qwen VAE/CLIP, depth-control
+  `src/workflows/` (KREA2 Turbo diffusion model, or its GGUF build
+  (`Krea-2-Turbo-Q8_0.gguf` in `models/unet`, half the memory, needs
+  ComfyUI-GGUF) offered next to it in the KREA2 model pickers and the
+  diffusion list of the text-to-image picker, Qwen VAE/CLIP, depth-control
   LoRA, Ultralytics detectors, ESRGAN-family upscalers, LTX 2.3 GGUF models +
   audio VAE — see each workflow file);
 - **Custom nodes** (the Workflows screen flags any that are missing):

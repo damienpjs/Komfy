@@ -6,7 +6,8 @@
  * pre-filled by a best-effort name heuristic (modelCoupling) and freely
  * overridable. Degraded mode (no list): the row stays inert on the frozen
  * defaults. Nothing model-specific is hardcoded — every option comes from
- * the connected server (cf. modelSourceOptions).
+ * the connected server (cf. modelSourceOptions). With ggufLoader, the GGUF
+ * diffusion models sit in the same section, tagged with the GGUF chip.
  */
 
 import { Ionicons } from '@expo/vector-icons';
@@ -36,7 +37,7 @@ import type {
   ModelSourceField as ModelSourceFieldSpec,
   ModelSourceValue,
 } from '../workflows/types';
-import { ModelField } from './ModelField';
+import { GgufChip, isGguf, ModelField } from './ModelField';
 
 interface Props {
   field: ModelSourceFieldSpec;
@@ -140,6 +141,7 @@ export function ModelSourceField({ field, value, options, onChange }: Props) {
               </Text>
             </View>
           )}
+          {!isCheckpoint && isGguf(current) && <GgufChip />}
         </View>
         {missing && (
           <Ionicons name="alert-circle" size={18} color={colors.warning} />
@@ -257,6 +259,7 @@ export function ModelSourceField({ field, value, options, onChange }: Props) {
                         </Text>
                       </View>
                     )}
+                    {section.mode === 'diffusion' && isGguf(item) && <GgufChip />}
                   </View>
                   {selected && (
                     <Ionicons name="checkmark" size={18} color={colors.brand} />
