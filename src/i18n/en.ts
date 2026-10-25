@@ -82,6 +82,7 @@ export default {
       sourceImage: 'Source image',
       threshold: 'Detection threshold',
       model: 'Model',
+      modelFile: 'Model file',
       modelGgufHint:
         "Diffusion models installed on the server. A GGUF file (.gguf) needs about half the memory: pick it when renders slow down or the Mac starts swapping. Q8_0 renders almost like the full model",
       modelHint:
@@ -99,8 +100,6 @@ export default {
     },
     modelSource: {
       hint: 'Any checkpoint (self-contained), or a diffusion model with its own CLIP encoder and VAE',
-      hintGguf:
-        'Any checkpoint (self-contained), or a diffusion model with its own CLIP encoder and VAE. A GGUF diffusion model (.gguf) needs about half the memory: pick it when renders slow down or the Mac starts swapping',
       checkpoints: 'Checkpoints',
       diffusion: 'Diffusion models',
       checkpointBadge: 'Checkpoint',
@@ -112,7 +111,13 @@ export default {
     t2i: {
       name: 'Create image',
       description:
-        'Text-to-image — pick a checkpoint or a diffusion model (KREA2 Turbo by default)',
+        'Text-to-image with KREA2 Turbo, standard or GGUF (lighter) build',
+      variantHint:
+        'Standard: the bf16 model (24.4 GB in memory). GGUF: the Q8_0, about half as heavy (13.7 GB) for a near-identical render; pick it when renders slow down or the Mac starts swapping',
+      clip: 'Text encoder (CLIP)',
+      clipHint: 'Qwen3-VL, the one KREA2 expects (type krea2)',
+      vae: 'Decoder (VAE)',
+      vaeHint: 'Decodes the final image; KREA2 uses the Qwen Image VAE',
     },
     i2i: {
       name: 'Image → Image (KREA2)',
@@ -404,6 +409,9 @@ export default {
   },
   model: {
     ggufChip: "GGUF · light",
+    standard: 'Standard',
+    ggufUnavailable:
+      'No GGUF file on the server (models/unet folder), or ComfyUI-GGUF not installed',
     search: 'Search a model…',
     missing: 'Not found on the server — pick another file',
     noResult: 'No matching model',
@@ -476,6 +484,7 @@ export default {
     failedTitle: 'Job failed ✗',
   },
   launch: {
+    advanced: 'Advanced settings',
     notFound: 'Workflow not found',
     launchFailed: 'Launch failed',
     jobQueued: 'Job added to the queue ✓ (#{{number}})',

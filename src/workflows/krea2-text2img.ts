@@ -1,11 +1,10 @@
 /**
- * Generalist text-to-image. The user picks any model via the `modelSource`
- * field: a checkpoint (self-contained MODEL/CLIP/VAE — a CheckpointLoaderSimple
- * is spliced in at patch time) or a diffusion model (UNETLoader, node 1 — with
- * its own CLIP encoder + VAE, nodes 2 & 3). A `.gguf` diffusion model swaps
- * node 1 for an UnetLoaderGGUF (ggufLoader). At patch time the graph is rewired
- * to the chosen loader and the unused ones dropped (cf. insertModelSource); the
- * latent (node 6) switches to 4-channel for a checkpoint.
+ * Text-to-image, locked on KREA2 Turbo. The form offers a single choice,
+ * Standard (bf16 UNETLoader, node 1) or GGUF (ComfyUI-GGUF: node 1 swapped
+ * in place for an UnetLoaderGGUF, cf. ModelField.ggufLoader), plus prompt,
+ * format, LoRAs and seed. The rest (exact model file, negative prompt,
+ * sampler settings, CLIP encoder node 2, VAE node 3) sits in the folded
+ * advanced settings.
  * Frozen defaults reproduce the original KREA2 Turbo setup (validated
  * against /object_info, ComfyUI 0.27.0): Qwen3-VL text encoder (type krea2),
  * qwen_image VAE, 16-channel SD3 latent, turbo sampler 8 steps / CFG 1.0.
@@ -117,16 +116,6 @@ export const krea2Text2Img: WorkflowManifest = {
       required: true,
     },
     {
-      kind: 'text',
-      key: 'negative',
-      label: 'wf.common.negativePrompt',
-      target: { nodeId: '5', input: 'text' },
-      default: 'blurry, low quality, cartoon, watermark, text, deformed',
-      placeholder: 'wf.common.negativePlaceholder',
-      hint: 'wf.common.negativeHint',
-      multiline: true,
-    },
-    {
       kind: 'dimensions',
       key: 'format',
       label: 'wf.common.dimensions',
@@ -146,29 +135,19 @@ export const krea2Text2Img: WorkflowManifest = {
       ],
       default: { width: 1024, height: 1024 },
     },
+    // KREA2 only, in two variants (bf16 or GGUF): a Standard / GGUF switch,
+    // the exact file in the advanced settings.
     {
-      kind: 'modelSource',
-      key: 'model',
+      kind: 'model',
+      key: 'unet',
       label: 'wf.common.model',
-      hint: 'wf.modelSource.hintGguf',
-      checkpointNodeId: 'komfy_checkpoint',
-      unetNodeId: '1',
-      clipNodeId: '2',
-      vaeNodeId: '3',
-      latentNodeId: '6',
-      modelTargets: [{ nodeId: '7', input: 'model' }],
-      clipTargets: [
-        { nodeId: '4', input: 'clip' },
-        { nodeId: '5', input: 'clip' },
-      ],
-      vaeTargets: [{ nodeId: '8', input: 'vae' }],
-      defaultUnet: 'krea2_turbo_bf16.safetensors',
-      defaultClip: 'qwen3vl_4b_fp8_scaled.safetensors',
-      defaultClipType: 'krea2',
-      defaultVae: 'qwen_image_vae.safetensors',
-      defaultCheckpoint: '',
+      hint: 'wf.t2i.variantHint',
+      target: { nodeId: '1', input: 'unet_name' },
+      default: 'krea2_turbo_bf16.safetensors',
+      filter: 'krea-?2',
       remember: true,
       ggufLoader: true,
+      variantSwitch: true,
     },
     {
       kind: 'loras',
@@ -180,6 +159,24 @@ export const krea2Text2Img: WorkflowManifest = {
       defaultStrength: 0.9,
     },
     {
+      kind: 'seed',
+      key: 'seed',
+      label: 'Seed',
+      target: { nodeId: '7', input: 'seed' },
+    },
+    // Advanced settings: tuned for the Turbo sampler, folded by default.
+    {
+      kind: 'text',
+      key: 'negative',
+      label: 'wf.common.negativePrompt',
+      target: { nodeId: '5', input: 'text' },
+      default: 'blurry, low quality, cartoon, watermark, text, deformed',
+      placeholder: 'wf.common.negativePlaceholder',
+      hint: 'wf.common.negativeHint',
+      multiline: true,
+      advanced: true,
+    },
+    {
       kind: 'number',
       key: 'steps',
       label: 'Steps',
@@ -189,6 +186,7 @@ export const krea2Text2Img: WorkflowManifest = {
       max: 60,
       integer: true,
       hint: 'wf.common.stepsHint',
+      advanced: true,
     },
     {
       kind: 'number',
@@ -199,9 +197,10 @@ export const krea2Text2Img: WorkflowManifest = {
       min: 0,
       max: 20,
       hint: 'wf.common.cfgHint',
+      advanced: true,
     },
     // Sampler & scheduler: the `model` field is a server-driven single-select
-    // over a node-input enum — reused here for the KSampler enums (no hardcoded
+    // over a node-input enum, reused here for the KSampler enums (no hardcoded
     // list in the repo, the server's /object_info is the source of truth).
     {
       kind: 'model',
@@ -211,6 +210,7 @@ export const krea2Text2Img: WorkflowManifest = {
       target: { nodeId: '7', input: 'sampler_name' },
       default: 'euler',
       remember: true,
+      advanced: true,
     },
     {
       kind: 'model',
@@ -219,12 +219,30 @@ export const krea2Text2Img: WorkflowManifest = {
       target: { nodeId: '7', input: 'scheduler' },
       default: 'simple',
       remember: true,
+      advanced: true,
+    },
+    // KREA2 companions: the CLIPLoader type stays frozen on `krea2`.
+    {
+      kind: 'model',
+      key: 'clip',
+      label: 'wf.t2i.clip',
+      hint: 'wf.t2i.clipHint',
+      target: { nodeId: '2', input: 'clip_name' },
+      default: 'qwen3vl_4b_fp8_scaled.safetensors',
+      filter: 'qwen3',
+      remember: true,
+      advanced: true,
     },
     {
-      kind: 'seed',
-      key: 'seed',
-      label: 'Seed',
-      target: { nodeId: '7', input: 'seed' },
+      kind: 'model',
+      key: 'vae',
+      label: 'wf.t2i.vae',
+      hint: 'wf.t2i.vaeHint',
+      target: { nodeId: '3', input: 'vae_name' },
+      default: 'qwen_image_vae.safetensors',
+      filter: 'qwen',
+      remember: true,
+      advanced: true,
     },
   ],
 };

@@ -82,6 +82,7 @@ export default {
       sourceImage: 'Image source',
       threshold: 'Seuil de détection',
       model: 'Modèle',
+      modelFile: 'Fichier du modèle',
       modelGgufHint:
         "Modèles de diffusion installés sur le serveur. Un fichier GGUF (.gguf) demande environ deux fois moins de mémoire : choisis-le si les rendus ralentissent ou si le Mac swappe. Le Q8_0 rend presque comme le modèle complet",
       modelHint:
@@ -103,8 +104,6 @@ export default {
     },
     modelSource: {
       hint: 'N’importe quel checkpoint (autonome), ou un modèle de diffusion avec son propre encodeur CLIP et son VAE',
-      hintGguf:
-        'N’importe quel checkpoint (autonome), ou un modèle de diffusion avec son propre encodeur CLIP et son VAE. Un modèle de diffusion GGUF (.gguf) demande environ deux fois moins de mémoire : choisis-le si les rendus ralentissent ou si le Mac swappe',
       checkpoints: 'Checkpoints',
       diffusion: 'Modèles de diffusion',
       checkpointBadge: 'Checkpoint',
@@ -116,7 +115,13 @@ export default {
     t2i: {
       name: 'Créer une image',
       description:
-        'Text-to-image — choisis un checkpoint ou un modèle de diffusion (KREA2 Turbo par défaut)',
+        'Text-to-image avec KREA2 Turbo, en version standard ou GGUF (plus légère)',
+      variantHint:
+        'Standard : le modèle bf16 (24,4 Go en mémoire). GGUF : le Q8_0, environ deux fois plus léger (13,7 Go) pour un rendu presque identique, à choisir si les rendus ralentissent ou si le Mac swappe',
+      clip: 'Encodeur de texte (CLIP)',
+      clipHint: 'Qwen3-VL, celui qu’attend KREA2 (type krea2)',
+      vae: 'Décodeur (VAE)',
+      vaeHint: 'Décode l’image finale ; KREA2 utilise le VAE Qwen Image',
     },
     i2i: {
       name: 'Image → Image (KREA2)',
@@ -412,6 +417,9 @@ export default {
   },
   model: {
     ggufChip: "GGUF · léger",
+    standard: 'Standard',
+    ggufUnavailable:
+      'Aucun fichier GGUF sur le serveur (dossier models/unet), ou ComfyUI-GGUF non installé',
     search: 'Rechercher un modèle…',
     missing: 'Introuvable sur le serveur — choisir un autre fichier',
     noResult: 'Aucun modèle correspondant',
@@ -485,6 +493,7 @@ export default {
     failedTitle: 'Job échoué ✗',
   },
   launch: {
+    advanced: 'Configuration avancée',
     notFound: 'Workflow introuvable',
     launchFailed: 'Échec du lancement',
     jobQueued: 'Job ajouté à la queue ✓ (#{{number}})',
