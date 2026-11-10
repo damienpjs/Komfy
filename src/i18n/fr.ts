@@ -624,6 +624,8 @@ export default {
     listError: 'Impossible de lister les LoRAs (serveur injoignable ?)',
     noResults: 'Aucun résultat',
     emptyDir: 'Dossier vide',
+    strengthDown: 'Baisser la force de 0,05',
+    strengthUp: 'Augmenter la force de 0,05',
   },
   prompt: {
     copied: 'Prompt copié',
