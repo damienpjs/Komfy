@@ -615,6 +615,8 @@ export default {
     listError: 'Could not list LoRAs (server unreachable?)',
     noResults: 'No results',
     emptyDir: 'Empty folder',
+    strengthDown: 'Decrease strength by 0.05',
+    strengthUp: 'Increase strength by 0.05',
   },
   prompt: {
     copied: 'Prompt copied',
