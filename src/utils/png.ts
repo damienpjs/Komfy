@@ -1,21 +1,26 @@
 /**
- * Minimal PNG encoder, pure JS — no native module, no zlib dependency.
+ * Minimal PNG encoder, pure JS: no native module, no zlib dependency.
  *
  * Komfy ships as a JS-only Expo Go bundle (README §Publishing), so the
  * usual canvas snapshot libraries (Skia, view-shot) are out of reach: the
  * hand-drawn inpaint mask has to be turned into a PNG here, in JS.
  *
- * Compression is skipped entirely — the deflate stream is written as
- * *stored* (uncompressed) blocks, which is a valid zlib stream every PNG
- * decoder accepts. A 1024×1024 grayscale mask lands around 1 MB, encoded in
- * a few milliseconds; the masks are small and short-lived (uploaded to
- * ComfyUI's input folder), so the size trade is worth the zero-dependency.
+ * Compression is deliberately narrow: a single fixed-Huffman deflate block
+ * whose only back-references are byte runs (distance 1). That is a valid
+ * zlib stream every decoder accepts, and it is exactly the redundancy a
+ * mask has: long flat runs of 0 and 255 with a short feathered ramp between
+ * them. A 1024×768 mask goes from 769 KB (stored blocks) to a few tens of
+ * KB, which is what crosses Tailscale on a phone connection. Rows are left
+ * unfiltered (filter 0): a blank row is then one more run of zeros that
+ * merges with its neighbours, which beats the Up filter on this content.
  *
- * Two color types are emitted, both 8-bit:
- *  - 1 channel (grayscale, PNG color type 0) — what gets uploaded and read
- *    back by LoadImageMask on the `red` channel;
- *  - 2 channels (gray + alpha, color type 4) — the on-screen overlay, where
- *    alpha carries the mask so unmasked pixels stay fully transparent.
+ * Two formats are emitted, both one byte per pixel:
+ *  - `gray` (color type 0): what gets uploaded and read back by
+ *    LoadImageMask on the `red` channel;
+ *  - `alpha` (color type 3): the on-screen overlay. A 256-entry palette of
+ *    one colour whose tRNS alpha equals the index, so the sample *is* the
+ *    alpha: unmasked pixels are fully transparent, the rest is the brush
+ *    colour. Half the bytes of a gray+alpha image, for the same picture.
  */
 
 /** CRC-32 (IEEE) table, built once. */
@@ -41,7 +46,7 @@ function crc32(bytes: Uint8Array, start: number, end: number): number {
 
 /**
  * Adler-32 over the uncompressed data (zlib trailer). Chunked at 5552 bytes
- * — the largest run that cannot overflow the accumulators — so the modulo
+ * (the largest run that cannot overflow the accumulators), so the modulo
  * is paid once per chunk instead of once per byte.
  */
 function adler32(bytes: Uint8Array): number {
@@ -57,40 +62,139 @@ function adler32(bytes: Uint8Array): number {
     a %= 65521;
     b %= 65521;
   }
-  return (((b << 16) | a) >>> 0) as number;
+  return ((b << 16) | a) >>> 0;
 }
 
-/** Largest payload a single stored deflate block can carry. */
-const MAX_STORED_BLOCK = 65535;
+/** Reverses the low `length` bits of `code` (Huffman codes go MSB first). */
+function reverseBits(code: number, length: number): number {
+  let out = 0;
+  for (let i = 0; i < length; i++) {
+    out = (out << 1) | ((code >>> i) & 1);
+  }
+  return out;
+}
 
-/** Wraps raw bytes in a zlib stream made only of stored (BTYPE=00) blocks. */
-function deflateStored(raw: Uint8Array): Uint8Array {
-  const blocks = Math.max(1, Math.ceil(raw.length / MAX_STORED_BLOCK));
-  const out = new Uint8Array(2 + blocks * 5 + raw.length + 4);
+/**
+ * Fixed literal/length code (RFC 1951 §3.2.6), stored bit-reversed so it
+ * can be written LSB first like every other field of the stream.
+ */
+const LITLEN_CODE = new Uint16Array(288);
+const LITLEN_BITS = new Uint8Array(288);
+for (let sym = 0; sym < 288; sym++) {
+  let code: number;
+  let bits: number;
+  if (sym < 144) {
+    code = 0x30 + sym;
+    bits = 8;
+  } else if (sym < 256) {
+    code = 0x190 + (sym - 144);
+    bits = 9;
+  } else if (sym < 280) {
+    code = sym - 256;
+    bits = 7;
+  } else {
+    code = 0xc0 + (sym - 280);
+    bits = 8;
+  }
+  LITLEN_CODE[sym] = reverseBits(code, bits);
+  LITLEN_BITS[sym] = bits;
+}
+
+/** Shortest and longest match deflate can express. */
+const MIN_MATCH = 3;
+const MAX_MATCH = 258;
+
+/** Match length → length symbol, extra-bit count and extra-bit value. */
+const LENGTH_SYM = new Uint16Array(MAX_MATCH + 1);
+const LENGTH_EXTRA_BITS = new Uint8Array(MAX_MATCH + 1);
+const LENGTH_EXTRA = new Uint8Array(MAX_MATCH + 1);
+{
+  const base = [
+    3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59,
+    67, 83, 99, 115, 131, 163, 195, 227, 258,
+  ];
+  const extra = [
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5,
+    5, 5, 5, 0,
+  ];
+  for (let s = 0; s < base.length; s++) {
+    // 258 has its own code (285), although 284's extra bits could reach it.
+    const last =
+      s === base.length - 1
+        ? MAX_MATCH
+        : Math.min(base[s] + (1 << extra[s]) - 1, MAX_MATCH - 1);
+    for (let len = base[s]; len <= last; len++) {
+      LENGTH_SYM[len] = 257 + s;
+      LENGTH_EXTRA_BITS[len] = extra[s];
+      LENGTH_EXTRA[len] = len - base[s];
+    }
+  }
+}
+
+/** Distance 1 is distance code 0: five zero bits, no extra bits. */
+const DISTANCE_1_BITS = 5;
+
+/**
+ * zlib stream (header, one fixed-Huffman block, Adler-32) of `raw`, where
+ * every run of three or more repeats of the previous byte is a distance-1
+ * back-reference and everything else a literal.
+ */
+function deflateRuns(raw: Uint8Array): Uint8Array {
+  // Worst case: every byte a 9-bit literal, plus header, block bits, EOB
+  // and trailer.
+  const out = new Uint8Array(2 + Math.ceil((raw.length * 9) / 8) + 16);
   let p = 0;
   // zlib header: CM=8 (deflate), CINFO=7 (32K window), FCHECK making the
   // 16-bit value a multiple of 31.
   out[p++] = 0x78;
   out[p++] = 0x01;
-  for (let i = 0; i < blocks; i++) {
-    const start = i * MAX_STORED_BLOCK;
-    const len = Math.min(MAX_STORED_BLOCK, raw.length - start);
-    // 3-bit block header (BFINAL + BTYPE=00); the 5 padding bits that round
-    // it up to a byte are exactly what a stored block requires.
-    out[p++] = i === blocks - 1 ? 1 : 0;
-    out[p++] = len & 0xff;
-    out[p++] = (len >>> 8) & 0xff;
-    out[p++] = ~len & 0xff;
-    out[p++] = (~len >>> 8) & 0xff;
-    out.set(raw.subarray(start, start + len), p);
-    p += len;
+
+  let bitBuf = 0;
+  let bitCount = 0;
+  const put = (value: number, bits: number) => {
+    bitBuf |= value << bitCount;
+    bitCount += bits;
+    while (bitCount >= 8) {
+      out[p++] = bitBuf & 0xff;
+      bitBuf >>>= 8;
+      bitCount -= 8;
+    }
+  };
+
+  put(1, 1); // BFINAL
+  put(1, 2); // BTYPE = 01, fixed Huffman
+
+  const n = raw.length;
+  let i = 0;
+  while (i < n) {
+    if (i > 0) {
+      const v = raw[i - 1];
+      const max = Math.min(MAX_MATCH, n - i);
+      let len = 0;
+      while (len < max && raw[i + len] === v) len++;
+      if (len >= MIN_MATCH) {
+        const sym = LENGTH_SYM[len];
+        put(LITLEN_CODE[sym], LITLEN_BITS[sym]);
+        if (LENGTH_EXTRA_BITS[len] > 0) {
+          put(LENGTH_EXTRA[len], LENGTH_EXTRA_BITS[len]);
+        }
+        put(0, DISTANCE_1_BITS);
+        i += len;
+        continue;
+      }
+    }
+    const lit = raw[i++];
+    put(LITLEN_CODE[lit], LITLEN_BITS[lit]);
   }
+  put(LITLEN_CODE[256], LITLEN_BITS[256]); // end of block
+  if (bitCount > 0) put(0, 8 - bitCount);
+
   const sum = adler32(raw);
   out[p++] = (sum >>> 24) & 0xff;
   out[p++] = (sum >>> 16) & 0xff;
   out[p++] = (sum >>> 8) & 0xff;
   out[p++] = sum & 0xff;
-  return out;
+  return out.subarray(0, p);
 }
 
 const B64_ALPHABET =
@@ -140,68 +244,92 @@ function writeU32BE(out: Uint8Array, p: number, value: number): void {
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
-/** PNG color type for a given channel count (8-bit samples). */
-const COLOR_TYPE = { 1: 0, 2: 4 } as const;
+export type PngFormat = 'gray' | 'alpha';
+
+/** Alpha = index (tRNS) for `alpha`. */
+const ALPHA_RAMP = Uint8Array.from({ length: 256 }, (_, i) => i);
+/** One-colour palette (PLTE) for `alpha`, rebuilt only when the colour changes. */
+let palette = new Uint8Array(256 * 3).fill(255);
+let paletteKey = 0xffffff;
+
+function solidPalette([r, g, b]: [number, number, number]): Uint8Array {
+  const key = (r << 16) | (g << 8) | b;
+  if (key !== paletteKey) {
+    palette = new Uint8Array(256 * 3);
+    for (let i = 0; i < 256; i++) {
+      palette[i * 3] = r;
+      palette[i * 3 + 1] = g;
+      palette[i * 3 + 2] = b;
+    }
+    paletteKey = key;
+  }
+  return palette;
+}
 
 /**
- * Encodes 8-bit samples as a PNG and returns it base64-encoded (ready for
- * a `data:` URI or a file write).
+ * Encodes one byte per pixel as a PNG and returns it base64-encoded (ready
+ * for a `data:` URI or a file write).
  *
- * `samples` is row-major, `channels` values per pixel, and must hold
- * exactly `width * height * channels` bytes.
+ * `samples` is row-major and must hold exactly `width * height` bytes.
+ * `color` (0..255 each) is the `alpha` format's colour, white by default.
  */
 export function encodePng(
   samples: Uint8Array,
   width: number,
   height: number,
-  channels: 1 | 2,
+  format: PngFormat,
+  color: [number, number, number] = [255, 255, 255],
 ): string {
-  const expected = width * height * channels;
+  const expected = width * height;
   if (samples.length !== expected) {
     throw new Error(
-      `encodePng: expected ${expected} samples for ${width}×${height}×${channels}, got ${samples.length}`,
+      `encodePng: expected ${expected} samples for ${width}×${height}, got ${samples.length}`,
     );
   }
 
-  // Scanlines, each prefixed with its filter byte (0 = None: the mask is
-  // mostly flat runs, and filtering would only help a compressor we don't run).
-  const stride = width * channels;
-  const raw = new Uint8Array(height * (stride + 1));
+  // Scanlines, each prefixed with its filter byte (0 = None).
+  const raw = new Uint8Array(height * (width + 1));
   for (let y = 0; y < height; y++) {
-    const dst = y * (stride + 1);
-    raw[dst] = 0;
-    raw.set(samples.subarray(y * stride, (y + 1) * stride), dst + 1);
+    raw.set(samples.subarray(y * width, (y + 1) * width), y * (width + 1) + 1);
   }
-  const zlib = deflateStored(raw);
+  const zlib = deflateRuns(raw);
 
-  const size = 8 + (12 + 13) + (12 + zlib.length) + 12;
+  const plte = format === 'alpha' ? solidPalette(color) : null;
+  const size =
+    8 +
+    (12 + 13) +
+    (plte ? 12 + plte.length + 12 + ALPHA_RAMP.length : 0) +
+    (12 + zlib.length) +
+    12;
   const png = new Uint8Array(size);
   let p = 0;
   png.set(PNG_SIGNATURE, p);
   p += 8;
 
-  const chunk = (type: string, length: number, fill: (at: number) => void) => {
-    writeU32BE(png, p, length);
+  const chunk = (type: string, data: Uint8Array) => {
+    writeU32BE(png, p, data.length);
     p += 4;
     const typeStart = p;
     for (let i = 0; i < 4; i++) png[p++] = type.charCodeAt(i);
-    fill(p);
-    p += length;
+    png.set(data, p);
+    p += data.length;
     writeU32BE(png, p, crc32(png, typeStart, p));
     p += 4;
   };
 
-  chunk('IHDR', 13, (at) => {
-    writeU32BE(png, at, width);
-    writeU32BE(png, at + 4, height);
-    png[at + 8] = 8; // bit depth
-    png[at + 9] = COLOR_TYPE[channels];
-    png[at + 10] = 0; // compression: deflate
-    png[at + 11] = 0; // filter method: adaptive
-    png[at + 12] = 0; // interlace: none
-  });
-  chunk('IDAT', zlib.length, (at) => png.set(zlib, at));
-  chunk('IEND', 0, () => {});
+  const ihdr = new Uint8Array(13);
+  writeU32BE(ihdr, 0, width);
+  writeU32BE(ihdr, 4, height);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = plte ? 3 : 0; // color type: indexed / grayscale
+  // compression, filter method and interlace all 0.
+  chunk('IHDR', ihdr);
+  if (plte) {
+    chunk('PLTE', plte);
+    chunk('tRNS', ALPHA_RAMP);
+  }
+  chunk('IDAT', zlib);
+  chunk('IEND', new Uint8Array(0));
 
   return toBase64(png);
 }

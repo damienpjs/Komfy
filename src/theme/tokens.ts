@@ -41,6 +41,21 @@ export const colors = {
   overlay: 'rgba(0, 0, 0, 0.6)', // backdrop behind a centred dialog
 } as const;
 
+/**
+ * Brush colours of the mask editor (the overlay only: the uploaded mask is
+ * always grayscale). Bright and saturated so they read over any photo at
+ * the overlay's partial opacity; the first is the default.
+ */
+export const maskBrushColors = [
+  { id: 'coral', hex: colors.danger },
+  { id: 'yellow', hex: colors.brand },
+  { id: 'mint', hex: colors.success },
+  { id: 'cyan', hex: '#5cc8e6' },
+  { id: 'magenta', hex: '#e070c8' },
+] as const;
+
+export type MaskBrushColorId = (typeof maskBrushColors)[number]['id'];
+
 export const spacing = {
   xs: 4,
   sm: 8,
