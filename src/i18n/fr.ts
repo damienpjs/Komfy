@@ -363,6 +363,29 @@ export default {
       denoiseHint:
         "1 = remplacement complet, 0,5–0,7 = retouche qui garde les formes et couleurs d'origine",
     },
+    outpaint: {
+      name: 'Outpainting avec Krea 2',
+      description:
+        "Agrandit une image au-delà de ses bords, de n'importe quel côté. Les pixels d'origine reviennent intacts",
+      expand: 'Agrandissement',
+      expandHint:
+        "Pixels ajoutés de chaque côté, en pixels de la source. Tirer les bords dans l'éditeur ou choisir un format",
+      promptPlaceholder: "Décrire toute l'image finale, pas seulement les zones ajoutées…",
+      promptHint:
+        "Décrire l'image complète (sujet, décor, lumière, style) : le modèle voit la source et a besoin de la scène entière pour la prolonger de façon cohérente",
+      output: 'Taille de sortie',
+      outputSource: 'Résolution source',
+      outputWorking: 'Résolution de travail',
+      outputHint:
+        "Source : le rendu est remis à l'échelle et les pixels d'origine recollés par-dessus, la photo garde toute sa définition (les zones ajoutées restent plus douces sur une grande photo). Travail : le rendu brut, à la résolution de travail",
+      lorasHint:
+        "AnyPaint (le LoRA d'outpainting) est toujours appliqué en premier. Les LoRAs ajoutés (style, personnage) s'enchaînent après",
+      seam: 'Fondu de la couture',
+      seamHint:
+        "Bande le long du bord de la source que le modèle redessine pour masquer la couture, en pixels de travail. 32 est la valeur d'entraînement ; 0 garde le bord de la source tel quel",
+      samplerHint:
+        "Garder euler : les samplers SDE (er_sde, dpmpp_sde…) cassent la cohérence de l'extension",
+    },
     t2p: {
       name: 'Texte → Prompt',
       description:
@@ -481,6 +504,9 @@ export default {
     dilationRange:
       'Zone modifiée entre {{min}} et {{max}} px pour chaque zone active',
     stepsRange: 'Steps entre 1 et 30',
+    outpaintMeasuring: "Lecture de la taille de l'image source, réessayer dans un instant",
+    outpaintEmpty: 'Agrandir au moins un côté',
+    outpaintMinSide: 'Chaque côté agrandi demande au moins {{min}} px',
     invalidStrength: 'Force invalide',
     invalidNumber: 'Nombre invalide',
     integerExpected: 'Entier attendu',
@@ -615,6 +641,42 @@ export default {
     clear: 'Tout effacer',
     fit: 'Recadrer',
     hint: 'Un doigt dessine · deux doigts zooment et déplacent',
+  },
+  outpaint: {
+    needsSource: "Choisir d'abord l'image source",
+    measuring: "Lecture de la taille de l'image…",
+    sizeFailed: "Impossible de lire la taille de l'image. La choisir à nouveau",
+    edit: 'Ajuster sur le plan',
+    editorTitle: 'Agrandir le plan',
+    generated: '+{{percent}} % généré',
+    workingSize: 'rendu en {{width}} × {{height}}',
+    noExpansion: 'Aucun agrandissement : tirer un bord ou choisir un format',
+    risky:
+      "Plus de {{percent}} % de l'image est nouvelle : le modèle risque d'inventer une scène sans rapport. Deux passes plus petites tiennent mieux",
+    zoomChip: '{{factor}}×',
+    anchor: 'Position de la source',
+    anchors: {
+      tl: 'En haut à gauche',
+      t: 'En haut',
+      tr: 'En haut à droite',
+      l: 'À gauche',
+      c: 'Au centre',
+      r: 'À droite',
+      bl: 'En bas à gauche',
+      b: 'En bas',
+      br: 'En bas à droite',
+    },
+    sides: 'Pixels ajoutés',
+    left: 'Gauche',
+    top: 'Haut',
+    right: 'Droite',
+    bottom: 'Bas',
+    budget: 'Résolution de travail',
+    budgetHint:
+      'Taille à laquelle le modèle génère. Une photo plus grande est réduite pour tenir, jamais agrandie ; 2 MP est plus lent',
+    megapixels: '{{value}} MP',
+    dragHint: "Tirer les poignées sur les bords. La position de la source s'applique aux formats",
+    reset: 'Réinitialiser',
   },
   lora: {
     add: 'Ajouter un LoRA',

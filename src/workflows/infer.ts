@@ -221,6 +221,9 @@ const KIND_RANK: Record<WorkflowField['kind'], number> = {
   // Same rank as the image it is painted over, and never inferred either: an
   // imported LoadImageMask has no way to say which picture it masks.
   mask: 0,
+  // Embedded workflows only (it needs the AnyPaint node set): ranked with
+  // the picture it expands.
+  outpaint: 0,
   text: 1,
   model: 2,
   // Never inferred from an imported graph (embedded workflows only), but the

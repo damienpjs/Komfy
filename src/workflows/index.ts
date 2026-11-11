@@ -7,6 +7,7 @@ import { krea2DrawReplace } from './krea2-draw-replace';
 import { krea2Edit } from './krea2-edit';
 import { krea2Img2Img } from './krea2-img2img';
 import { krea2Img2Prompt } from './krea2-img2prompt';
+import { krea2Outpaint } from './krea2-outpaint';
 import { krea2Text2Img } from './krea2-text2img';
 import { krea2Upscale } from './krea2-upscale';
 import { ltxI2v } from './ltx-i2v';
@@ -31,6 +32,7 @@ export const workflows: WorkflowManifest[] = [
   inpaintDraw,
   krea2DetectReplace,
   krea2DrawReplace,
+  krea2Outpaint,
 ];
 
 export function getWorkflow(id: string): WorkflowManifest | undefined {

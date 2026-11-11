@@ -11,6 +11,7 @@
  */
 
 import type { PromptGraph } from '../api/types';
+import { budgetForCanvas, clampSides, initialOutpaintValue } from './outpaint';
 import { applySelectOption } from './patch';
 import { GGUF_UNET_LOADER } from './requirements';
 import type {
@@ -18,6 +19,9 @@ import type {
   LoraSelection,
   ModelField,
   ModelSourceField,
+  OutpaintAnchor,
+  OutpaintField,
+  OutpaintValue,
   SelectField,
   WorkflowManifest,
   ZoneValue,
@@ -424,6 +428,77 @@ function walk(
   return true;
 }
 
+/** Anchor implied by which sides grew (a side left at 0 is where the source sits). */
+function anchorFromSides(v: OutpaintValue): OutpaintAnchor {
+  const col = v.left === 0 && v.right > 0 ? 'l' : v.right === 0 && v.left > 0 ? 'r' : '';
+  const row = v.top === 0 && v.bottom > 0 ? 't' : v.bottom === 0 && v.top > 0 ? 'b' : '';
+  return ((row + col) || 'c') as OutpaintAnchor;
+}
+
+/**
+ * Outpaint value rebuilt from the patched nodes (mirror of
+ * patch.insertOutpaint). With the restore branch present, everything is in
+ * source pixels already: the SolidMask holds the source size, the composite
+ * the left/top offsets, the upscale the final size. Without it (render kept
+ * at working resolution) only the working paddings exist: they are handed
+ * over with the working source size, and the form rescales them once it has
+ * measured the picture (cf. outpaint.reconcileSource).
+ */
+function readOutpaint(
+  extracted: PromptGraph,
+  state: WalkState,
+  field: OutpaintField,
+): OutpaintValue {
+  const read = (nodeId: string, input: string): number | undefined => {
+    const eId = state.map.get(nodeId);
+    const n = eId != null ? Number(extracted[eId]?.inputs[input]) : NaN;
+    return Number.isFinite(n) ? n : undefined;
+  };
+  const n = field.nodes;
+  const pad = {
+    left: read(n.prepare, 'left'),
+    top: read(n.prepare, 'top'),
+    right: read(n.prepare, 'right'),
+    bottom: read(n.prepare, 'bottom'),
+  };
+  const ws = read(n.scale, 'width');
+  const hs = read(n.scale, 'height');
+  const padsKnown = Object.values(pad).every((p) => p != null);
+  if (!ws || !hs || !padsKnown) return initialOutpaintValue(field.defaultBudget);
+  const canvas =
+    (ws + pad.left! + pad.right!) * (hs + pad.top! + pad.bottom!);
+  const base = initialOutpaintValue(budgetForCanvas(canvas, field.budgets));
+
+  const srcW = read(n.mask, 'width');
+  const srcH = read(n.mask, 'height');
+  const x = read(n.composite, 'x');
+  const y = read(n.composite, 'y');
+  const finalW = read(n.upscale, 'width');
+  const finalH = read(n.upscale, 'height');
+  let value: OutpaintValue;
+  if (srcW && srcH && x != null && y != null && finalW && finalH) {
+    value = clampSides({
+      ...base,
+      left: x,
+      top: y,
+      right: finalW - srcW - x,
+      bottom: finalH - srcH - y,
+      sourceWidth: srcW,
+      sourceHeight: srcH,
+    });
+  } else {
+    value = {
+      ...base,
+      left: pad.left!,
+      top: pad.top!,
+      right: pad.right!,
+      bottom: pad.bottom!,
+      pendingScale: { width: ws, height: hs },
+    };
+  }
+  return { ...value, anchor: anchorFromSides(value) };
+}
+
 function matchVariant(
   extracted: PromptGraph,
   manifest: WorkflowManifest,
@@ -682,6 +757,9 @@ function matchVariant(
         values[field.key] = opensWithFixed ? absorbed.slice(fixed.length) : absorbed;
         break;
       }
+      case 'outpaint':
+        values[field.key] = readOutpaint(extracted, state, field);
+        break;
       case 'zones': {
         // Shared seed: patch.ts gives pass i the seed `base + index`, so the
         // base is recovered from any pass (allZones = a single pass, base as is).

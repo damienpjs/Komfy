@@ -29,6 +29,7 @@ import { MaskInputField } from '../../components/MaskInputField';
 import { LoraField } from '../../components/LoraField';
 import { ModelField } from '../../components/ModelField';
 import { ModelSourceField } from '../../components/ModelSourceField';
+import { OutpaintField } from '../../components/OutpaintField';
 import { OutputDirPicker } from '../../components/OutputDirPicker';
 import { PresetBar } from '../../components/PresetBar';
 import { PresetNameDialog } from '../../components/PresetNameDialog';
@@ -63,6 +64,7 @@ import {
 import { useNodeInfo } from '../../hooks/useAvailability';
 import type { SourceSeeds } from '../../workflows/match';
 import { pickVariantFile, variantOf } from '../../workflows/modelVariant';
+import { initialOutpaintValue } from '../../workflows/outpaint';
 import { getAnyWorkflow } from '../../workflows/registry';
 import {
   DEFAULT_OUTPUT_DIR,
@@ -87,6 +89,7 @@ import type {
   FieldValues,
   LoraSelection,
   ModelSourceValue,
+  OutpaintValue,
   WorkflowField,
   ZonesValue,
 } from '../../workflows/types';
@@ -173,6 +176,8 @@ function initialValues(
     if (field.kind === 'image' || field.kind === 'mask') values[field.key] = '';
     if (field.kind === 'dimensions')
       values[field.key] = { ...field.default, inverted: false, custom: false };
+    if (field.kind === 'outpaint')
+      values[field.key] = initialOutpaintValue(field.defaultBudget);
     if (field.kind === 'zones')
       values[field.key] = {
         zones: [
@@ -618,6 +623,18 @@ export default function WorkflowLaunchScreen() {
               <ImageInputField
                 value={String(values[field.key] ?? '')}
                 onChange={(name) => setValue(field.key, name)}
+              />
+            )}
+
+            {field.kind === 'outpaint' && (
+              <OutpaintField
+                field={field}
+                value={
+                  (values[field.key] as OutpaintValue | undefined) ??
+                  initialOutpaintValue(field.defaultBudget)
+                }
+                onChange={(v) => setValue(field.key, v)}
+                sourceFilename={String(values[field.sourceKey] ?? '')}
               />
             )}
 
