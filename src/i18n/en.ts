@@ -482,6 +482,7 @@ export default {
   validation: {
     required: 'Required field',
     imageRequired: 'Image required',
+    imageHeic: 'HEIC photo: ComfyUI only reads one corner of it. Pick the image again',
     maskRequired: 'Draw the area to inpaint',
     modelRequired: 'Pick a model',
     integerDims: 'Integer dimensions required',
@@ -618,6 +619,9 @@ export default {
       '{{size}} MB — the limit is {{limit}} MB. Pick a lighter image.',
     uploadFailed: 'Upload failed',
     choose: 'Choose an image',
+    heic: 'HEIC photo',
+    heicBody:
+      'ComfyUI would only read one tile of this HEIC photo. Export it as JPEG or PNG, then pick it again.',
   },
   maskInput: {
     needsSource: 'Pick the source image first',

@@ -491,6 +491,7 @@ export default {
   validation: {
     required: 'Champ requis',
     imageRequired: 'Image requise',
+    imageHeic: "Photo HEIC : ComfyUI n'en lit qu'un coin. Choisir l'image à nouveau",
     maskRequired: 'Dessiner la zone à régénérer',
     modelRequired: 'Choisir un modèle',
     integerDims: 'Dimensions entières requises',
@@ -627,6 +628,9 @@ export default {
       '{{size}} Mo — la limite est de {{limit}} Mo. Choisir une image plus légère.',
     uploadFailed: 'Upload impossible',
     choose: 'Choisir une image',
+    heic: 'Photo HEIC',
+    heicBody:
+      "ComfyUI ne lirait qu'une tuile de cette photo HEIC. L'exporter en JPEG ou PNG, puis la choisir à nouveau.",
   },
   maskInput: {
     needsSource: "Choisir d'abord l'image source",

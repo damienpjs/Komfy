@@ -14,6 +14,7 @@ import {
   planOutpaint,
   restoreGeometry,
 } from './outpaint';
+import { isHeif } from '../utils/media';
 import { GGUF_UNET_LOADER } from './requirements';
 import { DEFAULT_GUIDE_SIZE } from './types';
 import type {
@@ -123,6 +124,12 @@ export function validate(
       if (typeof value !== 'string' || value === '') {
         errors[field.key] = i18n.t('validation.imageRequired');
       }
+    }
+    // A HEIC already on the server (uploaded before the JPEG conversion, or
+    // prefilled by a remix) would be read as its first tile only: refuse it
+    // rather than render one corner of the photo (cf. utils/imageUpload).
+    if (field.kind === 'image' && typeof value === 'string' && isHeif(value)) {
+      errors[field.key] = i18n.t('validation.imageHeic');
     }
     if (field.kind === 'mask' && field.required) {
       if (typeof value !== 'string' || value === '') {

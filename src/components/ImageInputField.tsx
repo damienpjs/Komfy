@@ -20,6 +20,8 @@ import {
 } from 'react-native';
 import { createClient } from '../api/client';
 import { useSettings } from '../store/settings';
+import { PICK_FOR_UPLOAD } from '../utils/imageUpload';
+import { isHeif } from '../utils/media';
 import {
   colors,
   MIN_TOUCH_TARGET,
@@ -55,13 +57,14 @@ export function ImageInputField({ value, onChange }: Props) {
       );
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: 'images',
-      quality: 1,
-    });
+    const result = await ImagePicker.launchImageLibraryAsync(PICK_FOR_UPLOAD);
     if (result.canceled || !result.assets[0]) return;
 
     const asset = result.assets[0];
+    if (isHeif(asset.fileName ?? asset.uri, asset.mimeType)) {
+      Alert.alert(t('imageInput.heic'), t('imageInput.heicBody'));
+      return;
+    }
     if (asset.fileSize != null && asset.fileSize > MAX_UPLOAD_BYTES) {
       Alert.alert(
         t('imageInput.tooLarge'),
