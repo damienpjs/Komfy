@@ -18,11 +18,14 @@ Install: symlink this folder into custom_nodes/ (see README.md), then
 restart ComfyUI.
 """
 
+import asyncio
+import io
 import os
 import shutil
 import time
 
 from aiohttp import web
+from PIL import Image, ImageCms
 
 import folder_paths
 from server import PromptServer
@@ -289,6 +292,79 @@ def empty_trash(roots, only=None):
     return freed
 
 
+# ComfyUI's LoadImage reads raw pixel values and ignores any embedded ICC
+# profile, and SaveImage writes PNGs without one, which every viewer reads
+# as sRGB. A Display P3 phone photo therefore comes back desaturated. The
+# Komfy upload converts such pictures to sRGB once, on arrival, so the
+# models get (and return) the colours the user picked.
+_SRGB = ImageCms.createProfile("sRGB")
+_SRGB_ICC = ImageCms.ImageCmsProfile(_SRGB).tobytes()
+
+
+def to_srgb(data):
+    """`data` (image file bytes) re-encoded in sRGB, or None when there is
+    nothing to do: no ICC profile, already sRGB, not an RGB(A) PNG/JPEG, or
+    not readable. Colours outside sRGB are clipped (relative colorimetric),
+    everything inside it is preserved. EXIF (orientation) is carried over."""
+    try:
+        img = Image.open(io.BytesIO(data))
+        icc = img.info.get("icc_profile")
+        if not icc or img.format not in ("PNG", "JPEG") or img.mode not in ("RGB", "RGBA"):
+            return None
+        src = ImageCms.ImageCmsProfile(io.BytesIO(icc))
+        if "srgb" in ImageCms.getProfileDescription(src).lower():
+            return None
+        fmt, exif = img.format, img.info.get("exif")
+        out = ImageCms.profileToProfile(
+            img,
+            src,
+            _SRGB,
+            renderingIntent=ImageCms.Intent.RELATIVE_COLORIMETRIC,
+            outputMode=img.mode,
+        )
+        buf = io.BytesIO()
+        extra = {"icc_profile": _SRGB_ICC}
+        if exif:
+            extra["exif"] = exif
+        if fmt == "JPEG":
+            out.save(buf, "JPEG", quality=95, subsampling=0, **extra)
+        else:
+            out.save(buf, "PNG", **extra)
+        return buf.getvalue()
+    except Exception:
+        return None
+
+
+def save_upload(base, subfolder, filename, data):
+    """Writes `data` as `filename` under `base`/`subfolder`, the way core
+    /upload/image names files: an identical file already there is reused,
+    a different one gets a " (n)" suffix. Returns (name, err)."""
+    base_real = os.path.realpath(base)
+    folder = os.path.realpath(os.path.join(base_real, subfolder))
+    if (folder != base_real and not folder.startswith(base_real + os.sep)) or (
+        TRASH_DIRNAME in subfolder.split("/")
+    ):
+        return None, "subfolder outside the input folder"
+    name = os.path.basename(filename)
+    if name in ("", ".", "..") or name.startswith("."):
+        return None, "invalid filename"
+    os.makedirs(folder, exist_ok=True)
+    stem, ext = os.path.splitext(name)
+    candidate, n = name, 1
+    while True:
+        path = os.path.join(folder, candidate)
+        if not os.path.exists(path):
+            with open(path, "wb") as f:
+                f.write(data)
+            return candidate, None
+        if os.path.getsize(path) == len(data):
+            with open(path, "rb") as f:
+                if f.read() == data:
+                    return candidate, None
+        candidate = f"{stem} ({n}){ext}"
+        n += 1
+
+
 def _volume_guard():
     """503 response when the output volume is not mounted, else None.
     Keeps the app's existing "volume not mounted" signal (the gallery is
@@ -401,3 +477,38 @@ async def komfy_trash_empty(request):
     except Exception:
         only = None  # no body → empty every root's trash
     return web.json_response({"freed": empty_trash(_roots(), only)})
+
+
+@PromptServer.instance.routes.post("/komfy/upload/image")
+async def komfy_upload_image(request):
+    """Drop-in for core POST /upload/image (input folder only): same form
+    fields (`image`, optional `subfolder`), same response, plus
+    `converted` when the picture was turned into sRGB (cf. to_srgb)."""
+    post = await request.post()
+    image = post.get("image")
+    if image is None or not getattr(image, "filename", None):
+        return web.json_response(
+            {"error": 'expected multipart fields: "image" (file), "subfolder" (optional)'},
+            status=400,
+        )
+    subfolder = str(post.get("subfolder") or "")
+    data = image.file.read()
+
+    def work():
+        converted = to_srgb(data)
+        name, err = save_upload(
+            folder_paths.get_input_directory(),
+            subfolder,
+            image.filename,
+            converted if converted is not None else data,
+        )
+        return name, err, converted is not None
+
+    # Converting and re-encoding a 12 MP photo takes about a second: keep it
+    # off the event loop that also streams the websocket progress.
+    name, err, converted = await asyncio.to_thread(work)
+    if err:
+        return web.json_response({"error": err}, status=400)
+    return web.json_response(
+        {"name": name, "subfolder": subfolder, "type": "input", "converted": converted}
+    )

@@ -258,21 +258,30 @@ export function createClient(baseUrl: string): ComfyClient {
       }),
 
     uploadImage: async (uri, name, subfolder = '') => {
-      const form = new FormData();
-      // React Native file object (local phone uri).
-      form.append('image', {
-        uri,
-        name,
-        type: name.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg',
-      } as unknown as Blob);
-      form.append('type', 'input');
-      if (subfolder !== '') form.append('subfolder', subfolder);
-      const res = await fetch(`${base}/upload/image`, {
-        method: 'POST',
-        body: form,
-      });
+      const post = (path: string) => {
+        const form = new FormData();
+        // React Native file object (local phone uri).
+        form.append('image', {
+          uri,
+          name,
+          type: name.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg',
+        } as unknown as Blob);
+        form.append('type', 'input');
+        if (subfolder !== '') form.append('subfolder', subfolder);
+        return fetch(`${base}${path}`, { method: 'POST', body: form });
+      };
+      // The komfy-listing route converts wide-gamut photos (iPhone Display
+      // P3) to sRGB: LoadImage ignores ICC profiles, so they would otherwise
+      // come back desaturated. 404/405 = extension missing or not reloaded
+      // yet: fall back to the core upload (colours unconverted).
+      let path = '/komfy/upload/image';
+      let res = await post(path);
+      if (res.status === 404 || res.status === 405) {
+        path = '/upload/image';
+        res = await post(path);
+      }
       if (!res.ok) {
-        throw new ComfyApiError(`HTTP ${res.status} on /upload/image`, res.status);
+        throw new ComfyApiError(`HTTP ${res.status} on ${path}`, res.status);
       }
       return (await res.json()) as { name: string };
     },

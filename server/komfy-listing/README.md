@@ -33,8 +33,17 @@ Routes:
 - `POST /komfy/trash/empty` (`{}` or `{"root": "input"}`): permanently
   removes the trash of every root (or just `root`). Returns the freed
   `{count, bytes}` per root. **Irreversible.**
+- `POST /komfy/upload/image` (multipart `image`, optional `subfolder`):
+  drop-in for core `/upload/image`, input folder only, same naming
+  (identical file reused, otherwise a " (n)" suffix). A PNG or JPEG whose
+  ICC profile is not sRGB (an iPhone photo is Display P3) is converted to
+  sRGB on arrival, because `LoadImage` ignores profiles and `SaveImage`
+  writes none: without it the result comes back desaturated. Colours
+  outside sRGB are clipped. Response adds `"converted": true|false`. The
+  app falls back to the core route on 404.
 
-`503` on all routes when the output folder is unavailable.
+`503` on all routes except the upload when the output folder is
+unavailable.
 
 The core ComfyUI API only lists the first level of output; these routes
 let the Komfy gallery browse both archives, upload into input and clean
