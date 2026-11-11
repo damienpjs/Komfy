@@ -125,6 +125,25 @@ function patchedInputKeys(manifest: WorkflowManifest): Set<string> {
       case 'zones':
         field.imageTargets.forEach(add);
         break;
+      case 'outpaint': {
+        // Geometry written at launch from the source size (cf. patch.ts).
+        const n = field.nodes;
+        for (const input of ['width', 'height']) {
+          add({ nodeId: n.scale, input });
+          add({ nodeId: n.upscale, input });
+          add({ nodeId: n.mask, input });
+          add({ nodeId: n.pasteMask, input });
+        }
+        for (const input of ['left', 'top', 'right', 'bottom']) {
+          add({ nodeId: n.prepare, input });
+          add({ nodeId: n.feather, input });
+        }
+        for (const input of ['x', 'y']) {
+          add({ nodeId: n.placeMask, input });
+          add({ nodeId: n.composite, input });
+        }
+        break;
+      }
     }
   }
   return keys;

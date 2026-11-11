@@ -6,6 +6,15 @@
 import i18n from '../i18n';
 import type { PromptGraph } from '../api/types';
 import { getLoraMaxCount } from '../store/settings';
+import {
+  hasExpansion,
+  maxSide,
+  OUTPAINT_MIN_SIDE,
+  OUTPAINT_SIDES,
+  planOutpaint,
+  restoreGeometry,
+} from './outpaint';
+import { isHeif } from '../utils/media';
 import { GGUF_UNET_LOADER } from './requirements';
 import { DEFAULT_GUIDE_SIZE } from './types';
 import type {
@@ -16,6 +25,8 @@ import type {
   ModelField,
   ModelSourceField,
   ModelSourceValue,
+  OutpaintField,
+  OutpaintValue,
   PatchTarget,
   SelectOption,
   WorkflowManifest,
@@ -114,6 +125,12 @@ export function validate(
         errors[field.key] = i18n.t('validation.imageRequired');
       }
     }
+    // A HEIC already on the server (uploaded before the JPEG conversion, or
+    // prefilled by a remix) would be read as its first tile only: refuse it
+    // rather than render one corner of the photo (cf. utils/imageUpload).
+    if (field.kind === 'image' && typeof value === 'string' && isHeif(value)) {
+      errors[field.key] = i18n.t('validation.imageHeic');
+    }
     if (field.kind === 'mask' && field.required) {
       if (typeof value !== 'string' || value === '') {
         errors[field.key] = i18n.t('validation.maskRequired');
@@ -190,6 +207,30 @@ export function validate(
         v.vae.trim() === ''
       ) {
         errors[field.key] = i18n.t('validation.modelRequired');
+      }
+    }
+    if (field.kind === 'outpaint') {
+      const v = value as OutpaintValue | undefined;
+      if (!v || !v.sourceWidth || !v.sourceHeight || v.pendingScale) {
+        // The image field reports a missing picture itself; a picture whose
+        // size is still being read cannot be planned yet.
+        if (values[field.sourceKey]) {
+          errors[field.key] = i18n.t('validation.outpaintMeasuring');
+        }
+      } else if (!hasExpansion(v)) {
+        errors[field.key] = i18n.t('validation.outpaintEmpty');
+      } else if (
+        OUTPAINT_SIDES.some((s) => v[s] > 0 && v[s] < OUTPAINT_MIN_SIDE)
+      ) {
+        errors[field.key] = i18n.t('validation.outpaintMinSide', {
+          min: OUTPAINT_MIN_SIDE,
+        });
+      } else if (
+        OUTPAINT_SIDES.some(
+          (s) => !Number.isInteger(v[s]) || v[s] < 0 || v[s] > maxSide(v, s),
+        )
+      ) {
+        errors[field.key] = i18n.t('validation.invalidNumber');
       }
     }
     if (field.kind === 'loras' && Array.isArray(value)) {
@@ -648,6 +689,39 @@ function insertModelSource(
   }
 }
 
+/**
+ * Writes the outpaint geometry into its nodes (cf. OutpaintField): working
+ * source size, working paddings, then the restore branch (generated canvas
+ * back to the requested size, original pasted at its place, inset from the
+ * grown sides by the redraw band, cf. outpaint.restoreGeometry). Restore
+ * nodes a select dropped are skipped. The band width is read back from the
+ * Prepare node, patched earlier by its own number field.
+ */
+function insertOutpaint(
+  graph: PromptGraph,
+  field: OutpaintField,
+  value: OutpaintValue,
+): void {
+  const plan = planOutpaint(value);
+  if (!plan) throw new Error('Outpaint: the source image size is unknown');
+  const set = (nodeId: string, inputs: Record<string, number>) => {
+    const node = graph[nodeId];
+    if (!node) return;
+    Object.assign(node.inputs, inputs);
+  };
+  const { nodes } = field;
+  set(nodes.scale, { width: plan.working.width, height: plan.working.height });
+  set(nodes.prepare, { ...plan.pad });
+  set(nodes.upscale, { width: plan.final.width, height: plan.final.height });
+  set(nodes.mask, { width: value.sourceWidth, height: value.sourceHeight });
+  const band = Number(graph[nodes.prepare]?.inputs.boundary_redraw_px);
+  const restore = restoreGeometry(value, plan, Number.isFinite(band) ? band : 0);
+  set(nodes.pasteMask, { ...restore.paste });
+  set(nodes.feather, { ...restore.ramp });
+  set(nodes.placeMask, { x: restore.inset.left, y: restore.inset.top });
+  set(nodes.composite, { x: value.left, y: value.top });
+}
+
 export function patchGraph(
   manifest: WorkflowManifest,
   values: FieldValues,
@@ -718,6 +792,9 @@ export function patchGraph(
         break;
       case 'zones':
         insertZonesChain(graph, field, value as ZonesValue);
+        break;
+      case 'outpaint':
+        insertOutpaint(graph, field, value as OutpaintValue);
         break;
       case 'select': {
         const index =

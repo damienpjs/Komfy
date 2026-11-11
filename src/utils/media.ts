@@ -17,3 +17,15 @@ export const MEDIA_RE = /\.(png|jpe?g|webp|gif|mp4|webm|mov|m4v|mkv)$/i;
 export function isVideoPath(path: string): boolean {
   return VIDEO_RE.test(path);
 }
+
+const HEIF_EXT = /\.(heic|heif)$/i;
+const HEIF_MIME = /^image\/hei[cf]/i;
+
+/**
+ * true for a HEIC/HEIF file name, URI or MIME type. ComfyUI reads such a
+ * photo as its first tile only, so uploads and launches refuse it (cf.
+ * utils/imageUpload).
+ */
+export function isHeif(name: string, mimeType?: string | null): boolean {
+  return HEIF_EXT.test(name) || (mimeType != null && HEIF_MIME.test(mimeType));
+}

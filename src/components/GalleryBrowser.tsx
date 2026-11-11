@@ -36,6 +36,8 @@ import { useRemix } from '../hooks/useRemix';
 import { useImportDraft } from '../store/importDraft';
 import { useSettings } from '../store/settings';
 import { useToast } from '../store/toast';
+import { PICK_FOR_UPLOAD } from '../utils/imageUpload';
+import { isHeif } from '../utils/media';
 import { remixHref } from '../utils/remixHref';
 import { saveImageToPhotos } from '../utils/saveToPhotos';
 import { useConnection } from '../store/connection';
@@ -250,11 +252,15 @@ export function GalleryBrowser() {
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: 'images',
+      ...PICK_FOR_UPLOAD,
       allowsMultipleSelection: true,
-      quality: 1,
     });
     if (result.canceled || result.assets.length === 0) return;
+
+    if (result.assets.some((a) => isHeif(a.fileName ?? a.uri, a.mimeType))) {
+      Alert.alert(t('imageInput.heic'), t('imageInput.heicBody'));
+      return;
+    }
 
     const tooLarge = result.assets.find(
       (a) => a.fileSize != null && a.fileSize > MAX_UPLOAD_BYTES,

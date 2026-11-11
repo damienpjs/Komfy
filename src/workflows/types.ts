@@ -434,6 +434,83 @@ export interface ZonesField extends FieldBase {
   defaultSteps: number;
 }
 
+/** Where the source sits on the expanded canvas (Photoshop's "anchor"). */
+export type OutpaintAnchor =
+  | 'tl'
+  | 't'
+  | 'tr'
+  | 'l'
+  | 'c'
+  | 'r'
+  | 'bl'
+  | 'b'
+  | 'br';
+
+/**
+ * Value of an outpaint field. Paddings are in SOURCE pixels, the unit the
+ * user sees; everything the graph needs (working size, working paddings,
+ * restored size) is derived from them at patch time (cf. outpaint.planOutpaint).
+ */
+export interface OutpaintValue {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  /** Pixel budget of the generated canvas, in megapixels (× 1024²). */
+  budget: number;
+  anchor: OutpaintAnchor;
+  /**
+   * Template the paddings came from ('ratio:16:9', 'zoom:1.5'), re-applied
+   * when the source changes. Cleared by any manual edit.
+   */
+  template?: string | null;
+  /** Source pixel size, measured by the form (0 = not measured yet). */
+  sourceWidth: number;
+  sourceHeight: number;
+  /**
+   * Remix of a render made at working resolution: the paddings were read in
+   * the working source's pixels (this size) and are rescaled to source pixels
+   * once the form has measured the source.
+   */
+  pendingScale?: { width: number; height: number } | null;
+}
+
+/**
+ * Outpaint field (Krea 2 AnyPaint): the canvas expansion drawn in the form,
+ * per side, over the picture held by `sourceKey`. One value drives several
+ * nodes, all computed from the source size (cf. patch.insertOutpaint):
+ *  - `scale`: ImageScale fitting the source to the working resolution;
+ *  - `prepare`: Krea2AnyPaintPrepare left/top/right/bottom (working px);
+ *  - `upscale`, `mask`, `pasteMask`, `feather`, `placeMask`, `composite`:
+ *    the restoration branch (generated canvas back to source scale, original
+ *    pixels pasted over it beyond the redraw band, cf. outpaint.restoreGeometry).
+ *    A select may drop that branch: missing nodes are skipped.
+ * The seam width is read live from `prepare.boundary_redraw_px`, so the
+ * number field driving it must come BEFORE this field.
+ */
+export interface OutpaintField extends FieldBase {
+  kind: 'outpaint';
+  /** Key of the `image` field holding the source picture. */
+  sourceKey: string;
+  nodes: {
+    scale: string;
+    prepare: string;
+    upscale: string;
+    /** Empty SolidMask at the source size (also how remix reads that size). */
+    mask: string;
+    /** Full SolidMask at the pasted size. */
+    pasteMask: string;
+    /** FeatherMask fading the pasted area in on the grown sides. */
+    feather: string;
+    /** MaskComposite placing the pasted area on the source-sized mask. */
+    placeMask: string;
+    composite: string;
+  };
+  /** Working-resolution choices (megapixels) and the default one. */
+  budgets: number[];
+  defaultBudget: number;
+}
+
 export type WorkflowField =
   | TextField
   | NumberField
@@ -445,7 +522,8 @@ export type WorkflowField =
   | ImageField
   | MaskField
   | LorasField
-  | ZonesField;
+  | ZonesField
+  | OutpaintField;
 
 export interface WorkflowManifest {
   id: string;
@@ -486,4 +564,5 @@ export type FieldValues = Record<
   | DimensionsValue
   | ZonesValue
   | ModelSourceValue
+  | OutpaintValue
 >;

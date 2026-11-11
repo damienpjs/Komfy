@@ -63,6 +63,7 @@ function coveredInputs(fields: WorkflowField[]): Set<string> {
         break;
       case 'loras':
       case 'zones':
+      case 'outpaint':
         break;
     }
   }

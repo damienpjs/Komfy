@@ -359,6 +359,29 @@ export default {
       denoiseHint:
         '1 = full replacement, 0.5–0.7 = retouch that keeps the original shapes and colors',
     },
+    outpaint: {
+      name: 'Outpainting with Krea 2',
+      description:
+        'Extends an image beyond its edges, on any side. The original pixels come back untouched',
+      expand: 'Expansion',
+      expandHint:
+        'Pixels added on each side, in source pixels. Drag the edges in the editor or pick a format',
+      promptPlaceholder: 'Describe the whole final image, not only the new areas…',
+      promptHint:
+        'Describe the complete image (subject, setting, light, style): the model sees the source and needs the full scene to extend it coherently',
+      output: 'Output size',
+      outputSource: 'Source resolution',
+      outputWorking: 'Working resolution',
+      outputHint:
+        'Source: the render is scaled back up and the original pixels pasted over it, so the photo keeps its full definition (the new areas stay softer on a large photo). Working: the raw render, at the working resolution',
+      lorasHint:
+        'AnyPaint (the outpainting LoRA) is always applied first. Added LoRAs (style, character) are chained after it',
+      seam: 'Seam blend',
+      seamHint:
+        'Band along the source edge that the model redraws to hide the seam, in working pixels. 32 is the trained value; 0 keeps the source edge exactly',
+      samplerHint:
+        'Keep euler: SDE samplers (er_sde, dpmpp_sde…) break the coherence of the extension',
+    },
     t2p: {
       name: 'Text → Prompt',
       description:
@@ -459,6 +482,7 @@ export default {
   validation: {
     required: 'Required field',
     imageRequired: 'Image required',
+    imageHeic: 'HEIC photo: ComfyUI only reads one corner of it. Pick the image again',
     maskRequired: 'Draw the area to inpaint',
     modelRequired: 'Pick a model',
     integerDims: 'Integer dimensions required',
@@ -472,6 +496,9 @@ export default {
     dilationRange:
       'Modified area between {{min}} and {{max}} px for every active zone',
     stepsRange: 'Steps between 1 and 30',
+    outpaintMeasuring: 'Reading the source image size, try again in a moment',
+    outpaintEmpty: 'Expand at least one side',
+    outpaintMinSide: 'Each expanded side needs at least {{min}} px',
     invalidStrength: 'Invalid strength',
     invalidNumber: 'Invalid number',
     integerExpected: 'Integer expected',
@@ -592,6 +619,9 @@ export default {
       '{{size}} MB — the limit is {{limit}} MB. Pick a lighter image.',
     uploadFailed: 'Upload failed',
     choose: 'Choose an image',
+    heic: 'HEIC photo',
+    heicBody:
+      'ComfyUI would only read one tile of this HEIC photo. Export it as JPEG or PNG, then pick it again.',
   },
   maskInput: {
     needsSource: 'Pick the source image first',
@@ -606,6 +636,42 @@ export default {
     clear: 'Clear',
     fit: 'Fit',
     hint: 'One finger draws · two fingers zoom and pan',
+  },
+  outpaint: {
+    needsSource: 'Pick the source image first',
+    measuring: 'Reading the image size…',
+    sizeFailed: 'Could not read the image size. Pick it again',
+    edit: 'Adjust on the canvas',
+    editorTitle: 'Expand the canvas',
+    generated: '+{{percent}} % generated',
+    workingSize: 'rendered at {{width}} × {{height}}',
+    noExpansion: 'No expansion yet: drag an edge or pick a format',
+    risky:
+      'Over {{percent}} % of the image is new: the model may invent an unrelated scene. Two smaller passes hold together better',
+    zoomChip: '{{factor}}×',
+    anchor: 'Source position',
+    anchors: {
+      tl: 'Top left',
+      t: 'Top',
+      tr: 'Top right',
+      l: 'Left',
+      c: 'Center',
+      r: 'Right',
+      bl: 'Bottom left',
+      b: 'Bottom',
+      br: 'Bottom right',
+    },
+    sides: 'Pixels added',
+    left: 'Left',
+    top: 'Top',
+    right: 'Right',
+    bottom: 'Bottom',
+    budget: 'Working resolution',
+    budgetHint:
+      'Size the model generates at. A larger photo is scaled down to fit, never up; 2 MP is slower',
+    megapixels: '{{value}} MP',
+    dragHint: 'Drag the handles on the edges. The source position applies to formats',
+    reset: 'Reset',
   },
   lora: {
     add: 'Add a LoRA',

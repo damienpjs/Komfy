@@ -36,7 +36,7 @@ Server side:
   (`Krea-2-Turbo-Q8_0.gguf` in `models/unet`, half the memory, needs
   ComfyUI-GGUF) offered next to it in the KREA2 model pickers, as a
   Standard / GGUF switch on text-to-image, Qwen VAE/CLIP, depth-control
-  LoRA, Ultralytics detectors, ESRGAN-family upscalers, LTX 2.3 GGUF models +
+  LoRA, AnyPaint outpainting LoRA, Ultralytics detectors, ESRGAN-family upscalers, LTX 2.3 GGUF models +
   audio VAE — see each workflow file);
 - **Custom nodes** (the Workflows screen flags any that are missing):
   - [ComfyUI-Impact-Pack](https://github.com/ltdrdata/ComfyUI-Impact-Pack)
@@ -53,6 +53,12 @@ Server side:
   - comfyui-krea2-controlnet and
     [comfyui_controlnet_aux](https://github.com/Fannovel16/comfyui_controlnet_aux)
     — Depth (Depth Anything V2 preprocessor);
+  - Outpainting:
+    [krea2-anypaint](https://github.com/alexw5702-afk/krea2-anypaint)
+    (validated at commit `675be5a`) plus its LoRA
+    `krea2_anypaint_rank32.safetensors` from
+    [yijunwang2/krea2-anypaint](https://huggingface.co/yijunwang2/krea2-anypaint),
+    placed in `models/loras/krea2/`;
   - Image → Video (LTX 2.3):
     [ComfyUI-LTXVideo](https://github.com/Lightricks/ComfyUI-LTXVideo),
     [ComfyUI-GGUF](https://github.com/city96/ComfyUI-GGUF), ComfyUI-KJNodes,
@@ -320,7 +326,7 @@ into Import on another phone transfers the workflow as-is.
    (name, icon, description, `saveNodeId`, patchable fields — see
    [krea2-text2img.ts](./src/workflows/krea2-text2img.ts) as a model).
    Field kinds: `text`, `number`, `seed`, `select`, `model`, `modelSource`,
-   `dimensions`, `image`, `mask`, `loras`, `zones`. A `model` field offers
+   `dimensions`, `image`, `mask`, `outpaint`, `loras`, `zones`. A `model` field offers
    the files actually installed on the server (its target's `/object_info`
    enum, optional family `filter` regex) instead of freezing a filename;
    `modelSource` generalizes it to a whole model (checkpoint, or diffusion
@@ -328,6 +334,9 @@ into Import on another phone transfers the workflow as-is.
    and `variantSwitch` shows it as a Standard / GGUF switch; `advanced: true`
    on any field folds it behind "Advanced settings". A `mask` field lets the user paint an area over the
    picture held by another field (`sourceKey`) and uploads it as a PNG.
+   An `outpaint` field grows the canvas of that picture on any side (drag
+   handles, typed pixels, ratio and zoom presets) and patches the scale,
+   pad and restore nodes from one geometry plan (`outpaint.ts`).
    User-facing manifest strings are i18n keys — add them to
    [src/i18n/en.ts](./src/i18n/en.ts) and [fr.ts](./src/i18n/fr.ts).
 3. Register it in [src/workflows/index.ts](./src/workflows/index.ts).
@@ -386,7 +395,7 @@ komfy/
 ├── src/api/              # client.ts, supervisor.ts, ws.ts (WebSocket), types.ts, queryClient.ts
 ├── src/i18n/             # i18next setup + en/fr dictionaries (default: English)
 ├── src/workflows/        # manifests + frozen API graphs, patch.ts, match.ts (remix), requeue.ts, requirements.ts (availability), infer.ts + registry.ts (runtime import)
-├── src/components/       # UI (queue cards, pickers, viewer, MaskEditor, ZonesField, SetupWizard, ServerPowerCard, PairingScanner…)
+├── src/components/       # UI (queue cards, pickers, viewer, MaskEditor, OutpaintEditor, ZonesField, SetupWizard, ServerPowerCard, PairingScanner…)
 ├── src/store/            # Zustand: settings, connection, supervisor, execution, toast, output/field/batch prefs, customWorkflows + importDraft, generatedPrompts (phone-local prompt library) + presets (named per-workflow form presets, phone-local)
 ├── src/hooks/            # useQueue, useGallery, useLoras, useRemix, useHealthCheck, useSupervisor(+Logs), useAvailability, usePendingPrompts
 ├── src/utils/            # pathTree (explorer), pngMetadata (tEXt chunks), pairing (QR/deep-link setup code), maskRaster + png (JS mask rasterizer/PNG encoder), describeJob, saveToPhotos…
