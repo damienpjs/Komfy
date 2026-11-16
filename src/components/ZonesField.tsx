@@ -714,6 +714,34 @@ export function ZonesField({
   const allZones = !!value.allZones;
   const atMax =
     field.maxZones != null && value.zones.length >= field.maxZones;
+  /**
+   * Copies card `i` (prompt, LoRAs, denoise, detail level, modified area) to
+   * the end of the list. Appended rather than inserted next to its source: a
+   * card's position is the detected zone it replaces, so an insertion would
+   * silently move every following card onto another zone. The copy starts
+   * active and unfolded; the drag handle places it.
+   */
+  const duplicateZone = (i: number) => {
+    if (atMax || drag != null) return;
+    const source = value.zones[i];
+    // The id the render will hand the new card (cf. `ids` above).
+    const id = nextId.current;
+    onChange({
+      ...value,
+      zones: [
+        ...value.zones,
+        {
+          ...source,
+          loras: source.loras.map((l) => ({ ...l })),
+          bypass: undefined,
+        },
+      ],
+    });
+    markLanded(id);
+    AccessibilityInfo.announceForAccessibility(
+      t('zones.duplicated', { number: value.zones.length + 1 }),
+    );
+  };
   const allFolded =
     value.zones.length > 0 && value.zones.every((_, i) => collapsed[i]);
   const toggleAllFolded = () =>
@@ -1040,6 +1068,32 @@ export function ZonesField({
                       >
                         {t('zones.zoneTitle', { number })}
                       </Text>
+                      <Pressable
+                        onPress={() => duplicateZone(i)}
+                        disabled={atMax || drag != null}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('zones.duplicate', {
+                          number: i + 1,
+                        })}
+                        accessibilityHint={
+                          atMax
+                            ? t('zones.maxZones', { count: field.maxZones })
+                            : undefined
+                        }
+                        accessibilityState={{ disabled: atMax }}
+                        style={({ pressed }) => [
+                          styles.duplicateBtn,
+                          atMax && { opacity: 0.4 },
+                          pressed && { opacity: 0.6 },
+                        ]}
+                      >
+                        <Ionicons
+                          name="copy-outline"
+                          size={19}
+                          color={colors.textMuted}
+                        />
+                      </Pressable>
                       {value.zones.length > 1 && (
                         <Pressable
                           onPress={() => removeZone(i)}
@@ -1349,6 +1403,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: -spacing.xs,
+  },
+  duplicateBtn: {
+    marginLeft: spacing.sm,
   },
   removeBtn: {
     marginLeft: spacing.sm,
