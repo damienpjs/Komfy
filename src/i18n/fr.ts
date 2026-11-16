@@ -604,6 +604,8 @@ export default {
       'Résolution à laquelle la zone est régénérée. À baisser (256–384) pour les éléments lointains, afin que le remplacement ne soit pas plus net que son entourage. À augmenter (768–1280) pour plus de détail sur les images haute résolution ; plus lent et plus gourmand en VRAM.',
     addZone: 'Ajouter un remplacement',
     maxZones: 'Maximum {{count}} zones',
+    duplicate: 'Dupliquer la zone n°{{number}}',
+    duplicated: 'Copie ajoutée en zone n°{{number}}',
     steps: 'Steps',
     seed: 'Seed',
     randomSeed: 'aléatoire',
