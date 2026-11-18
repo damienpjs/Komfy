@@ -85,6 +85,8 @@ export const typography = {
     md: 16,
     lg: 20,
     xl: 28,
+    /** Navigation bar title, the iOS native size. */
+    headerTitle: 17,
   },
 } as const;
 
