@@ -15,19 +15,28 @@ import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useNavigation, useRouter, type Href } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
   Pressable,
-  RefreshControl,
   StyleSheet,
   Text,
   useWindowDimensions,
   View,
 } from 'react-native';
+// The gesture-handler list (and its RefreshControl) exposes the scroll as a
+// native gesture, so the grid pinch can run alongside it instead of losing
+// the touch to the scroll view.
+import {
+  FlatList,
+  Gesture,
+  GestureDetector,
+  RefreshControl,
+  type GestureType,
+} from 'react-native-gesture-handler';
+import Animated, { FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ComfyApiError, createClient } from '../api/client';
 import { queryClient } from '../api/queryClient';
@@ -42,13 +51,19 @@ import { remixHref } from '../utils/remixHref';
 import { saveImageToPhotos } from '../utils/saveToPhotos';
 import { useConnection } from '../store/connection';
 import {
+  effectiveColumns,
+  GALLERY_COLUMN_CHOICES,
+  useGalleryPrefs,
+} from '../store/galleryPrefs';
+import { showActionSheet } from '../utils/actionSheet';
+import {
   colors,
   MIN_TOUCH_TARGET,
   radii,
   spacing,
   typography,
 } from '../theme/tokens';
-import { ImageViewer } from './ImageViewer';
+import { ImageViewer, type Rect, type Size } from './ImageViewer';
 import { OutputDirPicker } from './OutputDirPicker';
 import { RemixSheet, type RemixSheetState } from './RemixSheet';
 import {
@@ -57,10 +72,13 @@ import {
   type LoraFileEntry,
 } from '../utils/pathTree';
 
-// Target thumbnail width: spread the available space into as many columns
-// as possible (min. 3), which densifies the grid in landscape / on iPad
-// without stretching thumbnails in portrait.
-const TARGET_CELL_WIDTH = 118;
+// Pinch scale that changes the column count by one: spread → fewer, bigger
+// thumbnails; pinch → denser grid.
+const PINCH_STEP_IN = 1.35;
+const PINCH_STEP_OUT = 0.75;
+// How long the "you were here" ring stays on a cell the viewer closed on
+// without the flight animation (videos, unmeasurable cell).
+const LANDED_RING_MS = 400;
 
 // Guard against filling the input folder: reject a too-heavy upload locally
 // before sending it (same ceiling as the workflow image field).
@@ -78,8 +96,10 @@ export function GalleryBrowser() {
   const gallery = useGallery();
   const remix = useRemix();
   const router = useRouter();
-  const { width: windowWidth } = useWindowDimensions();
-  const columns = Math.max(3, Math.floor(windowWidth / TARGET_CELL_WIDTH));
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const chosenColumns = useGalleryPrefs((s) => s.columns);
+  const setChosenColumns = useGalleryPrefs((s) => s.setColumns);
+  const columns = effectiveColumns(chosenColumns, windowWidth, windowHeight);
   const online = useConnection((s) => s.online);
   const outputAvailable = useConnection((s) => s.outputAvailable);
 
@@ -89,7 +109,24 @@ export function GalleryBrowser() {
   const [viewer, setViewer] = useState<{
     images: GalleryImage[];
     index: number;
+    /** Window rect of the tapped thumbnail: the image grows out of it. */
+    origin: Rect | null;
+    /** Intrinsic sizes the grid already knows, so the flights can start. */
+    sizes: Record<string, Size>;
   } | null>(null);
+  // Item shown full screen: its cell stays empty while the viewer is up, the
+  // way the Photos app leaves the slot the image will fly back into.
+  const [activePath, setActivePath] = useState<string | null>(null);
+  // Cell to ring briefly after a close that could not fly back to it.
+  const [landedPath, setLandedPath] = useState<string | null>(null);
+
+  // Grid geometry, kept in refs: the viewer queries it to scroll the grid
+  // behind itself and to find where to land, without re-rendering the grid.
+  const listRef = useRef<FlatList<LoraEntry>>(null);
+  const cellRefs = useRef(new Map<string, View>());
+  const thumbSizes = useRef<Record<string, Size>>({});
+  const scrollY = useRef(0);
+  const [listBox, setListBox] = useState({ width: windowWidth, height: 0 });
   const serverUrl = useSettings((s) => s.serverUrl);
   const showToast = useToast((s) => s.show);
   const insets = useSafeAreaInsets();
@@ -134,6 +171,7 @@ export function GalleryBrowser() {
       if (!navigation.isFocused()) return; // arriving from another tab: no-op
       setDir('');
       setViewer(null);
+      setActivePath(null);
       exitSelect();
     });
     return unsub;
@@ -334,7 +372,7 @@ export function GalleryBrowser() {
   // the picker (iOS ignores a presentation started while a modal is
   // dismissing).
   const handleViewerMove = (image: GalleryImage) => {
-    setViewer(null);
+    closeViewer(true);
     setTimeout(() => openMovePicker([image.path]), 300);
   };
 
@@ -372,7 +410,7 @@ export function GalleryBrowser() {
     try {
       const result = await remix.extract(image);
       if (result.status === 'match') {
-        setViewer(null);
+        closeViewer(true);
         router.push(
           remixHref(result.manifestId, result.values, result.sourceSeeds),
         );
@@ -383,7 +421,7 @@ export function GalleryBrowser() {
         // parameter sheet + requeue as-is (Remix v2). Same constraint as
         // move/delete: close the viewer modal first.
         const graph = result.graph;
-        setViewer(null);
+        closeViewer(true);
         setTimeout(
           () => setRecipe({ filename: image.filename, graph }),
           300,
@@ -425,6 +463,143 @@ export function GalleryBrowser() {
       .map((f) => (f.kind === 'file' ? imagesByPath.get(f.path) : undefined))
       .filter((i): i is GalleryImage => !!i);
   }, [entries, imagesByPath]);
+
+  // Square cells: one stride per row (cell + row gap). Mirrors the FlatList
+  // layout below (grid padding, column gap) so getItemLayout and the scroll
+  // maths agree with what Yoga lays out.
+  const cellSize =
+    (listBox.width - 2 * spacing.md - (columns - 1) * spacing.xs) / columns;
+  const rowStride = cellSize + spacing.xs;
+  const rowCount = Math.ceil(entries.length / columns);
+
+  // First visible entry, so a column change (pinch, picker, rotation) reopens
+  // the grid on the same images instead of jumping back to the top. Read
+  // once per column count: FlatList only honours it when `key` remounts it.
+  const firstVisible = useRef(0);
+  const anchorRow = useMemo(
+    () => Math.floor(firstVisible.current / columns),
+    [columns],
+  );
+
+  // Scroll the grid (hidden behind the viewer) so `path`'s row is on screen.
+  // Returns false when the item is not in the current folder.
+  const revealPath = (path: string): boolean => {
+    const idx = entries.findIndex((e) => e.kind === 'file' && e.path === path);
+    if (idx === -1 || rowStride <= 0) return false;
+    const top = Math.floor(idx / columns) * rowStride;
+    const bottom = top + cellSize;
+    const viewTop = scrollY.current;
+    const viewBottom = viewTop + listBox.height;
+    let target: number | null = null;
+    if (top < viewTop) target = top - spacing.xs;
+    else if (bottom > viewBottom) target = bottom - listBox.height + spacing.xs;
+    if (target !== null) {
+      const offset = Math.max(0, target);
+      scrollY.current = offset;
+      listRef.current?.scrollToOffset({ offset, animated: false });
+    }
+    return true;
+  };
+
+  // Window rect of a thumbnail, scrolled into view first. Polls a few frames:
+  // a far jump lets the FlatList render the new window before the cell
+  // exists to be measured.
+  const getThumbRect = (image: GalleryImage): Promise<Rect | null> =>
+    new Promise((resolve) => {
+      if (!revealPath(image.path)) {
+        resolve(null);
+        return;
+      }
+      let tries = 0;
+      const attempt = () => {
+        const node = cellRefs.current.get(image.path);
+        if (node) {
+          node.measureInWindow((x, y, width, height) =>
+            resolve(width > 0 && height > 0 ? { x, y, width, height } : null),
+          );
+          return;
+        }
+        tries += 1;
+        if (tries > 12) resolve(null);
+        else requestAnimationFrame(attempt);
+      };
+      requestAnimationFrame(attempt);
+    });
+
+  const openViewer = (image: GalleryImage, index: number) => {
+    const open = (origin: Rect | null) =>
+      setViewer({
+        images: dirImages,
+        index,
+        origin,
+        sizes: { ...thumbSizes.current },
+      });
+    const node = cellRefs.current.get(image.path);
+    if (!node) {
+      open(null);
+      return;
+    }
+    node.measureInWindow((x, y, width, height) =>
+      open(width > 0 && height > 0 ? { x, y, width, height } : null),
+    );
+  };
+
+  const closeViewer = (flew: boolean) => {
+    if (!flew && activePath) {
+      // No flight to follow: ring the cell instead, so the eye still finds it.
+      const path = activePath;
+      setLandedPath(path);
+      setTimeout(
+        () => setLandedPath((p) => (p === path ? null : p)),
+        LANDED_RING_MS,
+      );
+    }
+    setViewer(null);
+    setActivePath(null);
+  };
+
+  const changeColumns = (next: number) => {
+    if (next === chosenColumns) return;
+    Haptics.selectionAsync();
+    setChosenColumns(next);
+  };
+
+  const openColumnPicker = () =>
+    showActionSheet(
+      t('gallery.gridTitle'),
+      GALLERY_COLUMN_CHOICES.map((n) => ({
+        label:
+          (n === chosenColumns ? '✓ ' : '') + t('gallery.perRow', { count: n }),
+        onPress: () => changeColumns(n),
+      })),
+      t('gallery.gridHint'),
+    );
+
+  // Pinch on the grid, like the Photos app: spread for bigger thumbnails,
+  // pinch for a denser grid. One column per gesture, so a long pinch never
+  // races through every size. The pinch sits on a stable wrapper, not on
+  // the FlatList: a new column count remounts the list (numColumns cannot
+  // change in place). The list declares it simultaneous with its scroll
+  // handler (`simultaneousHandlers`): the scroll wrapper blocks any other
+  // gesture once active, and a pinch's fingers always drag the list first.
+  const pinchRef = useRef<GestureType | undefined>(undefined);
+  const pinchStepped = useRef(false);
+  const pinch = Gesture.Pinch()
+    .withRef(pinchRef)
+    .runOnJS(true)
+    .onStart(() => {
+      pinchStepped.current = false;
+    })
+    .onUpdate((e) => {
+      if (pinchStepped.current) return;
+      const step =
+        e.scale > PINCH_STEP_IN ? -1 : e.scale < PINCH_STEP_OUT ? 1 : 0;
+      if (step === 0) return;
+      pinchStepped.current = true;
+      const choices: readonly number[] = GALLERY_COLUMN_CHOICES;
+      const next = useGalleryPrefs.getState().columns + step;
+      if (choices.includes(next)) changeColumns(next);
+    });
 
   // Files of the selection, resolved to images. Folders never resolve, so a
   // checked folder makes the counts diverge and disables the Save button.
@@ -554,18 +729,25 @@ export function GalleryBrowser() {
     if (!image) return null;
     const imageIndex = dirImages.indexOf(image);
     const isSelected = selected.has(image.path);
+    // Empty slot while this image is full screen (it flies back into it).
+    const isActive = viewer !== null && activePath === image.path;
     return (
       <Pressable
+        ref={(node) => {
+          if (node) cellRefs.current.set(image.path, node);
+          else cellRefs.current.delete(image.path);
+        }}
         style={({ pressed }) => [
           styles.cell,
           { flex: 1 / columns },
           isSelected && styles.cellSelected,
           pressed && { opacity: 0.7 },
+          isActive && styles.cellActive,
         ]}
         onPress={() =>
           selectMode
             ? toggleSelect(image.path)
-            : setViewer({ images: dirImages, index: imageIndex })
+            : openViewer(image, imageIndex)
         }
         onLongPress={() =>
           selectMode ? toggleSelect(image.path) : startSelect(image.path)
@@ -592,6 +774,19 @@ export function GalleryBrowser() {
             cachePolicy="disk"
             recyclingKey={image.path}
             transition={100}
+            onLoad={(e) => {
+              thumbSizes.current[image.path] = {
+                width: e.source.width,
+                height: e.source.height,
+              };
+            }}
+          />
+        )}
+        {landedPath === image.path && (
+          <Animated.View
+            pointerEvents="none"
+            exiting={FadeOut.duration(450)}
+            style={styles.landedRing}
           />
         )}
         {selectMode && (
@@ -668,6 +863,16 @@ export function GalleryBrowser() {
           )}
           {!selectMode && (
             <Pressable
+              onPress={openColumnPicker}
+              accessibilityLabel={t('gallery.gridTitle')}
+              hitSlop={8}
+              style={({ pressed }) => pressed && { opacity: 0.6 }}
+            >
+              <Ionicons name="grid-outline" size={20} color={colors.accent} />
+            </Pressable>
+          )}
+          {!selectMode && (
+            <Pressable
               onPress={() => setNewFolderOpen(true)}
               hitSlop={8}
               style={({ pressed }) => pressed && { opacity: 0.6 }}
@@ -707,13 +912,44 @@ export function GalleryBrowser() {
           <ActivityIndicator color={colors.accent} />
         </View>
       ) : (
+        <GestureDetector gesture={pinch}>
+        <View style={styles.listWrap} collapsable={false}>
         <FlatList
+          ref={listRef}
+          simultaneousHandlers={pinchRef}
           data={entries}
           key={columns}
           numColumns={columns}
           keyExtractor={(e) => (e.kind === 'dir' ? `d:${e.name}` : e.path)}
           renderItem={renderEntry}
           columnWrapperStyle={{ gap: spacing.xs }}
+          // Index = row (FlatList hands rows to VirtualizedList). Offsets
+          // include the row gap, so spacers and cells line up.
+          getItemLayout={(_, index) => ({
+            length: cellSize,
+            offset: rowStride * index,
+            index,
+          })}
+          initialScrollIndex={
+            rowCount > 0 && anchorRow > 0
+              ? Math.min(anchorRow, rowCount - 1)
+              : undefined
+          }
+          onLayout={(e) => {
+            const { width, height } = e.nativeEvent.layout;
+            setListBox((b) =>
+              b.width === width && b.height === height ? b : { width, height },
+            );
+          }}
+          onScroll={(e) => {
+            const y = e.nativeEvent.contentOffset.y;
+            scrollY.current = y;
+            if (rowStride > 0) {
+              firstVisible.current =
+                Math.max(0, Math.floor(y / rowStride)) * columns;
+            }
+          }}
+          scrollEventThrottle={32}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -734,6 +970,8 @@ export function GalleryBrowser() {
             </Text>
           }
         />
+        </View>
+        </GestureDetector>
       )}
 
       {viewer && (
@@ -742,7 +980,14 @@ export function GalleryBrowser() {
           images={viewer.images}
           initialIndex={viewer.index}
           viewUrl={gallery.viewUrl}
-          onClose={() => setViewer(null)}
+          originRect={viewer.origin}
+          knownSizes={viewer.sizes}
+          getThumbRect={getThumbRect}
+          onCurrentChange={(image) => {
+            setActivePath(image.path);
+            revealPath(image.path);
+          }}
+          onClose={closeViewer}
           onRemix={handleRemix}
           onMove={handleViewerMove}
           onDelete={deleteFromViewer}
@@ -909,6 +1154,9 @@ const styles = StyleSheet.create({
     fontFamily: typography.ui,
     fontSize: typography.sizes.sm,
   },
+  listWrap: {
+    flex: 1,
+  },
   grid: {
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.xl,
@@ -972,6 +1220,15 @@ const styles = StyleSheet.create({
   cellSelected: {
     borderWidth: 2,
     borderColor: colors.accent,
+  },
+  cellActive: {
+    opacity: 0,
+  },
+  landedRing: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: radii.sm,
+    borderWidth: 2,
+    borderColor: colors.accentStrong,
   },
   checkOverlay: {
     position: 'absolute',
