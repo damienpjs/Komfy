@@ -22,9 +22,23 @@ $ErrorActionPreference = "Stop"
 # ---------------------------------------------------------------------------
 # Chemins (surchargeables par variables d'environnement)
 # ---------------------------------------------------------------------------
-$ComfyDir = if ($env:COMFY_DIR) { $env:COMFY_DIR } else { "$env:USERPROFILE\ComfyUI" }
-$VenvPy   = if ($env:VENV_PY)   { $env:VENV_PY }   else { "$env:USERPROFILE\ComfyUI\.venv\Scripts\python.exe" }
 $BaseDir  = if ($env:BASE_DIR)  { $env:BASE_DIR }  else { "$env:USERPROFILE\ComfyUI" }
+
+# Selection de l'install (optionnelle), jumelle de start-comfy.sh : lignes
+# CLE=valeur (COMFY_DIR, VENV_PY, USER_DIR) dans <BASE_DIR>\comfy-install.env,
+# pour poser une mise a jour de ComfyUI a cote de la precedente (supprimer le
+# fichier relance l'ancienne). Une variable d'environnement garde la priorite.
+$InstallFile = if ($env:COMFY_INSTALL_FILE) { $env:COMFY_INSTALL_FILE } else { Join-Path $BaseDir "comfy-install.env" }
+$Install = @{}
+if (Test-Path $InstallFile) {
+  foreach ($line in Get-Content $InstallFile) {
+    if ($line -match '^(COMFY_DIR|VENV_PY|USER_DIR)=(.*)$') { $Install[$Matches[1]] = $Matches[2].Trim() }
+  }
+}
+
+$ComfyDir = if ($env:COMFY_DIR) { $env:COMFY_DIR } elseif ($Install.COMFY_DIR) { $Install.COMFY_DIR } else { "$env:USERPROFILE\ComfyUI" }
+$VenvPy   = if ($env:VENV_PY)   { $env:VENV_PY }   elseif ($Install.VENV_PY)   { $Install.VENV_PY }   else { "$env:USERPROFILE\ComfyUI\.venv\Scripts\python.exe" }
+$UserDir  = if ($env:USER_DIR)  { $env:USER_DIR }  elseif ($Install.USER_DIR)  { $Install.USER_DIR }  else { "$BaseDir\user_tailscale" }
 $Port     = if ($env:PORT)      { $env:PORT }      else { "8188" }
 
 # ---------------------------------------------------------------------------
@@ -56,6 +70,8 @@ if ($Listen -eq "local") {
 Write-Host "-----------------------------------------"
 Write-Host "  attention : $Attention"
 Write-Host "  ecoute    : http://${ListenAddr}:${Port}"
+Write-Host "  code      : $ComfyDir"
+if (Test-Path $InstallFile) { Write-Host "  install   : $InstallFile" }
 Write-Host "-----------------------------------------"
 
 Set-Location $ComfyDir
@@ -87,7 +103,7 @@ $comfyArgs = @(
   '--preview-method', 'auto',
   '--enable-manager',
   '--base-directory', $BaseDir,
-  '--user-directory', "$BaseDir\user_tailscale"
+  '--user-directory', $UserDir
 )
 
 # Pipeline synchrone : pas de banniere de fin de demarrage asynchrone sous

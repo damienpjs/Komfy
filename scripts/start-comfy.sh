@@ -10,14 +10,42 @@
 # Chemins surchargeables par variables d'environnement (les defauts ci-dessous
 # correspondent au poste du mainteneur). Ex. sur une autre install :
 #   COMFY_DIR=/opt/ComfyUI VENV_PY=/opt/ComfyUI/.venv/bin/python3 \
-#     BASE_DIR=/opt/ComfyUI-data ./start-comfy.sh
+#     BASE_DIR=/opt/ComfyUI-data USER_DIR=/opt/ComfyUI-data/user ./start-comfy.sh
+# Les memes cles peuvent vivre dans $BASE_DIR/comfy-install.env (voir plus bas).
 # Sous Windows, utiliser plutot scripts/start-comfy.ps1 (PowerShell).
 
 set -euo pipefail
 
+BASE_DIR="${BASE_DIR:-$HOME/Documents/ComfyUI}"
+
+# ---------------------------------------------------------------------------
+# Selection de l'install (optionnelle) : $BASE_DIR/comfy-install.env
+# ---------------------------------------------------------------------------
+# Lignes CLE=valeur (COMFY_DIR, VENV_PY, USER_DIR) qui choisissent le code, le
+# venv et le dossier utilisateur a lancer. Sert a poser une mise a jour de
+# ComfyUI A COTE de la precedente : supprimer le fichier relance l'ancienne,
+# intacte. Un dossier utilisateur par version, parce qu'une version recente
+# migre la base comfyui.db et qu'une plus ancienne refuse alors de demarrer.
+# Le superviseur Komfy passe par ce script, il suit donc le meme choix. Une
+# variable d'environnement deja posee garde la priorite. Le fichier est lu,
+# jamais execute.
+INSTALL_FILE="${COMFY_INSTALL_FILE:-$BASE_DIR/comfy-install.env}"
+if [ -f "$INSTALL_FILE" ]; then
+  while IFS='=' read -r key value || [ -n "$key" ]; do
+    value="${value%$'\r'}"
+    case "$key" in
+      COMFY_DIR|VENV_PY|USER_DIR)
+        if [ -z "${!key:-}" ]; then
+          printf -v "$key" '%s' "${value/#\~/$HOME}"
+        fi
+        ;;
+    esac
+  done < "$INSTALL_FILE"
+fi
+
 COMFY_DIR="${COMFY_DIR:-$HOME/ComfyUI-Installs/ComfyUI/ComfyUI}"
 VENV_PY="${VENV_PY:-$HOME/Documents/ComfyUI/.venv/bin/python3}"
-BASE_DIR="${BASE_DIR:-$HOME/Documents/ComfyUI}"
+USER_DIR="${USER_DIR:-$BASE_DIR/user_tailscale}"
 PORT="${PORT:-8188}"
 # Per-session log the Komfy supervisor tails to stream the console to the app.
 LOG_FILE="${KOMFY_LOG_FILE:-$BASE_DIR/logs/comfyui.log}"
@@ -72,6 +100,8 @@ fi
 echo "─────────────────────────────────────────"
 echo "  attention : ${1:-sdpa}"
 echo "  ecoute    : http://${LISTEN}:${PORT}"
+echo "  code      : ${COMFY_DIR}"
+[ -f "$INSTALL_FILE" ] && echo "  install   : ${INSTALL_FILE}"
 echo "─────────────────────────────────────────"
 
 # ---------------------------------------------------------------------------
@@ -86,7 +116,9 @@ echo "────────────────────────�
 (
   url="http://${LISTEN}:${PORT}"
   for _ in $(seq 1 120); do
-    if : > "/dev/tcp/${LISTEN}/${PORT}" 2>/dev/null; then
+    # Redirection autour du bloc : bash ouvre /dev/tcp avant d'appliquer un
+    # 2>/dev/null place apres, l'echec de connexion s'imprimerait a chaque sonde.
+    if { : > "/dev/tcp/${LISTEN}/${PORT}"; } 2>/dev/null; then
       printf '\n'
       echo "════════════════════════════════════════════════════════════"
       echo "  ✅  ComfyUI est prêt — URL du serveur pour l'app Komfy :"
@@ -134,7 +166,7 @@ exec "$VENV_PY" main.py \
   --preview-method auto \
   --enable-manager \
   --base-directory "$BASE_DIR" \
-  --user-directory "$BASE_DIR/user_tailscale"
+  --user-directory "$USER_DIR"
 
 # Notes sur les flags retires de ta commande d'origine :
 #
