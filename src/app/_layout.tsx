@@ -21,6 +21,7 @@ import { queryClient } from '../api/queryClient';
 import { useComfyWs } from '../api/ws';
 import { ensureNotificationSetup } from '../notifications';
 import { HeaderBackButton } from '../components/HeaderBackButton';
+import { HeaderTitle } from '../components/HeaderTitle';
 import { SetupWizard } from '../components/SetupWizard';
 import { StatusDot } from '../components/StatusDot';
 import { Toast } from '../components/Toast';
@@ -79,6 +80,8 @@ function AppShell() {
             // Explicit back button ("Back" + 44 pt target) everywhere outside
             // the tabs: the native one showed "(tabs)" and missed taps.
             headerLeft: () => <HeaderBackButton />,
+            // Width-capped title: the status dot overlay sits on the right.
+            headerTitle: (props) => <HeaderTitle {...props} />,
           }}
         >
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
