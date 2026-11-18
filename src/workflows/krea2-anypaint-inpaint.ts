@@ -303,7 +303,7 @@ export const krea2AnypaintInpaint: WorkflowManifest = {
   id: 'krea2-anypaint-inpaint',
   name: 'wf.anypaintInpaint.name',
   description: 'wf.anypaintInpaint.description',
-  icon: 'color-wand-outline',
+  icon: 'color-fill-outline',
   graph,
   saveNodeId: '25',
   fields: [
