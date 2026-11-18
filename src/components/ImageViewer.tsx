@@ -5,12 +5,19 @@
  * play-pause + scrubber controls. A single tap toggles the chrome (top bar +
  * caption + video controls) for an immersive full-bleed view. Swipe down
  * dismisses, swipe up opens the file details sheet (ImageInfoSheet).
+ *
+ * Hero transition with the grid (Photos-app style): the image grows out of
+ * the tapped thumbnail on open and flies back into its grid cell on close,
+ * the backdrop fading so the grid shows through. The Modal is transparent
+ * for that reason; the gallery keeps its grid scrolled on the displayed item
+ * so the landing cell is always on screen. Videos (no still to fly) and items
+ * the grid cannot place fall back to a plain fade.
  */
 
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
@@ -28,10 +35,12 @@ import {
   GestureHandlerRootView,
 } from 'react-native-gesture-handler';
 import Animated, {
+  Easing,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
+  type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { GalleryImage } from '../hooks/useGallery';
@@ -40,12 +49,46 @@ import { showActionSheet, type SheetAction } from '../utils/actionSheet';
 import { saveImageToPhotos } from '../utils/saveToPhotos';
 import { ImageInfoSheet } from './ImageInfoSheet';
 
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface Size {
+  width: number;
+  height: number;
+}
+
+/** Live transform of a page (zoom + drag), to start the closing flight. */
+interface PageTransform {
+  tx: number;
+  ty: number;
+  scale: number;
+}
+
 interface Props {
   visible: boolean;
   images: GalleryImage[];
   initialIndex: number;
   viewUrl: (image: GalleryImage) => string;
-  onClose: () => void;
+  /**
+   * Leaves the viewer, once its exit animation is over. `flew` tells whether
+   * the image flew back into its thumbnail (false: plain fade).
+   */
+  onClose: (flew: boolean) => void;
+  /** Window rect of the tapped thumbnail: the opening flight starts there. */
+  originRect?: Rect | null;
+  /** Intrinsic sizes already known by the caller (loaded thumbnails). */
+  knownSizes?: Record<string, Size>;
+  /**
+   * Window rect of an item's thumbnail (scrolled into view first), or null
+   * when it is not on the grid: the closing flight lands there.
+   */
+  getThumbRect?: (image: GalleryImage) => Promise<Rect | null>;
+  /** The displayed item changed (open, swipe, delete). */
+  onCurrentChange?: (image: GalleryImage) => void;
   /**
    * "Create a variant" (Sprint 4b) — shown for images and videos when provided.
    * The recipe comes from the PNG metadata (stills) or /history (both), so a
@@ -71,6 +114,45 @@ const DISMISS_VELOCITY = 900;
 // Swipe-up-for-details thresholds — lower: it opens a sheet, nothing is lost.
 const DETAILS_DISTANCE = 60;
 const DETAILS_VELOCITY = 700;
+// Drag distance (fraction of the page height) at which the backdrop is gone
+// and the image has shrunk to its smallest while swiping down.
+const DRAG_FULL = 0.5;
+const DRAG_MIN_SCALE = 0.7;
+
+// Hero flight between the grid cell and the full-screen image.
+const FLIGHT_MS = 320;
+const FLIGHT_EASING = Easing.bezier(0.2, 0.85, 0.25, 1);
+const FADE_MS = 200;
+
+/** Rect of an image of `size` letterboxed (contain) in a `w × h` page. */
+function containRect(size: Size, w: number, h: number): Rect {
+  const s = Math.min(w / size.width, h / size.height);
+  const width = size.width * s;
+  const height = size.height * s;
+  return { x: (w - width) / 2, y: (h - height) / 2, width, height };
+}
+
+/** `rect` after a page transform (translate, then scale about the centre). */
+function transformRect(
+  rect: Rect,
+  t: PageTransform,
+  w: number,
+  h: number,
+): Rect {
+  return {
+    x: (rect.x - w / 2) * t.scale + w / 2 + t.tx,
+    y: (rect.y - h / 2) * t.scale + h / 2 + t.ty,
+    width: rect.width * t.scale,
+    height: rect.height * t.scale,
+  };
+}
+
+/** Shrink applied while an unzoomed image is dragged down to dismiss. */
+function dragShrink(ty: number, scale: number, height: number): number {
+  'worklet';
+  if (scale > 1.01 || ty <= 0) return 1;
+  return 1 - Math.min(ty / (height * DRAG_FULL), 1) * (1 - DRAG_MIN_SCALE);
+}
 
 /** mm:ss for the video scrubber / duration row. */
 function formatClock(sec: number): string {
@@ -79,18 +161,27 @@ function formatClock(sec: number): string {
 }
 
 function ZoomablePage({
+  path,
   uri,
   width,
   height,
+  dragProgress,
+  registerTransform,
   onZoomChange,
   onDismiss,
   onShowDetails,
   onToggleChrome,
   onImageSize,
+  onImageError,
 }: {
+  path: string;
   uri: string;
   width: number;
   height: number;
+  /** 0 → 1 as the image is dragged down: fades the backdrop and chrome. */
+  dragProgress: SharedValue<number>;
+  /** Exposes the live transform, where the closing flight takes off. */
+  registerTransform: (path: string, get: () => PageTransform) => () => void;
   onZoomChange: (zoomed: boolean) => void;
   /** Swipe down on a non-zoomed image → closes the viewer. */
   onDismiss: () => void;
@@ -100,6 +191,7 @@ function ZoomablePage({
   onToggleChrome: () => void;
   /** Reports the intrinsic pixel size once the image has loaded. */
   onImageSize: (size: { width: number; height: number }) => void;
+  onImageError: () => void;
 }) {
   const { t } = useTranslation();
   const [attempt, setAttempt] = useState(0);
@@ -113,6 +205,16 @@ function ZoomablePage({
   const ty = useSharedValue(0);
   const savedTx = useSharedValue(0);
   const savedTy = useSharedValue(0);
+
+  useEffect(
+    () =>
+      registerTransform(path, () => ({
+        tx: tx.value,
+        ty: ty.value,
+        scale: scale.value * dragShrink(ty.value, scale.value, height),
+      })),
+    [registerTransform, path, height, tx, ty, scale],
+  );
 
   const notifyZoom = (z: boolean) => {
     setZoomed(z);
@@ -204,9 +306,10 @@ function ZoomablePage({
       runOnJS(onToggleChrome)();
     });
 
-  // Vertical swipe (non-zoomed image): DOWN dismisses (the image follows the
-  // finger then escapes bottom on release), UP opens the file details sheet
-  // (damped follow, the image springs back in place).
+  // Vertical swipe (non-zoomed image): DOWN follows the finger in both axes
+  // while the image shrinks and the backdrop fades onto the grid; released
+  // past the threshold it closes, the flight taking off from where it was
+  // dropped. UP opens the file details sheet (damped follow, springs back).
   // `failOffsetX` leaves horizontal swipes to the pager (image navigation).
   const dismissPan = Gesture.Pan()
     .enabled(!zoomed)
@@ -214,7 +317,15 @@ function ZoomablePage({
     .failOffsetX([-20, 20])
     .onUpdate((e) => {
       'worklet';
-      ty.value = e.translationY < 0 ? e.translationY / 2 : e.translationY;
+      if (e.translationY > 0) {
+        ty.value = e.translationY;
+        tx.value = e.translationX;
+        dragProgress.value = Math.min(e.translationY / (height * DRAG_FULL), 1);
+      } else {
+        ty.value = e.translationY / 2;
+        tx.value = 0;
+        dragProgress.value = 0;
+      }
     })
     .onEnd((e) => {
       'worklet';
@@ -228,11 +339,11 @@ function ZoomablePage({
         e.translationY > 0 &&
         (e.translationY > DISMISS_DISTANCE || e.velocityY > DISMISS_VELOCITY)
       ) {
-        ty.value = withTiming(height, { duration: 180 }, () =>
-          runOnJS(onDismiss)(),
-        );
+        runOnJS(onDismiss)();
       } else {
+        tx.value = withTiming(0);
         ty.value = withTiming(0);
+        dragProgress.value = withTiming(0);
       }
     });
 
@@ -242,24 +353,15 @@ function ZoomablePage({
     dismissPan,
   );
 
-  const animatedStyle = useAnimatedStyle(() => {
-    // Fade proportional to the DOWNWARD drag only (upward opens the details
-    // sheet — nothing closes), and only outside zoom (otherwise ty is used
-    // to move the zoomed image).
-    const dismissing = scale.value <= 1.01;
-    const progress =
-      dismissing && ty.value > 0
-        ? Math.min(ty.value / (height * 0.6), 1)
-        : 0;
-    return {
-      opacity: 1 - progress * 0.75,
-      transform: [
-        { translateX: tx.value },
-        { translateY: ty.value },
-        { scale: scale.value },
-      ],
-    };
-  });
+  // The drag-to-dismiss shrink only applies outside zoom (there ty pans the
+  // zoomed image) and only downward (upward opens the details sheet).
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: tx.value },
+      { translateY: ty.value },
+      { scale: scale.value * dragShrink(ty.value, scale.value, height) },
+    ],
+  }));
 
   if (failed) {
     return (
@@ -298,7 +400,10 @@ function ZoomablePage({
               setLoaded(true);
               onImageSize({ width: e.source.width, height: e.source.height });
             }}
-            onError={() => setFailed(true)}
+            onError={() => {
+              setFailed(true);
+              onImageError();
+            }}
           />
         </Animated.View>
       </GestureDetector>
@@ -497,6 +602,10 @@ export function ImageViewer({
   initialIndex,
   viewUrl,
   onClose,
+  originRect,
+  knownSizes,
+  getThumbRect,
+  onCurrentChange,
   onRemix,
   onMove,
   onDelete,
@@ -520,9 +629,11 @@ export function ImageViewer({
   const [detailsVisible, setDetailsVisible] = useState(false);
   // Intrinsic pixel sizes reported by loaded pages (image load or video track),
   // keyed by path — feeds the details sheet's dimensions row for both media.
-  const [imageSizes, setImageSizes] = useState<
-    Record<string, { width: number; height: number }>
-  >({});
+  // Seeded with the grid's loaded thumbnails so the opening flight knows the
+  // aspect ratio before the full-screen page has loaded.
+  const [imageSizes, setImageSizes] = useState<Record<string, Size>>(
+    () => knownSizes ?? {},
+  );
   // Clip durations (seconds) reported by loaded video pages, keyed by path.
   const [durations, setDurations] = useState<Record<string, number>>({});
   // Measured caption height, so the video scrubber stays above it.
@@ -554,7 +665,7 @@ export function ImageViewer({
     if (delIndex === -1) return;
     const next = items.filter((_, k) => k !== delIndex);
     if (next.length === 0) {
-      onClose();
+      onClose(false);
       return;
     }
     const newIndex = Math.min(delIndex, next.length - 1);
@@ -598,11 +709,207 @@ export function ImageViewer({
   );
   const current = items[index];
 
+  // ---- Hero transition --------------------------------------------------
+  // backdrop: black behind the pages; content: pager + chrome. Both start at
+  // 0 so the transparent Modal opens onto the grid, then the flight (or the
+  // fade fallback) brings them in.
+  const backdrop = useSharedValue(0);
+  const content = useSharedValue(0);
+  const dragProgress = useSharedValue(0);
+  const fx = useSharedValue(0);
+  const fy = useSharedValue(0);
+  const fw = useSharedValue(0);
+  const fh = useSharedValue(0);
+  const fr = useSharedValue(0);
+  // Rendered overlay (the flying image); its timeline lives in flightRef.
+  const [flightUri, setFlightUri] = useState<string | null>(null);
+  const flightRef = useRef<{
+    path: string;
+    to: Rect;
+    closing: boolean;
+    launched: boolean;
+    landed: boolean;
+  } | null>(null);
+  const closingRef = useRef(false);
+  const startedRef = useRef(false);
+  const loadedRef = useRef(new Set<string>());
+  const containerRef = useRef<View>(null);
+  const windowOffset = useRef({ x: 0, y: 0 });
+  const transforms = useRef(new Map<string, () => PageTransform>());
+
+  const registerTransform = useCallback(
+    (path: string, get: () => PageTransform) => {
+      transforms.current.set(path, get);
+      return () => {
+        if (transforms.current.get(path) === get) transforms.current.delete(path);
+      };
+    },
+    [],
+  );
+
+  // Gallery rects are window coordinates; the Modal may be offset (Android
+  // status bar), so bring them into the container's space.
+  const toLocal = (r: Rect): Rect => ({
+    ...r,
+    x: r.x - windowOffset.current.x,
+    y: r.y - windowOffset.current.y,
+  });
+
+  // Hand over from the flying overlay to the pager (opening flight landed
+  // and the page image is ready).
+  const reveal = () => {
+    if (!flightRef.current || flightRef.current.closing) return;
+    flightRef.current = null;
+    content.value = 1;
+    setFlightUri(null);
+  };
+
+  const onFlightEnd = () => {
+    const f = flightRef.current;
+    if (!f) return;
+    if (f.closing) {
+      onClose(true);
+      return;
+    }
+    f.landed = true;
+    if (loadedRef.current.has(f.path)) reveal();
+    // Never leave the overlay up if the page is slow or fails to load.
+    else setTimeout(reveal, 1500);
+  };
+
+  // Starts once the overlay image is on screen (onDisplay), so hiding the
+  // pager never leaves an empty frame. A timer covers a missed callback.
+  const launchFlight = () => {
+    const f = flightRef.current;
+    if (!f || f.launched) return;
+    f.launched = true;
+    const cfg = { duration: FLIGHT_MS, easing: FLIGHT_EASING };
+    content.value = 0;
+    backdrop.value = withTiming(f.closing ? 0 : 1, cfg);
+    fr.value = withTiming(f.closing ? radii.sm : 0, cfg);
+    fx.value = withTiming(f.to.x, cfg);
+    fy.value = withTiming(f.to.y, cfg);
+    fh.value = withTiming(f.to.height, cfg);
+    fw.value = withTiming(f.to.width, cfg, (finished) => {
+      if (finished) runOnJS(onFlightEnd)();
+    });
+  };
+
+  const startFlight = (
+    item: GalleryImage,
+    from: Rect,
+    to: Rect,
+    closing: boolean,
+  ) => {
+    fx.value = from.x;
+    fy.value = from.y;
+    fw.value = from.width;
+    fh.value = from.height;
+    fr.value = closing ? 0 : radii.sm;
+    flightRef.current = {
+      path: item.path,
+      to,
+      closing,
+      launched: false,
+      landed: false,
+    };
+    setFlightUri(viewUrl(item));
+    setTimeout(launchFlight, 250);
+  };
+
+  const fadeIn = () => {
+    backdrop.value = withTiming(1, { duration: FADE_MS });
+    content.value = withTiming(1, { duration: FADE_MS });
+  };
+
+  // Opening: grow out of the tapped thumbnail when its rect and the image's
+  // aspect ratio are known, else fade in.
+  const beginOpen = (w: number, h: number) => {
+    const item = items[index];
+    const size = item ? imageSizes[item.path] : undefined;
+    if (originRect && item && !item.isVideo && size) {
+      startFlight(item, toLocal(originRect), containRect(size, w, h), false);
+    } else {
+      fadeIn();
+    }
+  };
+
+  // Closing: fly from the image's current on-screen rect (zoom and drag
+  // included) into its grid cell; fade out when there is no cell to reach.
+  const requestClose = async () => {
+    if (closingRef.current || flightRef.current) return;
+    closingRef.current = true;
+    setDetailsVisible(false);
+    const item = current;
+    const size = item ? imageSizes[item.path] : undefined;
+    const target =
+      item && !item.isVideo && size && pageSize && getThumbRect
+        ? await getThumbRect(item)
+        : null;
+    if (!item || !size || !pageSize || !target) {
+      content.value = withTiming(0, { duration: FADE_MS });
+      backdrop.value = withTiming(0, { duration: FADE_MS }, (finished) => {
+        if (finished) runOnJS(onClose)(false);
+      });
+      return;
+    }
+    const t = transforms.current.get(item.path)?.() ?? {
+      tx: 0,
+      ty: 0,
+      scale: 1,
+    };
+    const from = transformRect(
+      containRect(size, pageSize.w, pageSize.h),
+      t,
+      pageSize.w,
+      pageSize.h,
+    );
+    // Fold the drag fade into the backdrop so the flight starts from what is
+    // on screen.
+    backdrop.value = backdrop.value * (1 - dragProgress.value);
+    dragProgress.value = 0;
+    startFlight(item, from, toLocal(target), true);
+  };
+
+  const markLoaded = (path: string) => {
+    loadedRef.current.add(path);
+    const f = flightRef.current;
+    if (f && !f.closing && f.landed && f.path === path) reveal();
+  };
+
+  // Keep the gallery on the displayed item (it scrolls the grid behind and
+  // empties that cell). Ref'd so an inline callback does not re-fire it.
+  const onCurrentChangeRef = useRef(onCurrentChange);
+  onCurrentChangeRef.current = onCurrentChange;
+  useEffect(() => {
+    if (current) onCurrentChangeRef.current?.(current);
+  }, [current]);
+
+  const backdropStyle = useAnimatedStyle(() => ({
+    opacity: backdrop.value * (1 - dragProgress.value),
+  }));
+  const contentStyle = useAnimatedStyle(() => ({ opacity: content.value }));
+  // Chrome clears out fast once a dismiss drag starts.
+  const chromeStyle = useAnimatedStyle(() => ({
+    opacity: content.value * (1 - Math.min(dragProgress.value * 3, 1)),
+  }));
+  const flightStyle = useAnimatedStyle(() => ({
+    left: fx.value,
+    top: fy.value,
+    width: fw.value,
+    height: fh.value,
+    borderRadius: fr.value,
+  }));
+
   return (
     <Modal
       visible={visible}
-      animationType="fade"
-      presentationStyle="fullScreen"
+      // Transparent + our own animations: the grid stays visible behind the
+      // backdrop, which is what lets the image fly back into its cell.
+      transparent
+      animationType="none"
+      statusBarTranslucent
+      navigationBarTranslucent
       // iOS: a native Modal does NOT follow the app's "default" orientation
       // (defaults to ['portrait'] only) → without this the viewer stays stuck
       // in portrait while the rest of the app rotates. The layout is already
@@ -614,17 +921,34 @@ export function ImageViewer({
         'landscape-left',
         'landscape-right',
       ]}
-      onRequestClose={onClose}
+      onRequestClose={requestClose}
     >
       {/* RNGH gestures require their own root INSIDE a RN Modal. */}
       <GestureHandlerRootView style={{ flex: 1 }}>
         <View
+          ref={containerRef}
           style={styles.container}
           onLayout={(e) => {
             const { width: w, height: h } = e.nativeEvent.layout;
             setPageSize({ w, h });
+            if (startedRef.current) return;
+            startedRef.current = true;
+            const node = containerRef.current;
+            if (!node) {
+              beginOpen(w, h);
+              return;
+            }
+            node.measureInWindow((x, y) => {
+              windowOffset.current = { x, y };
+              beginOpen(w, h);
+            });
           }}
         >
+          <Animated.View
+            pointerEvents="none"
+            style={[styles.backdrop, backdropStyle]}
+          />
+          <Animated.View style={[StyleSheet.absoluteFill, contentStyle]}>
           {pageSize && (
             <FlatList
               ref={listRef}
@@ -678,18 +1002,28 @@ export function ImageViewer({
                   />
                 ) : (
                   <ZoomablePage
+                    path={item.path}
                     uri={viewUrl(item)}
                     width={pageSize.w}
                     height={pageSize.h}
+                    dragProgress={dragProgress}
+                    registerTransform={registerTransform}
                     onZoomChange={setZoomed}
-                    onDismiss={onClose}
+                    onDismiss={requestClose}
                     onShowDetails={() => setDetailsVisible(true)}
                     onToggleChrome={() => setChromeVisible((v) => !v)}
-                    onImageSize={(size) =>
+                    onImageSize={(size) => {
+                      // The thumbnail's size may be a downscaled decode:
+                      // the full image's own size wins.
                       setImageSizes((prev) =>
-                        prev[item.path] ? prev : { ...prev, [item.path]: size },
-                      )
-                    }
+                        prev[item.path]?.width === size.width &&
+                        prev[item.path]?.height === size.height
+                          ? prev
+                          : { ...prev, [item.path]: size },
+                      );
+                      markLoaded(item.path);
+                    }}
+                    onImageError={() => markLoaded(item.path)}
                   />
                 )
               }
@@ -708,11 +1042,18 @@ export function ImageViewer({
               showsHorizontalScrollIndicator={false}
             />
           )}
+          </Animated.View>
 
           {chromeVisible && (
-            <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm }]}>
+            <Animated.View
+              style={[
+                styles.topBar,
+                { paddingTop: insets.top + spacing.sm },
+                chromeStyle,
+              ]}
+            >
               <Pressable
-                onPress={onClose}
+                onPress={requestClose}
                 hitSlop={12}
                 style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.6 }]}
               >
@@ -721,12 +1062,16 @@ export function ImageViewer({
               <Text style={styles.counter}>
                 {index + 1} / {items.length}
               </Text>
-            </View>
+            </Animated.View>
           )}
 
           {chromeVisible && current && (
-            <View
-              style={[styles.caption, { paddingBottom: insets.bottom + spacing.md }]}
+            <Animated.View
+              style={[
+                styles.caption,
+                { paddingBottom: insets.bottom + spacing.md },
+                chromeStyle,
+              ]}
               onLayout={(e) => setCaptionHeight(e.nativeEvent.layout.height)}
             >
               <Text style={styles.captionName} numberOfLines={1}>
@@ -792,7 +1137,22 @@ export function ImageViewer({
                   />
                 </Pressable>
               </View>
-            </View>
+            </Animated.View>
+          )}
+
+          {flightUri && (
+            <Animated.View
+              pointerEvents="none"
+              style={[styles.flight, flightStyle]}
+            >
+              <Image
+                source={{ uri: flightUri }}
+                style={styles.flightImage}
+                contentFit="cover"
+                cachePolicy="disk"
+                onDisplay={launchFlight}
+              />
+            </Animated.View>
           )}
 
           <ImageInfoSheet
@@ -808,13 +1168,25 @@ export function ImageViewer({
 }
 
 const styles = StyleSheet.create({
+  // Transparent: the backdrop below fades independently so the grid can
+  // show through during the hero transition and the dismiss drag.
   container: {
     flex: 1,
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: '#000',
   },
   page: {
     overflow: 'hidden',
-    backgroundColor: '#000',
+  },
+  flight: {
+    position: 'absolute',
+    overflow: 'hidden',
+  },
+  flightImage: {
+    width: '100%',
+    height: '100%',
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,

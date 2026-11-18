@@ -851,6 +851,11 @@ export default {
     createFolder: 'Créer le dossier',
     requeueFailed: 'Relance impossible',
     variantQueued: 'Variante ajoutée à la queue ✓ (#{{number}})',
+    gridTitle: 'Images par ligne',
+    gridHint:
+      "Pincez la grille pour changer à la volée. En paysage, davantage d'images tiennent par ligne.",
+    perRow_one: '{{count}} par ligne',
+    perRow_other: '{{count}} par ligne',
   },
   supervisor: {
     title: 'Alimentation serveur',

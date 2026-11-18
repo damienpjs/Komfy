@@ -11,12 +11,17 @@ export interface SheetAction {
   onPress: () => void;
 }
 
-export function showActionSheet(title: string, actions: SheetAction[]): void {
+export function showActionSheet(
+  title: string,
+  actions: SheetAction[],
+  message?: string,
+): void {
   if (Platform.OS === 'ios') {
     const options = [...actions.map((a) => a.label), i18n.t('common.cancel')];
     ActionSheetIOS.showActionSheetWithOptions(
       {
         title,
+        message,
         options,
         cancelButtonIndex: options.length - 1,
         destructiveButtonIndex: actions
@@ -28,7 +33,7 @@ export function showActionSheet(title: string, actions: SheetAction[]): void {
       },
     );
   } else {
-    Alert.alert(title, undefined, [
+    Alert.alert(title, message, [
       ...actions.map((a) => ({
         text: a.label,
         style: a.destructive ? ('destructive' as const) : undefined,

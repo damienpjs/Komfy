@@ -842,6 +842,11 @@ export default {
     createFolder: 'Create folder',
     requeueFailed: 'Requeue failed',
     variantQueued: 'Variant added to the queue ✓ (#{{number}})',
+    gridTitle: 'Images per row',
+    gridHint:
+      'Pinch the grid to change it on the fly. Landscape fits more per row.',
+    perRow_one: '{{count}} per row',
+    perRow_other: '{{count}} per row',
   },
   supervisor: {
     title: 'Server power',
