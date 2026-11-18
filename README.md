@@ -18,14 +18,8 @@ themselves (`docs/api-notes.md`) are local working files, not published.
 
 ## Architecture
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./docs/architecture-dark.png">
-  <img src="./docs/architecture.png" width="100%"
-       alt="Komfy architecture: the Expo app (screens, Zustand, TanStack Query, workflow manifest engine, network layer) reaches the local machine through one mandatory hop — the Tailscale tailnet, with no LAN mode, port forwarding or relay fallback — to ComfyUI on port 8188 (core API plus the komfy-listing extension) and to a standalone supervisor on port 8189 that starts, stops and tails ComfyUI.">
-</picture>
-
-<sub>Editable source: [`docs/architecture.excalidraw`](./docs/architecture.excalidraw)
-— drop it on [excalidraw.com](https://excalidraw.com) to edit, then re-export.</sub>
+<img src="./docs/architecture.png" width="100%"
+     alt="Komfy architecture, C4 container view. On the phone, the Expo app builds graphs from the embedded workflows and keeps its settings in AsyncStorage. Every call crosses the Tailscale tailnet, with no LAN mode and no port forwarding. On the local machine, the app queues graphs on ComfyUI (port 8188, no authentication), which loads the komfy-listing and komfy-ltx-mlx custom nodes and reads models and writes outputs on disk. A standalone Node supervisor (port 8189, token) starts, stops and tails ComfyUI. Ollama stays on 127.0.0.1 for the prompt workflows.">
 
 ## Prerequisites
 
@@ -405,6 +399,6 @@ komfy/
 ├── server/komfy-ltx-mlx/ # ComfyUI node: LTX 2.5 video through the ltx-2-mlx CLI (Apple Silicon)
 ├── scripts/              # start-comfy.sh/.ps1 + comfy.js (launch), expo-start.js (Metro on Tailscale), pair.js (QR), native-ios.js (npm run native)
 ├── plugins/              # Expo config plugins (withoutPushEntitlement — free Apple team builds)
-└── docs/architecture.*   # architecture diagram: Excalidraw source + PNG exports
+└── docs/architecture.png # architecture diagram (C4 container view)
                           # (rest of docs/ = local notes, git-ignored)
 ```
