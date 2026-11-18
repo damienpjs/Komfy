@@ -197,8 +197,10 @@ export interface SelectOption {
    * Node ids removed from the graph when this option is chosen — the way an
    * optional branch (e.g. an extra SaveImage sink) is toggled off. The nodes
    * stay in the frozen graph (so their class_types are still validated against
-   * the server); patch.ts deletes them at launch. Only safe for sinks nothing
-   * else reads from.
+   * the server); patch.ts deletes them at launch, then drops every input still
+   * reading one of them. So either a sink nothing else reads from, or a node
+   * plugged only into OPTIONAL sockets (e.g. a second reference image): a
+   * required input left unplugged would be rejected by the server.
    */
   bypassNodes?: string[];
   /**
@@ -259,6 +261,13 @@ export interface LorasField extends FieldBase {
    * server (cf. requirements.checkAvailability).
    */
   fixed?: LoraSelection[];
+  /**
+   * File names `fixed` used to hold before a newer version replaced them. A
+   * render whose chain opens with one of them is remixed with today's fixed
+   * LoRA: the old file is dropped instead of coming back as a user LoRA
+   * stacked on top of its own replacement.
+   */
+  formerFixed?: string[];
   /**
    * Initial selection (imported workflows: the absorbed chain's LoRAs,
    * editable in the form). Absent = empty form (embedded workflows).

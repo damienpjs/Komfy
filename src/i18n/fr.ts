@@ -139,9 +139,17 @@ export default {
         'Décrire la MODIFICATION, pas l’image entière — et préciser ce qui ne doit pas changer',
       lorasHint:
         'Chaînés après le LoRA d’identité — garder les autres légers (~0,4), ils entrent en concurrence avec lui',
+      refs: 'Images de référence',
+      refsHint:
+        'Deux images : la première est le décor (elle fixe le cadre de sortie), la seconde la personne à y placer. L’ordre compte. Écrire la consigne comme « place cette personne à la table, un café à la main ». Sur un Mac 64 Go, lancer ComfyUI en attention découpée (start-comfy.sh split) : avec l’attention par défaut, deux références à 1 MP saturent la mémoire',
+      refsOne: 'Une image',
+      refsTwo: 'Deux images : décor + personne',
+      personImage: 'Personne (seconde image)',
+      personImageHint:
+        'Placée à côté du canvas plutôt que calée dessus : la personne peut être remise en scène librement dans le décor',
       refBoost: 'Fidélité à la source (ref_boost)',
       refBoostHint:
-        '1 = neutre. Au-dessus, le résultat colle davantage à l’apparence de la source ; en dessous, il s’en détache — la bonne valeur dépend du modèle',
+        '1 = neutre. Au-dessus, le résultat colle davantage à l’apparence de la source ; en dessous, il s’en détache. Toute valeur autre que 1 fait passer l’attention par une matrice complète qui demande plusieurs Go de mémoire en plus (le double avec deux images) : sur un Mac 64 Go, à réserver aux canvas de moins d’1 MP',
       canvas: 'Canvas de sortie',
       canvasHint:
         '« Source » garde exactement le cadre de la source (arrondi au multiple de 16 inférieur). 1/2 MP conservent son ratio dans un format plus léger — pour une photo trop grande à générer en taille réelle',

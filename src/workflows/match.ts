@@ -754,7 +754,17 @@ function matchVariant(
         const opensWithFixed = fixed.every(
           (f, i) => absorbed[i]?.name === f.name,
         );
-        values[field.key] = opensWithFixed ? absorbed.slice(fixed.length) : absorbed;
+        // A render made before the fixed LoRA was upgraded opens with the
+        // former file: drop it too, today's fixed LoRA takes its place.
+        const opensWithFormer =
+          !opensWithFixed &&
+          absorbed.length > 0 &&
+          (field.formerFixed ?? []).includes(absorbed[0].name);
+        values[field.key] = opensWithFixed
+          ? absorbed.slice(fixed.length)
+          : opensWithFormer
+            ? absorbed.slice(1)
+            : absorbed;
         break;
       }
       case 'outpaint':

@@ -339,8 +339,23 @@ export function applySelectOption(
   }
   // Mid-chain nodes toggled off: delete and short-circuit (CTRL+B).
   passthroughBypass(graph, option.passthroughNodes ?? []);
-  // Optional branch toggled off: drop the sink nodes this option bypasses.
-  for (const nodeId of option.bypassNodes ?? []) delete graph[nodeId];
+  // Optional branch toggled off: drop the nodes this option bypasses, then
+  // unplug every input still reading one of them (an optional socket left
+  // empty, e.g. the second reference image of the KREA2 edit).
+  const bypassed = new Set(option.bypassNodes ?? []);
+  if (bypassed.size === 0) return;
+  for (const nodeId of bypassed) delete graph[nodeId];
+  for (const node of Object.values(graph)) {
+    for (const [input, value] of Object.entries(node.inputs)) {
+      if (
+        Array.isArray(value) &&
+        typeof value[0] === 'string' &&
+        bypassed.has(value[0])
+      ) {
+        delete node.inputs[input];
+      }
+    }
+  }
 }
 
 /**
@@ -764,6 +779,9 @@ export function patchGraph(
         break;
       case 'image':
       case 'mask':
+        // Same guard as `text`/`number`: an optional image whose LoadImage an
+        // earlier select dropped (the KREA2 edit in one-image mode).
+        if (!graph[field.target.nodeId]) break;
         applyPatch(graph, field.target, String(value ?? ''));
         break;
       case 'model':

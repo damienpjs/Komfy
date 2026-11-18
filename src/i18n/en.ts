@@ -135,9 +135,17 @@ export default {
         'Describe the CHANGE, not the whole image — and say what must stay untouched',
       lorasHint:
         'Chained after the identity LoRA — keep the extra ones light (~0.4), they compete with it',
+      refs: 'Reference images',
+      refsHint:
+        'Two images: the first one is the scene (it sets the output frame), the second the person to place in it. The order matters. Write the instruction as "place this person at the table, holding a coffee". On a 64 GB Mac, start ComfyUI with split attention (start-comfy.sh split): with the default attention, two references at 1 MP run out of memory',
+      refsOne: 'One image',
+      refsTwo: 'Two images: scene + person',
+      personImage: 'Person (second image)',
+      personImageHint:
+        'Placed beside the canvas rather than pinned onto it, so the person can be restaged freely in the scene',
       refBoost: 'Source fidelity (ref_boost)',
       refBoostHint:
-        '1 = off. Above, the result is pulled harder toward the source appearance; below, it loosens — the useful value depends on the model',
+        '1 = off. Above, the result is pulled harder toward the source appearance; below, it loosens. Any value other than 1 switches the attention to a full-matrix path that needs several GB more memory (twice that with two images): on a 64 GB Mac, keep it to canvases under 1 MP',
       canvas: 'Output canvas',
       canvasHint:
         '"Source" keeps the source frame exactly (floored to a multiple of 16). 1/2 MP keep its aspect ratio at a lighter size — for a photo too large to generate at native resolution',
