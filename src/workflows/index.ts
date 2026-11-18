@@ -1,6 +1,7 @@
 /** Registry of the embedded workflows (one file per workflow). */
 
 import { inpaintDraw } from './inpaint-draw';
+import { krea2AnypaintInpaint } from './krea2-anypaint-inpaint';
 import { krea2Depth } from './krea2-depth';
 import { krea2DetectReplace } from './krea2-detect-replace';
 import { krea2DrawReplace } from './krea2-draw-replace';
@@ -32,6 +33,7 @@ export const workflows: WorkflowManifest[] = [
   inpaintDraw,
   krea2DetectReplace,
   krea2DrawReplace,
+  krea2AnypaintInpaint,
   krea2Outpaint,
 ];
 

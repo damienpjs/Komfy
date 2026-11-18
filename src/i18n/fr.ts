@@ -394,6 +394,28 @@ export default {
       samplerHint:
         "Garder euler : les samplers SDE (er_sde, dpmpp_sde…) cassent la cohérence de l'extension",
     },
+    anypaintInpaint: {
+      name: 'Remplacer en contexte (Krea 2)',
+      description:
+        "Peindre une zone : elle est redessinée dans l'image entière, avec la lumière et le décor de la scène",
+      mask: 'Zone à remplacer',
+      maskHint:
+        "Peindre sur l'image. Pour une personne, couvrir tout le corps avec de la marge : la nouvelle peut être plus large que l'ancienne",
+      promptPlaceholder: "Décrire toute l'image finale, pas seulement la zone peinte…",
+      promptHint:
+        "Décrire l'image complète (sujet, décor, lumière, style) : le modèle dessine la zone en voyant le reste de la scène",
+      lorasHint:
+        "AnyPaint (le LoRA d'inpainting) est toujours appliqué en premier. Les LoRAs ajoutés (style, personnage) s'enchaînent après et n'agissent que sur la zone peinte",
+      budget: 'Résolution de travail',
+      budgetHint:
+        "Taille à laquelle l'image est calculée, en mégapixels. Krea 2 est entraîné autour de 1 MP ; plus haut est plus lent",
+      outputHint:
+        "Source : le rendu est remis à l'échelle et les pixels d'origine recollés hors de la zone, la photo garde toute sa définition. Travail : le rendu brut, à la résolution de travail",
+      seamHint:
+        "Bande le long du bord de la zone que le modèle redessine pour masquer le raccord, en pixels de travail. 32 est la valeur d'entraînement",
+      samplerHint:
+        "Garder euler : les samplers SDE (er_sde, dpmpp_sde…) cassent le lien avec le reste de l'image",
+    },
     t2p: {
       name: 'Texte → Prompt',
       description:

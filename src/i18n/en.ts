@@ -390,6 +390,28 @@ export default {
       samplerHint:
         'Keep euler: SDE samplers (er_sde, dpmpp_sde…) break the coherence of the extension',
     },
+    anypaintInpaint: {
+      name: 'Replace in context (Krea 2)',
+      description:
+        'Paint an area: it is redrawn inside the whole image, with the light and setting of the scene',
+      mask: 'Area to replace',
+      maskHint:
+        'Paint over the image. For a person, cover the whole body with room to spare: the new one can be wider than the old one',
+      promptPlaceholder: 'Describe the whole final image, not only the painted area…',
+      promptHint:
+        'Describe the complete image (subject, setting, light, style): the model draws the area while seeing the rest of the scene',
+      lorasHint:
+        'AnyPaint (the inpainting LoRA) is always applied first. Added LoRAs (style, character) are chained after it and only act on the painted area',
+      budget: 'Working resolution',
+      budgetHint:
+        'Size the image is rendered at, in megapixels. Krea 2 is trained around 1 MP; higher is slower',
+      outputHint:
+        'Source: the render is scaled back up and the original pixels pasted back outside the area, so the photo keeps its full definition. Working: the raw render, at the working resolution',
+      seamHint:
+        'Band along the edge of the area that the model redraws to hide the join, in working pixels. 32 is the trained value',
+      samplerHint:
+        'Keep euler: SDE samplers (er_sde, dpmpp_sde…) break the link with the rest of the image',
+    },
     t2p: {
       name: 'Text → Prompt',
       description:
