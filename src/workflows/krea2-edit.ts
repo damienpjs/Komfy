@@ -30,13 +30,51 @@
  * which is why the cheapest upscale method is enough. The wiring is the SAME
  * in every mode (no rewire, no bypass), so a render remixes back whichever
  * mode produced it.
+ *
+ * Two-image mode (`refs` select) puts a person into a scene, the composite
+ * the node pack is trained for: the source image (node 6) becomes the SCENE
+ * and still sets the output frame, node 15 holds the PERSON, plugged into the
+ * three `_b` sockets (pixel path of the patch + both grounded encodes). The
+ * order is the training order, scene first: swapping them degrades the
+ * result. The person is placed `beside` the canvas in position space (v2.0.0
+ * nodes): identity still flows, the layout pin is gone, so the person can be
+ * restaged inside the scene, while the scene stays `aligned`. In one-image
+ * mode node 15 is dropped and its three sockets unplugged (cf. bypassNodes),
+ * which is exactly the single-reference graph of the reference workflow.
+ *
+ * ref_boost stays at 1 by default on purpose. Any other value (person or
+ * scene dial) makes the node pass a dense attention bias to every block, and
+ * the attention then has to materialise heads × L² scores: Krea 2 has 48
+ * heads, L ≈ 8.7k tokens at 1 MP with one reference, so about 7 GB per call
+ * in bf16, roughly twice that with two references. Enough to take a 64 GB
+ * Mac down at 1 MP and above.
+ *
+ * Measured on a 64 GB M3 Max (ComfyUI 0.45.5, Krea 2 Turbo Q8_0 GGUF): with
+ * the default PyTorch attention, the two-image mode runs out of memory at
+ * 1 MP even at ref_boost 1 (the MPS attention materialises the scores
+ * anyway); with --use-split-cross-attention it renders with about 15 GB to
+ * spare, and the one-image edit is only ~13% slower. The bf16 model plus the
+ * identity LoRA does not fit either way: ComfyUI keeps the original weights
+ * of every patched layer next to the patched ones, so pick the GGUF.
  */
 
 import type { PromptGraph } from '../api/types';
 import type { SelectOption, WorkflowManifest } from './types';
 
-/** LoRA the edit is built around — applied first, not user-editable. */
-const IDENTITY_LORA = 'krea2/krea2_identity_edit_v1_2.safetensors';
+/**
+ * LoRA the edit is built around: applied first, not user-editable. V2
+ * splits the former single LoRA in two: Identity (restage a person: pose,
+ * scene, outfit, light, and person-into-scene composites) is the successor
+ * of the v1.2 file; General Edit V2 (removals, recolors, backgrounds) is a
+ * separate LoRA, not wired here.
+ */
+const IDENTITY_LORA = 'krea2/krea2_identity_edit_v2.safetensors';
+/** Fixed LoRA of the renders made before V2 (cf. LorasField.formerFixed). */
+const FORMER_IDENTITY_LORAS = ['krea2/krea2_identity_edit_v1_2.safetensors'];
+
+/** Krea2EditModelPatch placement options (v2.0.0 node pack). */
+const REF_ALIGNED = 'aligned (trained)';
+const REF_BESIDE = 'beside (right of target)';
 
 const graph: PromptGraph = {
   '1': {
@@ -74,7 +112,14 @@ const graph: PromptGraph = {
     inputs: {
       image: '',
     },
-    _meta: { title: 'Source image (the one being edited)' },
+    _meta: { title: 'Source image (the one being edited; the SCENE in two-image mode)' },
+  },
+  '15': {
+    class_type: 'LoadImage',
+    inputs: {
+      image: '',
+    },
+    _meta: { title: 'PERSON to place in the scene (two-image mode only)' },
   },
   '7': {
     class_type: 'VAEEncode',
@@ -119,9 +164,16 @@ const graph: PromptGraph = {
       // Same latent as KSampler.latent_image: lets the node encode the source
       // before sampling starts instead of pulling the VAE in mid-run.
       target_latent: ['8', 0],
+      // Second reference (the person), dropped in one-image mode.
+      source_image_b: ['15', 0],
       ref_boost: 1,
+      // Scene dial in two-image mode: kept neutral (cf. header, memory).
       ref_boost_a: 1,
       fit_mode: 'fit',
+      // Placement of the last reference (the person, or the only image) and
+      // of the scene; patched by the `refs` select.
+      ref_position: REF_ALIGNED,
+      ref_position_a: REF_ALIGNED,
     },
     _meta: { title: 'Krea2 Edit (source patch)' },
   },
@@ -130,6 +182,7 @@ const graph: PromptGraph = {
     inputs: {
       clip: ['3', 0],
       image: ['6', 0],
+      image_b: ['15', 0],
       prompt: '',
       grounding_px: 768,
       system_prompt: '',
@@ -141,6 +194,7 @@ const graph: PromptGraph = {
     inputs: {
       clip: ['3', 0],
       image: ['6', 0],
+      image_b: ['15', 0],
       prompt: '',
       grounding_px: 768,
       system_prompt: '',
@@ -155,13 +209,13 @@ const graph: PromptGraph = {
       negative: ['11', 0],
       latent_image: ['8', 0],
       seed: 0,
-      steps: 10,
+      steps: 8,
       cfg: 1.0,
       sampler_name: 'euler',
       scheduler: 'simple',
       denoise: 1.0,
     },
-    _meta: { title: 'Turbo sampler (10 steps, cfg 1)' },
+    _meta: { title: 'Turbo sampler (8 steps, cfg 1)' },
   },
   '13': {
     class_type: 'VAEDecode',
@@ -223,6 +277,39 @@ export const krea2Edit: WorkflowManifest = {
       target: { nodeId: '6', input: 'image' },
       required: true,
     },
+    // Ahead of the person image: in one-image mode it drops node 15, and the
+    // image field below then skips its missing target.
+    {
+      kind: 'select',
+      key: 'refs',
+      label: 'wf.edit.refs',
+      hint: 'wf.edit.refsHint',
+      defaultIndex: 0,
+      options: [
+        {
+          label: 'wf.edit.refsOne',
+          patches: [
+            { target: { nodeId: '9', input: 'ref_position' }, value: REF_ALIGNED },
+          ],
+          bypassNodes: ['15'],
+        },
+        {
+          label: 'wf.edit.refsTwo',
+          patches: [
+            { target: { nodeId: '9', input: 'ref_position' }, value: REF_BESIDE },
+          ],
+        },
+      ],
+    },
+    {
+      kind: 'image',
+      key: 'person',
+      label: 'wf.edit.personImage',
+      hint: 'wf.edit.personImageHint',
+      target: { nodeId: '15', input: 'image' },
+      showWhen: { key: 'refs', equals: 1 },
+      required: true,
+    },
     {
       kind: 'text',
       key: 'prompt',
@@ -263,6 +350,7 @@ export const krea2Edit: WorkflowManifest = {
       // The identity-edit LoRA opens the chain on every launch and is not
       // offered in the form (cf. LorasField.fixed).
       fixed: [{ name: IDENTITY_LORA, strength: 1 }],
+      formerFixed: FORMER_IDENTITY_LORAS,
       modelSource: { nodeId: '1', output: 0 },
       modelTargets: [{ nodeId: '9', input: 'model' }],
       defaultStrength: 0.4,
@@ -316,7 +404,8 @@ export const krea2Edit: WorkflowManifest = {
       key: 'steps',
       label: 'Steps',
       target: { nodeId: '12', input: 'steps' },
-      default: 10,
+      // V2 author's setting for Turbo (v1.2 was 10).
+      default: 8,
       min: 1,
       max: 60,
       integer: true,
