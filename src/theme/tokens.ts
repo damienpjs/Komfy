@@ -114,6 +114,13 @@ export const signature = {
   chip: '#22262a',
   chipBorder: '#393f45',
   track: '#323840',
+  accent: '#e7f950', // the K yellow: actions and progress on the slab
+  success: '#86d3a7',
+  danger: '#f39189',
+  warningText: '#f2c66b',
+  warningFill: '#352b1b',
+  dangerText: '#ffb0a8',
+  dangerFill: '#3a2421',
 } as const;
 
 /** Dot grid geometry, shared by every DotGrid. */

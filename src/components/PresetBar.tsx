@@ -21,9 +21,11 @@ interface Props {
   onApply: (preset: Preset) => void;
   /** The form's current preset values, for "Update with current settings". */
   capture: () => FieldValues;
+  /** Save the form as a new preset: a trailing chip, so the bar always shows. */
+  onSave?: () => void;
 }
 
-export function PresetBar({ workflowId, onApply, capture }: Props) {
+export function PresetBar({ workflowId, onApply, capture, onSave }: Props) {
   const styles = useStyles();
   const { colors } = useTheme();
   const { t } = useTranslation();
@@ -38,7 +40,7 @@ export function PresetBar({ workflowId, onApply, capture }: Props) {
     [presets],
   );
 
-  if (ordered.length === 0) return null;
+  if (ordered.length === 0 && !onSave) return null;
 
   const store = usePresets.getState;
 
@@ -125,6 +127,21 @@ export function PresetBar({ workflowId, onApply, capture }: Props) {
             </Text>
           </Pressable>
         ))}
+        {onSave && (
+          <Pressable
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.chip,
+              styles.saveChip,
+              pressed && { backgroundColor: colors.surfacePressed },
+            ]}
+            onPress={onSave}
+          >
+            <Text style={[styles.chipLabel, styles.saveLabel]} numberOfLines={1}>
+              + {t('presets.saveShort')}
+            </Text>
+          </Pressable>
+        )}
       </ScrollView>
 
       <PresetNameDialog
@@ -166,5 +183,13 @@ const useStyles = makeStyles((colors) => ({
     color: colors.text,
     fontFamily: typography.uiMedium,
     fontSize: typography.sizes.xs,
+  },
+  saveChip: {
+    borderStyle: 'dashed',
+    backgroundColor: 'transparent',
+  },
+  saveLabel: {
+    color: colors.accent,
+    fontFamily: typography.uiSemiBold,
   },
 }));

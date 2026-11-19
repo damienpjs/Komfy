@@ -1,6 +1,10 @@
 /** English resources (default language). Keep keys in sync with fr.ts. */
 
 export default {
+  preflight: {
+    twoRefs: 'Two images saturate memory with the default attention: start ComfyUI in split mode.',
+    refBoost: 'A ref_boost other than 1 needs several GB more: keep the canvas under 1 MP.',
+  },
   common: {
     cancel: 'Cancel',
     done: 'Done',
@@ -588,6 +592,24 @@ export default {
     failedTitle: 'Job failed ✗',
   },
   launch: {
+    view: 'View',
+    goToField: 'Show',
+    errorsSummary_one: '{{count}} field to fix',
+    errorsSummary_other: '{{count}} fields to fix',
+    images_one: 'image',
+    images_other: 'images',
+    countA11y: 'Image count: {{count}}. Change',
+    destinationA11y: 'Destination: {{path}}. Change',
+    countLess: 'One image less',
+    countMore: 'One image more',
+    distinctSeedsHint: 'Each image draws its own seed; a fixed seed counts up from itself.',
+    singleImageHint: 'One image per launch.',
+    advancedSummary_one: '{{count}} setting',
+    advancedSummary_other: '{{count}} settings',
+    advancedModified_one: '{{count}} changed',
+    advancedModified_other: '{{count}} changed',
+    hintMore: 'More',
+    hintLess: 'Less',
     advanced: 'Advanced settings',
     notFound: 'Workflow not found',
     launchFailed: 'Launch failed',
@@ -803,6 +825,7 @@ export default {
     pending: 'Generating…',
   },
   presets: {
+    saveShort: 'Save',
     fallback: 'My preset',
     title: 'Presets',
     apply: 'Apply preset: {{name}}',

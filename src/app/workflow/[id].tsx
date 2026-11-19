@@ -1,6 +1,8 @@
 /**
  * Launch screen: form generated from the workflow manifest, graph patch →
- * POST /prompt → toast + redirect to the Queue.
+ * POST /prompt → toast ("View" opens Activity); the form stays put so the
+ * next variation is one tap away. The launch bar is pinned under the form
+ * with the image count, the destination and the checks run before sending.
  * ComfyUI validation errors (400, node_errors) are displayed.
  */
 
@@ -31,7 +33,10 @@ import { ModelField } from '../../components/ModelField';
 import { ModelSourceField } from '../../components/ModelSourceField';
 import { OutpaintField } from '../../components/OutpaintField';
 import { OutputDirPicker } from '../../components/OutputDirPicker';
+import { CountSheet, BATCH_MAX } from '../../components/CountSheet';
 import { FamilySwitch } from '../../components/FamilySwitch';
+import { FieldHint } from '../../components/FieldHint';
+import { LaunchBar, type PreflightItem } from '../../components/LaunchBar';
 import { PresetBar } from '../../components/PresetBar';
 import { PresetNameDialog } from '../../components/PresetNameDialog';
 import { PromptField } from '../../components/PromptField';
@@ -58,7 +63,8 @@ import {
   accessoryId,
   KEYBOARD_ACCESSORY_ID,
 } from '../../utils/formAccessory';
-import { useNodeInfo } from '../../hooks/useAvailability';
+import { useAvailability, useNodeInfo } from '../../hooks/useAvailability';
+import { memoryWarnings } from '../../workflows/preflight';
 import type { SourceSeeds } from '../../workflows/match';
 import { pickVariantFile, variantOf } from '../../workflows/modelVariant';
 import { initialOutpaintValue } from '../../workflows/outpaint';
@@ -93,9 +99,6 @@ import type {
 } from '../../workflows/types';
 
 
-// Image count shortcuts (usual grids) offered as chips.
-const BATCH_PRESETS = [1, 2, 4, 9, 16, 25];
-const BATCH_MAX = 100;
 
 /**
  * Positive-prompt field key — the one a saved prompt can be dropped into.
@@ -252,6 +255,15 @@ export default function WorkflowLaunchScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [dirPickerOpen, setDirPickerOpen] = useState(false);
   const [savingPreset, setSavingPreset] = useState(false);
+  const [countSheetOpen, setCountSheetOpen] = useState(false);
+  const availability = useAvailability();
+  /** Each field block's offset in the scroll content (scroll to an error). */
+  const fieldY = useRef<Record<string, number>>({});
+  /** Pristine values (no prefill, no remembered prefs): what "modified" means. */
+  const defaults = useMemo(
+    () => initialValues(manifest?.fields ?? []),
+    [manifest],
+  );
   // Advanced settings (fields flagged `advanced`): folded by default.
   const [advancedOpen, setAdvancedOpen] = useState(false);
   // A zone card is being dragged: the page must hold still under it, or the
@@ -322,34 +334,6 @@ export default function WorkflowLaunchScreen() {
   const setBatchPref = useBatchPrefs((s) => s.setCount);
   const applyCount = (n: number) =>
     setBatchPref(Math.max(1, Math.min(BATCH_MAX, Math.round(n))));
-  // Raw text of the editable field; null = show the store value.
-  const [countText, setCountText] = useState<string | null>(null);
-
-  // Held +/- press: instead of a fixed step of 1 per tap, the increment
-  // accelerates with hold duration (short tap = ±1, long press = ±10).
-  const holdTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const stopHold = () => {
-    if (holdTimer.current) {
-      clearInterval(holdTimer.current);
-      holdTimer.current = null;
-    }
-  };
-  const startHold = (dir: 1 | -1) => {
-    stopHold();
-    setCountText(null);
-    const start = Date.now();
-    const stepFor = (ms: number) =>
-      ms < 1500 ? 1 : ms < 3000 ? 2 : ms < 5000 ? 5 : 10;
-    applyCount(useBatchPrefs.getState().count + dir); // immediate first step
-    holdTimer.current = setInterval(() => {
-      const cur = useBatchPrefs.getState().count;
-      applyCount(cur + dir * stepFor(Date.now() - start));
-      // Limit reached: no point in keeping the interval running.
-      if ((dir < 0 && cur <= 1) || (dir > 0 && cur >= BATCH_MAX)) stopHold();
-    }, 140);
-  };
-  useEffect(() => stopHold, []);
-
   const outputDir =
     useOutputPrefs((s) => s.dirs[manifest?.id ?? '']) ?? DEFAULT_OUTPUT_DIR;
   const setOutputDir = useOutputPrefs((s) => s.setDir);
@@ -414,7 +398,6 @@ export default function WorkflowLaunchScreen() {
     const commit = () => {
       store.save(manifest.id, name, snapshot);
       setSavingPreset(false);
-      useCatalogPrefs.getState().markLaunched(manifest.id);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast(t('presets.saved', { name }));
     };
@@ -436,6 +419,10 @@ export default function WorkflowLaunchScreen() {
     const validationErrors = validate(manifest, values);
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      // After the re-render: an error in a folded advanced field unfolds it.
+      const first = orderedFields.find((f) => validationErrors[f.key]);
+      if (first) setTimeout(() => scrollToField(first.key), 80);
       return;
     }
     setSubmitting(true);
@@ -496,19 +483,48 @@ export default function WorkflowLaunchScreen() {
         const res = await client.postPrompt(graph, clientId);
         firstNumber ??= res.number;
       }
+      useCatalogPrefs.getState().markLaunched(manifest.id);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast(
         batchCount > 1
           ? t('launch.jobsQueued', { count: batchCount, number: firstNumber })
           : t('launch.jobQueued', { number: firstNumber }),
+        'success',
+        {
+          label: t('launch.view'),
+          onPress: () => router.navigate('/activity' as Href),
+        },
       );
-      router.replace('/activity' as Href);
     } catch (e) {
       Alert.alert(t('launch.launchFailed'), comfyErrorMessage(e));
     } finally {
       setSubmitting(false);
     }
   };
+
+  const scrollToField = (key: string) => {
+    const y = fieldY.current[key];
+    if (y != null) scrollRef.current?.scrollTo({ y: Math.max(0, y - 12), animated: true });
+  };
+
+  const errorKeys = orderedFields.map((f) => f.key).filter((k) => !!errors[k]);
+  const preflight: PreflightItem[] = [];
+  if (errorKeys.length > 0) {
+    preflight.push({
+      kind: 'error',
+      text: t('launch.errorsSummary', { count: errorKeys.length }),
+      actionLabel: t('launch.goToField'),
+      onAction: () => scrollToField(errorKeys[0]),
+    });
+  }
+  for (const warning of memoryWarnings(manifest.id, values)) {
+    preflight.push({ kind: 'warn', text: t(warning.message) });
+  }
+
+  const missing = availability?.[manifest.id];
+  const advancedModified = advancedFields.filter(
+    (f) => JSON.stringify(values[f.key]) !== JSON.stringify(defaults[f.key]),
+  ).length;
 
   return (
     <View style={{ flex: 1 }} ref={pageRef} onLayout={measureViewport}>
@@ -544,10 +560,34 @@ export default function WorkflowLaunchScreen() {
 
         <FamilySwitch manifest={manifest} values={values} />
 
+        {missing && !missing.ok && (
+          <View style={styles.missingBanner} accessibilityRole="alert">
+            <Ionicons name="warning-outline" size={18} color={colors.warning} />
+            <View style={styles.missingText}>
+              <Text style={styles.missingTitle}>{t('availability.title')}</Text>
+              {missing.missingNodes.length > 0 && (
+                <Text style={styles.missingBody}>
+                  {t('availability.missingNodes', {
+                    list: missing.missingNodes.join('\n'),
+                  })}
+                </Text>
+              )}
+              {missing.missingValues.length > 0 && (
+                <Text style={styles.missingBody}>
+                  {t('availability.missingModels', {
+                    list: [...new Set(missing.missingValues.map((v) => v.value))].join('\n'),
+                  })}
+                </Text>
+              )}
+            </View>
+          </View>
+        )}
+
         <PresetBar
           workflowId={manifest.id}
           onApply={applyPreset}
           capture={capturePreset}
+          onSave={() => setSavingPreset(true)}
         />
 
         {orderedFields.map((field) => {
@@ -568,9 +608,18 @@ export default function WorkflowLaunchScreen() {
                     size={16}
                     color={colors.accent}
                   />
-                  <Text style={styles.advancedToggleText}>
-                    {t('launch.advanced')}
-                  </Text>
+                  <View style={styles.advancedTexts}>
+                    <Text style={styles.advancedToggleText}>
+                      {t('launch.advanced')}
+                    </Text>
+                    <Text style={styles.advancedSummary}>
+                      {t('launch.advancedSummary', { count: advancedFields.length })}
+                      {advancedModified > 0
+                        ? ` · ${t('launch.advancedModified', { count: advancedModified })}`
+                        : ''}
+                    </Text>
+                  </View>
+                  {advancedModified > 0 && <View style={styles.modifiedDot} />}
                 </Pressable>
                 {showAdvanced &&
                   variantFields.map(
@@ -607,7 +656,12 @@ export default function WorkflowLaunchScreen() {
           return (
           <Fragment key={field.key}>
           {advancedHeader}
-          <View style={styles.fieldBlock}>
+          <View
+            style={styles.fieldBlock}
+            onLayout={(e) => {
+              fieldY.current[field.key] = e.nativeEvent.layout.y;
+            }}
+          >
             <Text style={styles.label}>{t(field.label)}</Text>
 
             {field.kind === 'zones' && (
@@ -986,9 +1040,7 @@ export default function WorkflowLaunchScreen() {
               </View>
             )}
 
-            {field.hint && !errors[field.key] && (
-              <Text style={styles.hint}>{t(field.hint)}</Text>
-            )}
+            {field.hint && !errors[field.key] && <FieldHint text={t(field.hint)} />}
             {!!errors[field.key] && (
               <Text style={styles.fieldError}>{errors[field.key]}</Text>
             )}
@@ -996,141 +1048,6 @@ export default function WorkflowLaunchScreen() {
           </Fragment>
           );
         })}
-
-        {!isTextResult && (
-        <View style={styles.fieldBlock}>
-          <Text style={styles.label}>{t('launch.imageCount')}</Text>
-          <View style={styles.batchRow}>
-            <Pressable
-              style={({ pressed }) => [
-                styles.batchBtn,
-                pressed && { backgroundColor: colors.surfacePressed },
-                batchCount <= 1 && { opacity: 0.4 },
-              ]}
-              disabled={batchCount <= 1}
-              onPressIn={() => startHold(-1)}
-              onPressOut={stopHold}
-            >
-              <Ionicons name="remove" size={20} color={colors.text} />
-            </Pressable>
-            <TextInput
-              style={styles.batchValue}
-              keyboardType="number-pad"
-              selectTextOnFocus
-              maxLength={3}
-              value={countText ?? String(batchCount)}
-              onFocus={() => setCountText(String(batchCount))}
-              onChangeText={(text) => {
-                setCountText(text);
-                const n = parseInt(text, 10);
-                if (Number.isFinite(n)) applyCount(n);
-              }}
-              onBlur={() => setCountText(null)}
-              inputAccessoryViewID={accessoryId}
-            />
-            <Pressable
-              style={({ pressed }) => [
-                styles.batchBtn,
-                pressed && { backgroundColor: colors.surfacePressed },
-                batchCount >= BATCH_MAX && { opacity: 0.4 },
-              ]}
-              disabled={batchCount >= BATCH_MAX}
-              onPressIn={() => startHold(1)}
-              onPressOut={stopHold}
-            >
-              <Ionicons name="add" size={20} color={colors.text} />
-            </Pressable>
-            <Text style={styles.batchHint}>
-              {batchCount > 1 ? t('launch.distinctSeeds') : ''}
-            </Text>
-          </View>
-          <View style={styles.batchPresets}>
-            {BATCH_PRESETS.map((preset) => {
-              const active = batchCount === preset;
-              return (
-                <Pressable
-                  key={preset}
-                  style={({ pressed }) => [
-                    styles.batchChip,
-                    active && styles.batchChipActive,
-                    pressed &&
-                      !active && { backgroundColor: colors.surfacePressed },
-                  ]}
-                  onPress={() => {
-                    setCountText(null);
-                    applyCount(preset);
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.batchChipText,
-                      active && styles.batchChipTextActive,
-                    ]}
-                  >
-                    {preset}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-        )}
-
-        {!isTextResult && (
-        <View style={styles.fieldBlock}>
-          <Text style={styles.label}>{t('launch.destination')}</Text>
-          <Pressable
-            style={({ pressed }) => [
-              styles.destRow,
-              pressed && { backgroundColor: colors.surfacePressed },
-            ]}
-            onPress={() => setDirPickerOpen(true)}
-          >
-            <Ionicons name="folder-outline" size={18} color={colors.warning} />
-            <Text style={styles.destPath} numberOfLines={1}>
-              output/{outputDir === '' ? '' : `${outputDir}/`}
-            </Text>
-            <Ionicons
-              name="chevron-forward"
-              size={16}
-              color={colors.textDisabled}
-            />
-          </Pressable>
-        </View>
-        )}
-
-        {/* In the form, not the header: the connection badge (AppShell) owns
-            the top-right corner of every screen. */}
-        <Pressable
-          style={({ pressed }) => [
-            styles.presetBtn,
-            pressed && { backgroundColor: colors.surfacePressed },
-          ]}
-          onPress={() => setSavingPreset(true)}
-          accessibilityRole="button"
-        >
-          <Ionicons name="bookmark-outline" size={18} color={colors.text} />
-          <Text style={styles.presetBtnText}>{t('presets.save')}</Text>
-        </Pressable>
-
-        <Pressable
-          style={({ pressed }) => [
-            styles.launchBtn,
-            pressed && { backgroundColor: colors.brandPressed },
-            submitting && { opacity: 0.4 },
-          ]}
-          onPress={launch}
-          disabled={submitting}
-        >
-          <Ionicons name="play" size={18} color={colors.onBrand} />
-          <Text style={styles.launchText}>
-            {submitting
-              ? t('launch.launching')
-              : !isTextResult && batchCount > 1
-                ? t('launch.launchX', { count: batchCount })
-                : t('launch.launch')}
-          </Text>
-        </Pressable>
 
         <PresetNameDialog
           visible={savingPreset}
@@ -1150,6 +1067,29 @@ export default function WorkflowLaunchScreen() {
           onClose={() => setDirPickerOpen(false)}
         />
       </ScrollView>
+
+      <LaunchBar
+        batch={
+          isTextResult
+            ? undefined
+            : {
+                count: batchCount,
+                onCountPress: () => setCountSheetOpen(true),
+                destination: `${outputDir === '' ? 'output' : outputDir}/`,
+                onDestinationPress: () => setDirPickerOpen(true),
+              }
+        }
+        submitting={submitting}
+        onLaunch={launch}
+        preflight={preflight}
+      />
+
+      <CountSheet
+        visible={countSheetOpen}
+        count={batchCount}
+        onChange={applyCount}
+        onClose={() => setCountSheetOpen(false)}
+      />
 
       {/* Dragged zone card: where it stands, pinned to the screen — the list
           under the finger scrolls, this does not. */}
@@ -1400,116 +1340,41 @@ const useStyles = makeStyles((colors) => ({
     fontFamily: typography.mono,
     fontSize: typography.sizes.sm,
   },
-  batchPresets: {
+  missingBanner: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    marginTop: spacing.md,
-  },
-  batchChip: {
-    minWidth: MIN_TOUCH_TARGET,
-    minHeight: MIN_TOUCH_TARGET,
-    paddingHorizontal: spacing.md,
+    gap: spacing.sm + 2,
+    padding: spacing.md - 4,
     borderRadius: radii.md,
-    borderColor: colors.border,
-    borderWidth: 1,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.warningSoft,
   },
-  batchChipActive: {
-    backgroundColor: colors.accentSoft,
-    borderColor: colors.accent,
-  },
-  batchChipText: {
-    color: colors.textMuted,
-    fontFamily: typography.mono,
-    fontSize: typography.sizes.md,
-  },
-  batchChipTextActive: {
-    color: colors.accent,
-  },
-  batchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  batchBtn: {
-    width: MIN_TOUCH_TARGET,
-    height: MIN_TOUCH_TARGET,
-    borderRadius: radii.md,
-    borderColor: colors.border,
-    borderWidth: 1,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  batchValue: {
-    color: colors.text,
-    fontFamily: typography.mono,
-    fontSize: typography.sizes.lg,
-    minWidth: 56,
-    minHeight: MIN_TOUCH_TARGET,
-    textAlign: 'center',
-    borderRadius: radii.md,
-    borderColor: colors.border,
-    borderWidth: 1,
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.sm,
-  },
-  batchHint: {
+  missingText: {
     flex: 1,
-    color: colors.textDisabled,
-    fontFamily: typography.ui,
-    fontSize: typography.sizes.xs,
+    gap: spacing.xs,
   },
-  destRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    minHeight: MIN_TOUCH_TARGET,
-  },
-  destPath: {
-    flex: 1,
-    color: colors.text,
-    fontFamily: typography.mono,
-    fontSize: typography.sizes.sm,
-  },
-  presetBtn: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    minHeight: MIN_TOUCH_TARGET,
-    borderRadius: radii.md,
-    borderColor: colors.border,
-    borderWidth: 1,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: spacing.sm,
-  },
-  presetBtnText: {
+  missingTitle: {
     color: colors.text,
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.sm,
   },
-  launchBtn: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    minHeight: MIN_TOUCH_TARGET + 4,
-    borderRadius: radii.md,
-    backgroundColor: colors.brand, // main CTA in neon yellow (style guide)
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: spacing.sm,
+  missingBody: {
+    color: colors.text,
+    fontFamily: typography.ui,
+    fontSize: 13,
+    lineHeight: 18,
   },
-  launchText: {
-    color: colors.onBrand,
-    fontFamily: typography.uiBold,
-    fontSize: typography.sizes.md,
+  advancedTexts: {
+    flex: 1,
+    gap: 2,
+  },
+  advancedSummary: {
+    color: colors.textMuted,
+    fontFamily: typography.mono,
+    fontSize: typography.sizes.xs,
+  },
+  modifiedDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.accent,
   },
 }));

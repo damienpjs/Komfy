@@ -1,6 +1,10 @@
 /** Ressources françaises. Garder les clés synchronisées avec en.ts. */
 
 export default {
+  preflight: {
+    twoRefs: 'Deux images saturent la mémoire en attention standard : lancer ComfyUI en mode split.',
+    refBoost: 'Un ref_boost différent de 1 demande plusieurs Go de plus : rester sous 1 MP de canvas.',
+  },
   common: {
     cancel: 'Annuler',
     done: 'Terminé',
@@ -597,6 +601,24 @@ export default {
     failedTitle: 'Job échoué ✗',
   },
   launch: {
+    view: 'Voir',
+    goToField: 'Voir',
+    errorsSummary_one: '{{count}} champ à compléter',
+    errorsSummary_other: '{{count}} champs à compléter',
+    images_one: 'image',
+    images_other: 'images',
+    countA11y: "Nombre d'images : {{count}}. Modifier",
+    destinationA11y: 'Destination : {{path}}. Modifier',
+    countLess: 'Une image de moins',
+    countMore: 'Une image de plus',
+    distinctSeedsHint: 'Chaque image tire son propre seed ; un seed fixe s’incrémente à partir de lui.',
+    singleImageHint: 'Une image par lancement.',
+    advancedSummary_one: '{{count}} réglage',
+    advancedSummary_other: '{{count}} réglages',
+    advancedModified_one: '{{count}} modifié',
+    advancedModified_other: '{{count}} modifiés',
+    hintMore: 'Plus',
+    hintLess: 'Moins',
     advanced: 'Configuration avancée',
     notFound: 'Workflow introuvable',
     launchFailed: 'Échec du lancement',
@@ -812,6 +834,7 @@ export default {
     pending: 'Génération en cours…',
   },
   presets: {
+    saveShort: 'Enregistrer',
     fallback: 'Mon preset',
     title: 'Presets',
     apply: 'Appliquer le preset : {{name}}',
