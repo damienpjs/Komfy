@@ -6,7 +6,8 @@
  * shows a mode switch to its siblings.
  */
 
-import type { WorkflowIconKey } from '../components/WorkflowIcon';
+import { isWorkflowIconKey, type WorkflowIconKey } from '../components/WorkflowIcon';
+import { getAnyWorkflow } from './registry';
 
 export interface FamilyMember {
   manifestId: string;
@@ -140,7 +141,11 @@ export function isFamily(entry: CatalogEntry): boolean {
 /** Icon of a manifest; imported workflows get the node-graph icon. */
 export function iconOf(manifestId: string): WorkflowIconKey {
   const entry = entryOf(manifestId);
-  return entry?.members.find((m) => m.manifestId === manifestId)?.icon ?? 'graph';
+  const member = entry?.members.find((m) => m.manifestId === manifestId);
+  if (member) return member.icon;
+  // Imported workflow: the icon picked at import, if it is one of ours.
+  const icon = getAnyWorkflow(manifestId)?.icon;
+  return icon && isWorkflowIconKey(icon) ? icon : 'graph';
 }
 
 /**

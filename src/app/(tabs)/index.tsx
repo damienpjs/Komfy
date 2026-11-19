@@ -270,7 +270,7 @@ export default function CreateScreen() {
               renderRow({
                 key: m.id,
                 manifestId: m.id,
-                icon: 'graph',
+                icon: iconOf(m.id),
                 name: t(m.name),
                 description: t(m.description),
                 onLongPress: () => customMenu(m.id, t(m.name)),

@@ -34,6 +34,20 @@ export type WorkflowIconKey =
   | 'import'
   | 'graph';
 
+/** Icons an imported workflow can pick (the import arrow is the action, not a workflow). */
+export const PICKABLE_ICONS: WorkflowIconKey[] = [
+  'graph', 't2i', 'i2i', 'edit', 'depth', 'repaint', 'context', 'drawReplace',
+  'inpaint', 'detect', 'outpaint', 'upscale', 'video', 't2v', 'i2v', 'flf',
+  'prompt', 'idea2prompt', 'img2prompt',
+];
+
+const KEYS = new Set<string>([...PICKABLE_ICONS, 'import']);
+
+/** Manifests imported before icons existed hold an Ionicons name. */
+export function isWorkflowIconKey(value: string): value is WorkflowIconKey {
+  return KEYS.has(value);
+}
+
 interface Props {
   name: WorkflowIconKey;
   color: string;

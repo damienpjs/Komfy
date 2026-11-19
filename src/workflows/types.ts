@@ -9,6 +9,7 @@
  */
 
 import type { Ionicons } from '@expo/vector-icons';
+import type { WorkflowIconKey } from '../components/WorkflowIcon';
 import type { PromptGraph } from '../api/types';
 
 /** Target of a patch: a graph node's input. */
@@ -538,7 +539,11 @@ export interface WorkflowManifest {
   id: string;
   name: string;
   description: string;
-  icon: keyof typeof Ionicons.glyphMap;
+  /**
+   * A workflow icon key (WorkflowIcon). Imports made before the redesign
+   * hold an Ionicons name instead, drawn as the graph icon.
+   */
+  icon: keyof typeof Ionicons.glyphMap | WorkflowIconKey;
   /** Graph in API format (Save (API Format)), never mutated directly. */
   graph: PromptGraph;
   fields: WorkflowField[];
