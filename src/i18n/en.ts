@@ -299,6 +299,16 @@ export default {
       lastFrameOff: 'Off',
       lastFrameOn: 'Save',
     },
+    ltxRefs: {
+      ref1: "Character reference (optional)",
+      ref2: "Second reference",
+      ref3: "Third reference",
+      hint: "1 to 3 photos of the same character (face close-up, full body, profile), laid out on a black reference sheet that guides the whole clip. For best results, start the prompt with \"Reference sheet: <what the photos show>\" then \"Generated video: <the action>\". Trained on 5 s clips at 24 fps",
+      lora: "References: LoRA strength",
+      loraHint: "Strength of the Ingredients IC-LoRA. Lightricks suggests 1 on LTX 2.5",
+      guide: "References: guide strength",
+      guideHint: "How strongly the reference sheet steers the frames (0 to 1)",
+    },
     ltx25: {
       t2vName: "Text → Video + audio (LTX 2.5)",
       t2vDescription: "Generates a clip with synced audio from a prompt. LTX 2.5 through MLX, the fast path on Apple Silicon",
