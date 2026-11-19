@@ -26,11 +26,12 @@ interface FieldBase {
   /**
    * Conditional visibility: the field is shown only while another field's
    * value equals `equals` (e.g. the distilled-LoRA strengths, revealed only
-   * when the `distilled` toggle is On). Hidden fields are still patched at
+   * when the `distilled` toggle is On), or, with `filled`, once that field
+   * holds a value (e.g. the second reference photo, offered after the first). Hidden fields are still patched at
    * launch — a select that hides one typically also removes its target node,
    * making the value moot (cf. patch.ts passthroughBypass + the number guard).
    */
-  showWhen?: { key: string; equals: string | number };
+  showWhen?: { key: string; equals: string | number } | { key: string; filled: true };
   /**
    * Advanced setting: rendered after the other fields, folded behind an
    * "Advanced settings" toggle (unfolded automatically when one of them
@@ -308,6 +309,14 @@ export interface ImageField extends FieldBase {
   kind: 'image';
   target: PatchTarget;
   required?: boolean;
+  /**
+   * Optional image left empty: its LoadImage node is removed at launch and
+   * every input reading it is unplugged, instead of sending an empty
+   * filename the server would reject. The consumer's socket must therefore
+   * be optional (e.g. the reference photos of the LTX character sheet).
+   * On remix, the missing node is expected, not a mismatch.
+   */
+  omitWhenEmpty?: boolean;
 }
 
 /**
@@ -580,3 +589,14 @@ export type FieldValues = Record<
   | ModelSourceValue
   | OutpaintValue
 >;
+
+/** Whether a field is shown (and validated) given the current form values. */
+export function isFieldShown(field: WorkflowField, values: FieldValues): boolean {
+  const cond = field.showWhen;
+  if (!cond) return true;
+  if ('filled' in cond) {
+    const v = values[cond.key];
+    return v != null && v !== '';
+  }
+  return values[cond.key] === cond.equals;
+}
