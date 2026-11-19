@@ -17,6 +17,18 @@ One node class covers the three Komfy workflows: no image = text to video,
 `first_image` = image to video, `first_image` + `last_image` = first/last
 frame (`--image PATH 0 S --image PATH last S`).
 
+Character references (optional `ref_1`..`ref_3`): the photos are laid out on
+a reference sheet (reference_sheet.py), looped into a static video at the
+output size, and the render switches to `ltx-2-mlx ic-lora` with the
+Ingredients IC-LoRA and that video as `--video-conditioning`. Text to video
+only: with a start image the clip leaves it after frame 0, so the node
+refuses the combination. `mode`, `negative_prompt`, `audio=False` and
+`tile_frames` do not apply there. ic-lora runs Lightricks' Ingredients recipe:
+one stage at full size on the dev transformer with the pack's distilled LoRA
+fused at 0.5 (measured on 0.18 with a 2.5 pack: the default distilled
+two-stage plan gives a mosaic, the distilled single stage copies the sheet).
+It always renders audio. Needs ltx-2-mlx 0.17+ for IC-LoRA on 2.5 packs.
+
 Configuration (environment of the ComfyUI process, all optional):
   KOMFY_LTX_MLX_BIN    path to the ltx-2-mlx executable
                        (default ~/ltx-2-mlx/.venv/bin/ltx-2-mlx)
@@ -44,8 +56,13 @@ import comfy.model_management as mm
 import comfy.utils
 import folder_paths
 
+from .reference_sheet import build_sheet, tensor_to_uint8
+
 HOME = os.path.expanduser("~")
 DEFAULT_BIN = os.path.join(HOME, "ltx-2-mlx", ".venv", "bin", "ltx-2-mlx")
+# Ingredients was trained on 121-frame clips: the length used when the
+# duration is left to the prompt (ic-lora has no predicted duration).
+REFS_DEFAULT_SECONDS = 5.0
 NO_PACK = "(no LTX MLX pack found)"
 NO_LORA = "None"
 # A pack folder carries one of these next to its safetensors (the pitfall
@@ -219,6 +236,48 @@ def _count_frames(path, env):
         return None
 
 
+def _default_ingredients(loras):
+    for name in loras:
+        low = name.lower()
+        if "ingredients" in low and "2.5" in low:
+            return name
+    return NO_LORA
+
+
+def _dev_recipe(pack):
+    """ic-lora flags of the Ingredients recipe for a pack: single stage, dev
+    transformer, the pack's distilled LoRA at 0.5."""
+    dev = os.path.join(pack, "transformer-dev.safetensors")
+    distilled = sorted(glob.glob(os.path.join(pack, "*distilled-lora*.safetensors")))
+    if not os.path.isfile(dev) or not distilled:
+        raise RuntimeError(
+            f"Character references need the pack's transformer-dev.safetensors and its "
+            f"distilled LoRA (*distilled-lora*.safetensors) in {pack}"
+        )
+    return ["--single-stage", "--dev-transformer", "transformer-dev.safetensors",
+            "--distilled-lora", distilled[0], "--distilled-lora-strength", "0.5"]
+
+
+def _sheet_video(refs, width, height, frames, fps, folder, env):
+    """Writes the reference sheet as a static mp4 of `frames` frames."""
+    ffmpeg = shutil.which("ffmpeg", path=env["PATH"])
+    if not ffmpeg:
+        raise RuntimeError("ffmpeg not found: needed to build the reference video")
+    sheet = build_sheet([tensor_to_uint8(r) for r in refs], width, height)
+    png = os.path.join(folder, "sheet.png")
+    Image.fromarray(sheet).save(png)
+    mp4 = os.path.join(folder, "sheet.mp4")
+    res = subprocess.run(
+        [ffmpeg, "-y", "-v", "error", "-loop", "1", "-framerate", str(fps), "-i", png,
+         "-frames:v", str(frames), "-c:v", "libx264", "-preset", "veryfast", "-crf", "12",
+         "-pix_fmt", "yuv420p", mp4],
+        capture_output=True, text=True, env=env,
+    )
+    if res.returncode != 0 or not os.path.isfile(mp4):
+        raise RuntimeError("Could not encode the reference video:\n" + res.stderr[-800:])
+    return mp4
+
+
 def _extract_frame(video, index, png, env):
     ffmpeg = shutil.which("ffmpeg", path=env["PATH"])
     if not ffmpeg:
@@ -286,6 +345,18 @@ class KomfyLTX25MLX:
             "optional": {
                 "first_image": ("IMAGE",),
                 "last_image": ("IMAGE",),
+                "ref_1": ("IMAGE", {"tooltip": "Character reference photo: switches the render to the Ingredients IC-LoRA"}),
+                "ref_2": ("IMAGE",),
+                "ref_3": ("IMAGE",),
+                # A path under models/loras, not a list: a combo would make the
+                # server reject every render when the gated LoRA is not installed,
+                # even without references. Resolved only when a photo is plugged.
+                "ingredients_lora": ("STRING", {"default": _default_ingredients(loras)}),
+                "ingredients_strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05}),
+                "reference_strength": ("FLOAT", {
+                    "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.05,
+                    "tooltip": "Strength of the reference sheet video (ic-lora --video-conditioning)",
+                }),
             },
         }
 
@@ -297,7 +368,8 @@ class KomfyLTX25MLX:
     def generate(self, model_pack, prompt, negative_prompt, mode, width, height, fit_to_image,
                  duration, frame_rate, seed, first_strength, last_strength, lora_name,
                  lora_strength, audio, low_ram, tile_frames, save_last_frame, filename_prefix,
-                 first_image=None, last_image=None):
+                 first_image=None, last_image=None, ref_1=None, ref_2=None, ref_3=None,
+                 ingredients_lora=NO_LORA, ingredients_strength=1.0, reference_strength=1.0):
         packs = _discover_packs()
         if model_pack not in packs:
             raise RuntimeError(
@@ -312,6 +384,13 @@ class KomfyLTX25MLX:
             raise ValueError("The prompt is empty")
         if last_image is not None and first_image is None:
             raise ValueError("A last image needs a first image")
+        refs = [r for r in (ref_1, ref_2, ref_3) if r is not None]
+        if refs and ingredients_lora.strip() in ("", NO_LORA):
+            raise ValueError("Character references need the Ingredients IC-LoRA (ingredients_lora)")
+        if refs and first_image is not None:
+            # Measured on 0.18: with a start image the clip leaves it after
+            # frame 0 and films the sheet. Fail before a 13-minute render.
+            raise ValueError("Character references work in text to video only: remove the first image")
 
         # Every mode except one_stage samples stage 1 at half resolution,
         # whose sides must stay multiples of 32: full size in multiples of 64.
@@ -334,8 +413,15 @@ class KomfyLTX25MLX:
 
         tmpdir = tempfile.mkdtemp(prefix="komfy-ltx-", dir=folder_paths.get_temp_directory())
         try:
-            cmd = [
-                binary, "generate", "--" + mode.replace("_", "-"),
+            env = _child_env()
+            frames = _frames_for(duration, frame_rate) if duration > 0 else None
+            if refs and frames is None:
+                frames = _frames_for(REFS_DEFAULT_SECONDS, frame_rate)
+            if refs:
+                cmd = [binary, "ic-lora"] + _dev_recipe(packs[model_pack])
+            else:
+                cmd = [binary, "generate", "--" + mode.replace("_", "-")]
+            cmd += [
                 "--model", packs[model_pack],
                 "--prompt", prompt,
                 "-H", str(h), "-W", str(w),
@@ -343,29 +429,34 @@ class KomfyLTX25MLX:
                 "--seed", str(seed),
                 "--output", out_path,
             ]
-            frames = _frames_for(duration, frame_rate) if duration > 0 else None
             if frames:
                 cmd += ["--frames", str(frames)]
             if first_image is not None:
                 cmd += ["--image", _save_png(first_image[0], tmpdir, "first.png"), "0", f"{first_strength:g}"]
             if last_image is not None:
                 cmd += ["--image", _save_png(last_image[0], tmpdir, "last.png"), "last", f"{last_strength:g}"]
-            if negative_prompt.strip() and mode != "distilled":
+            if refs:
+                ingredients = folder_paths.get_full_path("loras", ingredients_lora.strip())
+                if not ingredients:
+                    raise RuntimeError(f"Ingredients IC-LoRA '{ingredients_lora}' not found in models/loras")
+                cmd += ["--lora", ingredients, f"{ingredients_strength:g}"]
+                sheet = _sheet_video(refs, w, h, frames, frame_rate, tmpdir, env)
+                cmd += ["--video-conditioning", sheet, f"{reference_strength:g}"]
+            elif negative_prompt.strip() and mode != "distilled":
                 cmd += ["--negative-prompt", negative_prompt]
             if lora_name != NO_LORA:
                 cmd += ["--lora", folder_paths.get_full_path("loras", lora_name), f"{lora_strength:g}"]
-            if not audio:
+            if not audio and not refs:
                 cmd += ["--no-audio"]
             if low_ram:
                 cmd += ["--low-ram"]
-            if tile_frames > 1:
+            if tile_frames > 1 and not refs:
                 cmd += ["--tile-frames", str(tile_frames)]
 
             print("[komfy-ltx-mlx] " + shlex.join(cmd))
             mm.unload_all_models()
             mm.soft_empty_cache()
 
-            env = _child_env()
             self._run(cmd, env, tmpdir)
 
             if not os.path.isfile(out_path):

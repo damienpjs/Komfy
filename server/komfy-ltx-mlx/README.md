@@ -8,7 +8,8 @@ and remix keep working.
 Why not run LTX 2.5 inside ComfyUI directly? On a Mac, PyTorch MPS is about
 16× slower than the MLX port for the same render. This node delegates the
 generation to the [`ltx-2-mlx`](https://github.com/dgrauet/ltx-2-mlx) CLI
-(0.16.0+, which covers LTX 2.5 packs) in a separate process:
+(0.18.0+: LTX 2.5 packs, and IC-LoRA on 2.5 for the character references) in
+a separate process:
 
 1. ComfyUI unloads its own models (the 22B pack needs the unified memory);
 2. `ltx-2-mlx generate …` runs in its own virtualenv and returns all its
@@ -32,6 +33,41 @@ generation to the [`ltx-2-mlx`](https://github.com/dgrauet/ltx-2-mlx) CLI
 | `lora_name` | Any file in `models/loras` (e.g. a character LoRA), or `None` |
 | `low_ram` / `tile_frames` | Memory levers for long or large clips |
 | `save_last_frame` | Writes the last clean frame (the one before last with an end anchor) |
+| `ref_1`..`ref_3` | Optional character photos: with one or more, the render switches to `ltx-2-mlx ic-lora` (see below) |
+| `ingredients_lora` / `ingredients_strength` | The Ingredients IC-LoRA for 2.5 and its strength (1.0 recommended) |
+| `reference_strength` | Strength of the reference sheet video (`--video-conditioning`) |
+
+### Character references (Ingredients IC-LoRA)
+
+Lightricks' Ingredients IC-LoRA keeps characters consistent with a
+*reference sheet*: one panel per element on a black background, no text, fed
+as a static video at the output size. `reference_sheet.py` lays 1 to 3
+photos out on that sheet (the grid that gives them the most area), the node
+loops it into an mp4 of the clip's length and runs `ic-lora` with
+`--lora <Ingredients> S --video-conditioning sheet.mp4 S` on Lightricks'
+recipe: one stage at full size, dev transformer, the pack's distilled LoRA at
+0.5 (`--single-stage --dev-transformer ... --distilled-lora ... 0.5`). Measured
+on ltx-2-mlx 0.18 with the 2.5 q8 pack at 768x448x49: the default distilled
+two-stage plan returns a mosaic and the distilled single stage copies the
+sheet; this recipe renders the character (5 min for 2 s). It always renders
+audio and has no CFG: `mode`, `negative_prompt`, `audio=False` and
+`tile_frames` are ignored there. With a
+duration of 0, the clip is 5 s (the LoRA was trained on 121 frames at 24 fps).
+The prompt works best in the model card's two parts: `Reference sheet: <what
+the photos show>` then `Generated video: <the action>`.
+
+What the tests showed (2026-11-19, M3 Max, 5 s at 512x768, 13 min a render):
+
+- References work **without a start image** only (text to video): the
+  character comes out with the referenced face and teeth. With a start image
+  the clip leaves it after frame 0 and films the sheet itself (the native
+  LTX 2.3 graph recomposed the scene the same way). Ingredients was trained
+  without first-frame conditioning, so the node refuses references together
+  with `first_image`.
+- Cut-outs on black (the model card's "clean panels") beat photos with their
+  background: with backgrounds, each panel tends to become a shot of its own.
+  The sheet trims black margins so cut-outs fill their panel.
+- A close-up panel can still open the clip as a short shot of its own.
 
 ## Install
 
@@ -40,6 +76,12 @@ generation to the [`ltx-2-mlx`](https://github.com/dgrauet/ltx-2-mlx) CLI
 git clone https://github.com/dgrauet/ltx-2-mlx ~/ltx-2-mlx
 cd ~/ltx-2-mlx && uv sync --all-extras
 hf download dgrauet/ltx-2.5-mlx-q8 --local-dir ~/models/ltx-2.5-mlx-q8
+
+# Optional, for the character references: the Ingredients IC-LoRA (gated:
+# accept the license on the model page first)
+hf download Lightricks/LTX-2.5-22b-IC-LoRA-Ingredients \
+  ltx-2.5-22b-ic-lora-ingredients-0.9.safetensors \
+  --local-dir <comfy models>/loras/ltx/ic-lora
 
 # 2. The node (macOS / Linux)
 ln -s "<repo>/server/komfy-ltx-mlx" <comfy-data-dir>/custom_nodes/komfy-ltx-mlx
