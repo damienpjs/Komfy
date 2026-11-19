@@ -1,18 +1,19 @@
 /**
- * Settings screen: server URL, connection test, language selector,
- * AsyncStorage persistence via the settings store.
+ * Settings, grouped by subject with the server first: power and console on
+ * the banner card, then Connection (ComfyUI address, supervisor pairing),
+ * Generation (previews, LoRA cap), Appearance (theme, language) and Storage
+ * (server trash). Persisted through the settings store.
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'expo-router';
-import { useMemo, useState } from 'react';
+import * as Haptics from 'expo-haptics';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   Alert,
   Pressable,
   ScrollView,
-  StyleSheet,
   Switch,
   Text,
   TextInput,
@@ -21,6 +22,8 @@ import {
 import { ComfyApiError, createClient, testConnection } from '../../api/client';
 import { queryClient } from '../../api/queryClient';
 import { ServerPowerCard } from '../../components/ServerPowerCard';
+import { SupervisorPairing } from '../../components/SupervisorPairing';
+import { useQueue } from '../../hooks/useQueue';
 import type { Lang } from '../../i18n';
 import {
   SERVER_URL_PLACEHOLDER,
@@ -32,6 +35,7 @@ import { useToast } from '../../store/toast';
 import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../../theme/tokens';
 import { makeStyles, useTheme } from '../../theme/theme';
 import { formatBytes } from '../../utils/format';
+import Svg, { Path } from 'react-native-svg';
 
 type TestState =
   | { phase: 'idle' }
@@ -43,6 +47,58 @@ const LANGUAGES: { code: Lang; label: string }[] = [
   { code: 'en', label: 'English' },
   { code: 'fr', label: 'Français' },
 ];
+
+const LORA_CAP_MAX = 12;
+
+/** Section title + its grouped card. */
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  const styles = useStyles();
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle} accessibilityRole="header">
+        {title}
+      </Text>
+      <View style={styles.group}>{children}</View>
+    </View>
+  );
+}
+
+/** Segmented control for a short list of choices. */
+function Segmented<T extends string>({
+  value,
+  options,
+  onChange,
+}: {
+  value: T;
+  options: { code: T; label: string }[];
+  onChange: (code: T) => void;
+}) {
+  const styles = useStyles();
+  return (
+    <View style={styles.seg} accessibilityRole="radiogroup">
+      {options.map(({ code, label }) => {
+        const on = value === code;
+        return (
+          <Pressable
+            key={code}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: on }}
+            onPress={() => {
+              if (on) return;
+              Haptics.selectionAsync();
+              onChange(code);
+            }}
+            style={[styles.segBtn, on && styles.segBtnOn]}
+          >
+            <Text style={[styles.segText, on && styles.segTextOn]} numberOfLines={1}>
+              {label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
 
 const THEMES: { code: ThemePreference; label: string }[] = [
   { code: 'auto', label: 'settings.themeAuto' },
@@ -67,13 +123,13 @@ export default function Settings() {
   const setThemePreference = useSettings((s) => s.setThemePreference);
   const online = useConnection((s) => s.online);
   const showToast = useToast((s) => s.show);
+  const pendingCount = useQueue().query.data?.queue_pending.length ?? 0;
 
   const [draft, setDraft] = useState(serverUrl);
   const [test, setTest] = useState<TestState>({ phase: 'idle' });
   const [emptying, setEmptying] = useState(false);
-  // Editable LoRA cap; kept as text so intermediate empty states are tolerated.
-  // Preserved while the limit is off, so toggling back restores it.
-  const [loraDraft, setLoraDraft] = useState(String(loraMaxCount ?? 4));
+  // Last cap, kept while the limit is off so toggling back restores it.
+  const [lastCap, setLastCap] = useState(loraMaxCount ?? 4);
 
   // Trash contents (komfy-listing extension) — powers the "empty trash"
   // confirmation. Silent on 404/503 (button just stays disabled).
@@ -163,24 +219,28 @@ export default function Settings() {
     setServerUrl(normalized);
   };
 
-  const toggleLoraLimit = (limited: boolean) => {
-    if (!limited) {
-      setLoraMaxCount(null);
-    } else {
-      const n = parseInt(loraDraft, 10);
-      setLoraMaxCount(Number.isInteger(n) && n >= 1 ? n : 4);
-    }
+  const toggleLoraLimit = (limited: boolean) =>
+    setLoraMaxCount(limited ? lastCap : null);
+
+  const stepCap = (delta: number) => {
+    if (loraMaxCount == null) return;
+    const next = Math.max(1, Math.min(LORA_CAP_MAX, loraMaxCount + delta));
+    if (next === loraMaxCount) return;
+    Haptics.selectionAsync();
+    setLoraMaxCount(next);
+    setLastCap(next);
   };
 
-  const commitLoraDraft = () => {
-    const n = parseInt(loraDraft, 10);
-    if (Number.isInteger(n) && n >= 1) {
-      setLoraMaxCount(n);
-      setLoraDraft(String(n));
-    } else {
-      setLoraDraft(String(loraMaxCount ?? 4)); // invalid → revert
-    }
-  };
+  const stepIcon = (d: string, disabled: boolean) => (
+    <Svg width={18} height={18} viewBox="0 0 24 24">
+      <Path
+        d={d}
+        stroke={disabled ? colors.textDisabled : colors.text}
+        strokeWidth={2.2}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
 
   return (
     <ScrollView
@@ -190,201 +250,182 @@ export default function Settings() {
       keyboardDismissMode="on-drag"
       automaticallyAdjustKeyboardInsets
     >
-      <Text style={styles.label}>{t('settings.serverUrl')}</Text>
-      <TextInput
-        style={styles.input}
-        value={draft}
-        onChangeText={(text) => {
-          setDraft(text);
-          setTest({ phase: 'idle' });
-        }}
-        placeholder={SERVER_URL_PLACEHOLDER}
-        placeholderTextColor={colors.textDisabled}
-        autoCapitalize="none"
-        autoCorrect={false}
-        keyboardType="url"
-      />
-      <Text style={styles.hint}>{t('settings.serverHint')}</Text>
+      <ServerPowerCard pendingCount={pendingCount} />
 
-      <View style={styles.buttonRow}>
-        <Pressable
-          style={({ pressed }) => [
-            styles.button,
-            styles.buttonSecondary,
-            (!isValid || test.phase === 'testing') && styles.buttonDisabled,
-            pressed && { backgroundColor: colors.surfacePressed },
-          ]}
-          onPress={runTest}
-          disabled={!isValid || test.phase === 'testing'}
-        >
-          {test.phase === 'testing' ? (
-            <ActivityIndicator color={colors.text} />
-          ) : (
-            <Text style={styles.buttonText}>{t('settings.test')}</Text>
+      <Section title={t('settings.sectionConnection')}>
+        <View style={styles.block}>
+          <Text style={styles.label}>{t('settings.serverUrl')}</Text>
+          <TextInput
+            style={styles.input}
+            value={draft}
+            onChangeText={(text) => {
+              setDraft(text);
+              setTest({ phase: 'idle' });
+            }}
+            placeholder={SERVER_URL_PLACEHOLDER}
+            placeholderTextColor={colors.textDisabled}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+          />
+          <Text style={styles.hint}>{t('settings.serverHint')}</Text>
+          <View style={styles.buttonRow}>
+            <Pressable
+              accessibilityRole="button"
+              style={({ pressed }) => [
+                styles.button,
+                styles.buttonSecondary,
+                (!isValid || test.phase === 'testing') && styles.buttonDisabled,
+                pressed && { backgroundColor: colors.surfacePressed },
+              ]}
+              onPress={runTest}
+              disabled={!isValid || test.phase === 'testing'}
+            >
+              {test.phase === 'testing' ? (
+                <ActivityIndicator color={colors.text} />
+              ) : (
+                <Text style={styles.buttonText}>{t('settings.test')}</Text>
+              )}
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              style={({ pressed }) => [
+                styles.button,
+                styles.buttonPrimary,
+                (!isValid || !isDirty) && styles.buttonDisabled,
+                pressed && { opacity: 0.85 },
+              ]}
+              onPress={save}
+              disabled={!isValid || !isDirty}
+            >
+              <Text style={[styles.buttonText, styles.buttonTextPrimary]}>
+                {isDirty ? t('common.save') : t('settings.saved')}
+              </Text>
+            </Pressable>
+          </View>
+          {test.phase === 'ok' && (
+            <Text style={styles.testOk}>{t('settings.testOk', { version: test.version })}</Text>
           )}
-        </Pressable>
-        <Pressable
-          style={({ pressed }) => [
-            styles.button,
-            styles.buttonPrimary,
-            (!isValid || !isDirty) && styles.buttonDisabled,
-            pressed && { backgroundColor: colors.accentPressed },
-          ]}
-          onPress={save}
-          disabled={!isValid || !isDirty}
-        >
-          <Text style={[styles.buttonText, styles.buttonTextPrimary]}>
-            {isDirty ? t('common.save') : t('settings.saved')}
-          </Text>
-        </Pressable>
-      </View>
-
-      {test.phase === 'ok' && (
-        <Text style={styles.testOk}>
-          {t('settings.testOk', { version: test.version })}
-        </Text>
-      )}
-      {test.phase === 'error' && (
-        <Text style={styles.testError}>✗ {test.message}</Text>
-      )}
-
-      <ServerPowerCard />
-
-      <View style={styles.toggleRow}>
-        <View style={styles.toggleTextWrap}>
-          <Text style={styles.toggleLabel}>{t('settings.previews')}</Text>
-          <Text style={styles.toggleHint}>{t('settings.previewsHint')}</Text>
+          {test.phase === 'error' && (
+            <Text style={styles.testError}>{test.message}</Text>
+          )}
         </View>
-        <Switch
-          value={previewsEnabled}
-          onValueChange={setPreviewsEnabled}
-          trackColor={{ false: colors.bgElevated, true: colors.accent }}
-          thumbColor={colors.switchThumb}
-        />
-      </View>
+        <View style={[styles.block, styles.separated]}>
+          <SupervisorPairing />
+        </View>
+      </Section>
 
-      <View style={styles.loraCard}>
-        <View style={styles.loraHeader}>
-          <View style={styles.toggleTextWrap}>
-            <Text style={styles.toggleLabel}>{t('settings.loraMax')}</Text>
-            <Text style={styles.toggleHint}>{t('settings.loraMaxHint')}</Text>
+      <Section title={t('settings.sectionGeneration')}>
+        <View style={styles.row}>
+          <View style={styles.rowTexts}>
+            <Text style={styles.rowTitle}>{t('settings.previews')}</Text>
+            <Text style={styles.rowHint}>{t('settings.previewsHint')}</Text>
+          </View>
+          <Switch
+            value={previewsEnabled}
+            onValueChange={setPreviewsEnabled}
+            trackColor={{ false: colors.field, true: colors.accent }}
+            thumbColor={colors.switchThumb}
+          />
+        </View>
+        <View style={[styles.row, styles.separated]}>
+          <View style={styles.rowTexts}>
+            <Text style={styles.rowTitle}>{t('settings.loraMax')}</Text>
+            <Text style={styles.rowHint}>{t('settings.loraMaxHint')}</Text>
           </View>
           <Switch
             value={loraMaxCount != null}
             onValueChange={toggleLoraLimit}
-            trackColor={{ false: colors.bgElevated, true: colors.accent }}
+            trackColor={{ false: colors.field, true: colors.accent }}
             thumbColor={colors.switchThumb}
           />
         </View>
         {loraMaxCount != null && (
-          <View style={styles.loraSubRow}>
-            <Text style={styles.loraSubLabel}>{t('settings.loraMaxValue')}</Text>
-            <TextInput
-              style={styles.numInput}
-              value={loraDraft}
-              onChangeText={(text) => setLoraDraft(text.replace(/[^0-9]/g, ''))}
-              onEndEditing={commitLoraDraft}
-              onBlur={commitLoraDraft}
-              keyboardType="number-pad"
-              returnKeyType="done"
-              maxLength={3}
-            />
+          <View style={[styles.row, styles.separated, styles.subRow]}>
+            <Text style={styles.subLabel}>{t('settings.loraMaxValue')}</Text>
+            <View style={styles.stepper}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('launch.countLess')}
+                disabled={loraMaxCount <= 1}
+                onPress={() => stepCap(-1)}
+                style={styles.stepBtn}
+              >
+                {stepIcon('M6 12h12', loraMaxCount <= 1)}
+              </Pressable>
+              <Text style={styles.stepValue} accessibilityLiveRegion="polite">
+                {loraMaxCount}
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('launch.countMore')}
+                disabled={loraMaxCount >= LORA_CAP_MAX}
+                onPress={() => stepCap(1)}
+                style={styles.stepBtn}
+              >
+                {stepIcon('M12 6v12M6 12h12', loraMaxCount >= LORA_CAP_MAX)}
+              </Pressable>
+            </View>
           </View>
         )}
-      </View>
+      </Section>
 
-      <View style={styles.toggleRow}>
-        <Text style={styles.toggleLabel}>{t('settings.language')}</Text>
-        <View style={styles.langRow}>
-          {LANGUAGES.map(({ code, label }) => (
-            <Pressable
-              key={code}
-              style={[
-                styles.langButton,
-                language === code && styles.langButtonActive,
-              ]}
-              onPress={() => setLanguage(code)}
-            >
-              <Text
-                style={[
-                  styles.langText,
-                  language === code && styles.langTextActive,
-                ]}
-              >
-                {label}
-              </Text>
-            </Pressable>
-          ))}
+      <Section title={t('settings.sectionAppearance')}>
+        <View style={styles.rowStacked}>
+          <Text style={styles.rowTitle}>{t('settings.theme')}</Text>
+          <Segmented
+            value={themePreference}
+            options={THEMES.map(({ code, label }) => ({ code, label: t(label) }))}
+            onChange={setThemePreference}
+          />
         </View>
-      </View>
-
-      <View style={styles.toggleRow}>
-        <Text style={styles.toggleLabel}>{t('settings.theme')}</Text>
-        <View style={styles.langRow}>
-          {THEMES.map(({ code, label }) => (
-            <Pressable
-              key={code}
-              accessibilityRole="button"
-              accessibilityState={{ selected: themePreference === code }}
-              style={[
-                styles.langButton,
-                themePreference === code && styles.langButtonActive,
-              ]}
-              onPress={() => setThemePreference(code)}
-            >
-              <Text
-                style={[
-                  styles.langText,
-                  themePreference === code && styles.langTextActive,
-                ]}
-              >
-                {t(label)}
-              </Text>
-            </Pressable>
-          ))}
+        <View style={[styles.rowStacked, styles.separated]}>
+          <Text style={styles.rowTitle}>{t('settings.language')}</Text>
+          <Segmented value={language} options={LANGUAGES} onChange={setLanguage} />
         </View>
-      </View>
+      </Section>
 
       {online === true && (
-        <View style={styles.toggleRow}>
-          <View style={styles.toggleTextWrap}>
-            <Text style={styles.toggleLabel}>{t('settings.trashTitle')}</Text>
-            <Text style={styles.toggleHint}>
-              {trash.isLoading
-                ? t('common.loading')
-                : trashTotals.count === 0
-                  ? t('settings.trashEmptyState')
-                  : t('settings.trashSummary', {
-                      count: trashTotals.count,
-                      size: formatBytes(trashTotals.bytes),
-                    })}
-            </Text>
+        <Section title={t('settings.sectionStorage')}>
+          <View style={styles.row}>
+            <View style={styles.rowTexts}>
+              <Text style={styles.rowTitle}>{t('settings.trashTitle')}</Text>
+              <Text style={styles.rowHint}>
+                {trash.isLoading
+                  ? t('common.loading')
+                  : trashTotals.count === 0
+                    ? t('settings.trashEmptyState')
+                    : t('settings.trashSummary', {
+                        count: trashTotals.count,
+                        size: formatBytes(trashTotals.bytes),
+                      })}
+              </Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              style={({ pressed }) => [
+                styles.trashBtn,
+                (emptying || trashTotals.count === 0) && styles.buttonDisabled,
+                pressed && { opacity: 0.7 },
+              ]}
+              onPress={confirmEmptyTrash}
+              disabled={emptying || trashTotals.count === 0}
+            >
+              {emptying ? (
+                <ActivityIndicator color={colors.danger} />
+              ) : (
+                <Text style={styles.trashBtnText}>{t('settings.trashEmpty')}</Text>
+              )}
+            </Pressable>
           </View>
-          <Pressable
-            style={({ pressed }) => [
-              styles.trashBtn,
-              (emptying || trashTotals.count === 0) && styles.buttonDisabled,
-              pressed && { opacity: 0.7 },
-            ]}
-            onPress={confirmEmptyTrash}
-            disabled={emptying || trashTotals.count === 0}
-          >
-            {emptying ? (
-              <ActivityIndicator color={colors.danger} />
-            ) : (
-              <Text style={styles.trashBtnText}>{t('settings.trashEmpty')}</Text>
-            )}
-          </Pressable>
-        </View>
+        </Section>
       )}
 
-      <Link href="/ws-log" style={styles.wsLogLink}>
-        {t('settings.wsLog')}
-      </Link>
-
-      <View style={styles.metaCard}>
+      <View style={styles.meta}>
         <Text style={styles.metaLabel}>client_id</Text>
-        <Text style={styles.metaValue}>{clientId}</Text>
+        <Text style={styles.metaValue} selectable>
+          {clientId}
+        </Text>
       </View>
     </ScrollView>
   );
@@ -397,85 +438,101 @@ const useStyles = makeStyles((colors) => ({
   content: {
     flexGrow: 1,
     padding: spacing.md,
+    paddingBottom: spacing.xl,
+    gap: spacing.lg,
+  },
+  section: {
     gap: spacing.sm,
+  },
+  sectionTitle: {
+    color: colors.textMuted,
+    fontFamily: typography.mono,
+    fontSize: typography.sizes.xs,
+    letterSpacing: 0.7,
+    textTransform: 'uppercase',
+  },
+  group: {
+    overflow: 'hidden',
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  separated: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  block: {
+    gap: spacing.xs + 2,
+    padding: spacing.md - 2,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    minHeight: 60,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.md - 2,
+  },
+  rowStacked: {
+    gap: spacing.sm,
+    paddingVertical: spacing.sm + 4,
+    paddingHorizontal: spacing.md - 2,
+  },
+  subRow: {
+    backgroundColor: colors.bgElevated,
+    paddingLeft: spacing.lg,
+  },
+  rowTexts: {
+    flex: 1,
+    gap: 2,
+  },
+  rowTitle: {
+    color: colors.text,
+    fontFamily: typography.uiSemiBold,
+    fontSize: 15,
+  },
+  rowHint: {
+    color: colors.textMuted,
+    fontFamily: typography.ui,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  subLabel: {
+    flex: 1,
+    color: colors.textMuted,
+    fontFamily: typography.uiMedium,
+    fontSize: 14,
   },
   label: {
     color: colors.text,
-    fontFamily: typography.uiSemiBold,
-    fontSize: typography.sizes.md,
+    fontFamily: typography.uiMedium,
+    fontSize: 14,
   },
   input: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
+    minHeight: MIN_TOUCH_TARGET,
+    paddingHorizontal: spacing.md - 2,
     borderRadius: radii.md,
+    backgroundColor: colors.field,
     color: colors.text,
     fontFamily: typography.mono,
-    fontSize: typography.sizes.sm,
-    paddingHorizontal: spacing.md,
-    minHeight: MIN_TOUCH_TARGET,
+    fontSize: 14,
   },
   hint: {
     color: colors.textMuted,
     fontFamily: typography.ui,
-    fontSize: typography.sizes.xs,
-  },
-  numInput: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radii.md,
-    color: colors.text,
-    fontFamily: typography.mono,
-    fontSize: typography.sizes.sm,
-    textAlign: 'center',
-    minWidth: 64,
-    minHeight: MIN_TOUCH_TARGET,
-    paddingHorizontal: spacing.md,
-  },
-  // LoRA cap: toggle + the "Maximum" sub-row grouped in one card, so the
-  // number reads as a child of "LoRAs per field", not a standalone setting.
-  loraCard: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radii.md,
-    marginTop: spacing.sm,
-    overflow: 'hidden',
-  },
-  loraHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-    padding: spacing.md,
-  },
-  loraSubRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-    paddingVertical: spacing.sm,
-    paddingRight: spacing.md,
-    paddingLeft: spacing.lg, // indent: signals nesting under the toggle above
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-    backgroundColor: colors.bgElevated,
-  },
-  loraSubLabel: {
-    color: colors.textMuted,
-    fontFamily: typography.uiMedium,
-    fontSize: typography.sizes.sm,
+    fontSize: 13,
+    lineHeight: 18,
   },
   buttonRow: {
     flexDirection: 'row',
     gap: spacing.sm,
-    marginTop: spacing.sm,
+    marginTop: spacing.xs,
   },
   button: {
     flex: 1,
-    minHeight: MIN_TOUCH_TARGET,
-    borderRadius: radii.md,
+    minHeight: MIN_TOUCH_TARGET + 4,
+    borderRadius: radii.md + 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -483,7 +540,6 @@ const useStyles = makeStyles((colors) => ({
     backgroundColor: colors.strong,
   },
   buttonSecondary: {
-    backgroundColor: colors.surface,
     borderColor: colors.border,
     borderWidth: 1,
   },
@@ -501,104 +557,86 @@ const useStyles = makeStyles((colors) => ({
   testOk: {
     color: colors.success,
     fontFamily: typography.uiMedium,
-    fontSize: typography.sizes.sm,
+    fontSize: 14,
   },
   testError: {
     color: colors.danger,
     fontFamily: typography.uiMedium,
-    fontSize: typography.sizes.sm,
+    fontSize: 14,
   },
-  toggleRow: {
+  seg: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
+    gap: 3,
+    padding: 3,
     borderRadius: radii.md,
-    padding: spacing.md,
-    marginTop: spacing.sm,
+    backgroundColor: colors.field,
   },
-  toggleTextWrap: {
+  segBtn: {
     flex: 1,
-    gap: spacing.xs,
+    minHeight: MIN_TOUCH_TARGET - 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xs,
+    borderRadius: radii.md - 3,
   },
-  toggleLabel: {
+  segBtnOn: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  segText: {
+    color: colors.textMuted,
+    fontFamily: typography.uiMedium,
+    fontSize: 14,
+  },
+  segTextOn: {
     color: colors.text,
     fontFamily: typography.uiSemiBold,
-    fontSize: typography.sizes.sm,
   },
-  toggleHint: {
-    color: colors.textMuted,
-    fontFamily: typography.ui,
-    fontSize: typography.sizes.xs,
-  },
-  langRow: {
+  stepper: {
     flexDirection: 'row',
-    gap: spacing.xs,
-  },
-  langButton: {
-    minHeight: MIN_TOUCH_TARGET,
-    paddingHorizontal: spacing.md,
+    alignItems: 'center',
     borderRadius: radii.md,
-    borderColor: colors.border,
-    borderWidth: 1,
-    backgroundColor: colors.bgElevated,
+    backgroundColor: colors.field,
+  },
+  stepBtn: {
+    width: MIN_TOUCH_TARGET,
+    height: MIN_TOUCH_TARGET,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  langButtonActive: {
-    backgroundColor: colors.strong,
-    borderColor: colors.strong,
-  },
-  langText: {
-    color: colors.textMuted,
-    fontFamily: typography.uiMedium,
-    fontSize: typography.sizes.sm,
-  },
-  langTextActive: {
-    color: colors.onStrong,
-    fontFamily: typography.uiSemiBold,
+  stepValue: {
+    minWidth: 28,
+    color: colors.text,
+    fontFamily: typography.mono,
+    fontSize: 16,
+    textAlign: 'center',
   },
   trashBtn: {
     minHeight: MIN_TOUCH_TARGET,
+    justifyContent: 'center',
     paddingHorizontal: spacing.md,
     borderRadius: radii.md,
-    borderColor: colors.danger,
-    borderWidth: 1,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.dangerSoft,
   },
   trashBtnText: {
     color: colors.danger,
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.sm,
   },
-  wsLogLink: {
-    color: colors.accent,
-    fontFamily: typography.uiMedium,
-    fontSize: typography.sizes.sm,
-    paddingVertical: spacing.sm,
-  },
-  metaCard: {
+  meta: {
     marginTop: 'auto',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radii.md,
-    padding: spacing.md,
-    gap: spacing.xs,
+    gap: 2,
+    paddingHorizontal: spacing.xs,
   },
   metaLabel: {
     color: colors.textMuted,
-    fontFamily: typography.ui,
-    fontSize: typography.sizes.xs,
+    fontFamily: typography.mono,
+    fontSize: 12,
   },
   metaValue: {
-    color: colors.text,
+    color: colors.textMuted,
     fontFamily: typography.mono,
-    fontSize: typography.sizes.sm,
+    fontSize: 12,
   },
 }));

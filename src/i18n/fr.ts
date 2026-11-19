@@ -94,7 +94,7 @@ export default {
     textResult: 'Prompt généré',
     prompts: 'Prompts sauvegardés',
     wsLog: 'Journal WS',
-    console: 'Console ComfyUI',
+    console: 'Console',
     back: 'Retour',
     importWorkflow: 'Importer un workflow',
     editWorkflow: 'Éditer le workflow',
@@ -132,15 +132,26 @@ export default {
     empty: 'La queue est vide.',
   },
   setup: {
-    title: 'Connectez votre serveur ComfyUI',
-    subtitle:
-      "Komfy a besoin de l'adresse de votre serveur ComfyUI pour fonctionner. Renseignez-la ci-dessous — vous pourrez la modifier plus tard dans les Réglages.",
+    title: 'Reliez Komfy à votre ComfyUI',
+    subtitle: 'Une seule adresse Tailscale, à la maison comme en 4G/5G. Le port n\'est jamais exposé à Internet.',
+    scan: 'Scanner le QR d\'appairage',
+    scanSub: 'sur le serveur : npm run pair',
+    typeAddress: 'Saisir l\'adresse',
     urlLabel: 'URL du serveur ComfyUI',
-    hint: "IP Tailscale de la machine qui fait tourner ComfyUI (ex. http://100.x.y.z:8188) — la même URL à la maison comme en 4G/5G. N'exposez jamais le port à Internet.",
+    hint: 'IP Tailscale de la machine qui fait tourner ComfyUI, par exemple http://100.x.y.z:8188. Une IP seule reçoit http:// et :8188.',
     save: 'Enregistrer et continuer',
     saveAnyway: 'Enregistrer quand même',
-    saveAnywayHint:
-      "Le serveur peut être hors ligne pour l'instant — vous pourrez corriger l'URL plus tard dans les Réglages.",
+    saveAnywayHint: 'Le serveur peut être hors ligne pour l\'instant : l\'URL se corrige ensuite dans Réglages.',
+    checkedAfter: 'Vérifié juste après',
+    checkComfy: 'ComfyUI répond',
+    checkComfySub: 'l\'adresse ci-dessus, port 8188',
+    checkSupervisor: 'Superviseur appairé',
+    checkSupervisorSub: 'Allumer, éteindre, console en direct',
+    checkListing: 'Extension komfy-listing',
+    checkListingSub: 'Galerie complète, corbeille, déplacer',
+    required: 'requis',
+    optional: 'option',
+    checkedHint: 'Un contrôle qui échoue indique la pièce à réparer, au lieu d\'un simple « injoignable ». Tout reste modifiable dans Réglages.',
   },
   wf: {
     common: {
@@ -544,6 +555,7 @@ export default {
     noResult: 'Aucun modèle correspondant',
   },
   importWf: {
+    icon: 'Icône',
     card: 'Importer',
     cardDescription: 'Ajouter un workflow depuis son JSON au format API',
     help:
@@ -567,6 +579,10 @@ export default {
     edit: 'Éditer',
   },
   editWf: {
+    labelA11y: 'Libellé du champ',
+    moveUp: 'Monter',
+    moveDown: 'Descendre',
+    removeField: 'Retirer ce champ',
     notFound:
       'Workflow introuvable — seuls les workflows importés sont éditables.',
     fields: 'Champs (libellé, ordre, suppression)',
@@ -1020,6 +1036,9 @@ export default {
     turnOnA11y: 'Allumer ComfyUI',
   },
   supervisor: {
+    console: 'Console',
+    restartTitle: 'Redémarrer ComfyUI ?',
+    restartBody: 'ComfyUI s\'arrête, puis repart avec le mode d\'attention choisi au-dessus.',
     mode: 'Attention',
     modeDefault: 'Défaut serveur',
     modeSdpa: 'SDPA',
@@ -1050,9 +1069,15 @@ export default {
       'Vide = déduite de l’URL serveur (même hôte, port 8189).',
     token: 'Token du superviseur',
     tokenHint: 'Imprimé par `npm run pair` sur le serveur.',
-    openConsole: 'Console en direct →',
   },
   console: {
+    tabComfy: 'ComfyUI',
+    tabWs: 'Événements WS',
+    filterAll: 'Tout',
+    filterWarn: 'Alertes · {{count}}',
+    filterError: 'Erreurs · {{count}}',
+    copy: 'Copier les lignes visibles',
+    copied: 'Lignes copiées',
     title: 'Console ComfyUI',
     empty: 'Aucune sortie — démarrez ComfyUI pour voir ses logs.',
     connecting: 'Connexion au superviseur…',
@@ -1076,6 +1101,10 @@ export default {
     applied: 'Appairage appliqué ✓',
   },
   settings: {
+    sectionConnection: 'Connexion',
+    sectionGeneration: 'Génération',
+    sectionAppearance: 'Apparence',
+    sectionStorage: 'Stockage',
     serverUrl: 'URL du serveur ComfyUI',
     serverHint:
       "IP Tailscale du serveur — une seule URL, à la maison comme en 4G/5G. Jamais d'exposition internet.",
@@ -1103,7 +1132,6 @@ export default {
     trashEmptied_other:
       'Corbeille vidée — {{count}} fichiers, {{size}} libérés ✓',
     trashEmptyFailed: 'Impossible de vider la corbeille',
-    wsLog: 'Journal des événements WebSocket →',
     language: 'Langue',
     theme: 'Thème',
     themeAuto: 'Auto',
