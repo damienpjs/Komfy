@@ -4,6 +4,7 @@
  * bar area, the header does not add the top inset a second time.
  */
 
+import type { ReactNode } from 'react';
 import { Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { makeStyles } from '../theme/theme';
@@ -11,7 +12,8 @@ import { spacing, typography } from '../theme/tokens';
 import { ServerChip } from './ServerChip';
 import { useVolumeBannerVisible } from './VolumeBanner';
 
-export function TabHeader({ title }: { title: string }) {
+/** `action`: the screen's own header button (headerRight), left of the chip. */
+export function TabHeader({ title, action }: { title: string; action?: ReactNode }) {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const bannerVisible = useVolumeBannerVisible();
@@ -20,7 +22,10 @@ export function TabHeader({ title }: { title: string }) {
       <Text style={styles.title} accessibilityRole="header" numberOfLines={1}>
         {title}
       </Text>
-      <ServerChip />
+      <View style={styles.right}>
+        {action}
+        <ServerChip />
+      </View>
     </View>
   );
 }
@@ -33,6 +38,11 @@ const useStyles = makeStyles((colors) => ({
     gap: spacing.md,
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.sm,
+  },
+  right: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
   },
   title: {
     flex: 1,

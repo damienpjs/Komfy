@@ -829,6 +829,8 @@ export default {
     library: 'Library',
   },
   prompts: {
+    useInTitle: 'Use in…',
+    useInHint: 'Opens the workflow with this prompt already filled in.',
     search: 'Search prompts…',
     empty: 'No saved prompt yet',
     emptyHint:
@@ -862,6 +864,11 @@ export default {
     deleteTitle: 'Delete “{{name}}”?',
   },
   viewer: {
+    variant: 'Variant',
+    photos: 'Photos',
+    trash: 'Trash',
+    reuseSeed: 'Reuse',
+    reuseSeedA11y: 'Open a variant with this seed',
     imageUnavailable: 'Image unavailable',
     videoUnavailable: 'Video unavailable',
     unavailableBody: 'File unavailable on the server, or deleted.',
@@ -915,6 +922,7 @@ export default {
     live: 'LIVE',
   },
   gallery: {
+    importA11y: 'Import photos into input',
     updateExtTitle: 'Extension needs an update',
     updateExtBody:
       'The "{{action}}" route is missing on the server: restart ComfyUI to reload komfy-listing.',

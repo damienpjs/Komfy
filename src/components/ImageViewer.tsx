@@ -46,7 +46,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { GalleryImage } from '../hooks/useGallery';
 import { radii, spacing, typography } from '../theme/tokens';
 import { makeStyles, ThemeOverride, useTheme } from '../theme/theme';
-import { showActionSheet, type SheetAction } from '../utils/actionSheet';
 import { saveImageToPhotos } from '../utils/saveToPhotos';
 import { ImageInfoSheet } from './ImageInfoSheet';
 
@@ -96,6 +95,8 @@ interface Props {
    * video whose job is still in the session history remixes like an image.
    */
   onRemix?: (image: GalleryImage) => Promise<void>;
+  /** Variant with the source seed applied, from the details sheet. */
+  onReuseSeed?: (image: GalleryImage) => Promise<void>;
   /** Move this item (••• menu) — closes the viewer on the gallery side. */
   onMove?: (image: GalleryImage) => void;
   /**
@@ -612,6 +613,7 @@ export function ImageViewer({
   getThumbRect,
   onCurrentChange,
   onRemix,
+  onReuseSeed,
   onMove,
   onDelete,
 }: Props) {
@@ -686,26 +688,6 @@ export function ImageViewer({
     requestAnimationFrame(() =>
       listRef.current?.scrollToIndex({ index: newIndex, animated: false }),
     );
-  };
-
-  // ••• menu: save / move / delete the displayed item.
-  const openMenu = (image: GalleryImage) => {
-    const actions: SheetAction[] = [
-      {
-        label: t('gallery.saveToPhotos'),
-        onPress: () => saveCurrentToPhotos(image),
-      },
-    ];
-    if (onMove)
-      actions.push({ label: t('gallery.move'), onPress: () => onMove(image) });
-    if (onDelete) {
-      actions.push({
-        label: t('common.delete'),
-        destructive: true,
-        onPress: () => deleteCurrent(image),
-      });
-    }
-    showActionSheet(image.filename, actions);
   };
 
   const insets = useSafeAreaInsets();
@@ -1092,12 +1074,9 @@ export function ImageViewer({
                 )}
                 <View style={styles.actionsRow}>
                   {onRemix && (
-                    <Pressable
-                      style={({ pressed }) => [
-                        styles.remixBtn,
-                        pressed && { backgroundColor: colors.brandPressed },
-                        remixing && { opacity: 0.5 },
-                      ]}
+                    <ActionButton
+                      label={remixing ? t('viewer.readingRecipe') : t('viewer.variant')}
+                      primary
                       disabled={remixing}
                       onPress={async () => {
                         setRemixing(true);
@@ -1107,43 +1086,44 @@ export function ImageViewer({
                           setRemixing(false);
                         }
                       }}
-                    >
-                      <Ionicons
-                        name="color-wand-outline"
-                        size={18}
-                        color={colors.onBrand}
-                      />
-                      <Text style={styles.remixText}>
-                        {remixing
-                          ? t('viewer.readingRecipe')
-                          : t('gallery.remixAction')}
-                      </Text>
-                    </Pressable>
-                  )}
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.saveBtn,
-                      // Fill the row when it's the only button (no remix handler).
-                      onRemix ? null : styles.saveBtnWide,
-                      pressed && { backgroundColor: colors.surfacePressed },
-                      saveState === 'saving' && { opacity: 0.5 },
-                    ]}
-                    disabled={saveState === 'saving'}
-                    onPress={() => openMenu(current)}
-                    hitSlop={6}
-                  >
-                    <Ionicons
-                      name={
-                        saveState === 'done'
-                          ? 'checkmark'
-                          : saveState === 'saving'
-                            ? 'hourglass-outline'
-                            : 'ellipsis-horizontal'
+                      icon={
+                        <Ionicons name="color-wand-outline" size={20} color={colors.onBrand} />
                       }
-                      size={20}
-                      color={saveState === 'done' ? colors.success : colors.text}
                     />
-                  </Pressable>
+                  )}
+                  <ActionButton
+                    label={t('viewer.photos')}
+                    disabled={saveState === 'saving'}
+                    onPress={() => saveCurrentToPhotos(current)}
+                    icon={
+                      <Ionicons
+                        name={
+                          saveState === 'done'
+                            ? 'checkmark'
+                            : saveState === 'saving'
+                              ? 'hourglass-outline'
+                              : 'download-outline'
+                        }
+                        size={20}
+                        color={saveState === 'done' ? colors.success : colors.text}
+                      />
+                    }
+                  />
+                  {onMove && (
+                    <ActionButton
+                      label={t('gallery.move')}
+                      onPress={() => onMove(current)}
+                      icon={<Ionicons name="folder-open-outline" size={20} color={colors.text} />}
+                    />
+                  )}
+                  {onDelete && (
+                    <ActionButton
+                      label={t('viewer.trash')}
+                      danger
+                      onPress={() => deleteCurrent(current)}
+                      icon={<Ionicons name="trash-outline" size={20} color={colors.danger} />}
+                    />
+                  )}
                 </View>
               </Animated.View>
             )}
@@ -1167,12 +1147,64 @@ export function ImageViewer({
               image={detailsVisible ? (current ?? null) : null}
               dimensions={current ? imageSizes[current.path] : undefined}
               durationSec={current ? durations[current.path] : undefined}
+              onReuseSeed={
+                onReuseSeed && current
+                  ? async () => {
+                      setDetailsVisible(false);
+                      await onReuseSeed(current);
+                    }
+                  : undefined
+              }
               onClose={() => setDetailsVisible(false)}
             />
           </View>
         </GestureHandlerRootView>
       </ThemeOverride>
     </Modal>
+  );
+}
+
+/** One named action of the viewer bar: icon tile over its label. */
+function ActionButton({
+  label,
+  icon,
+  onPress,
+  disabled,
+  primary,
+  danger,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  onPress: () => void;
+  disabled?: boolean;
+  primary?: boolean;
+  danger?: boolean;
+}) {
+  const styles = useStyles('dark');
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled: !!disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [styles.action, (pressed || disabled) && { opacity: 0.6 }]}
+    >
+      <View
+        style={[
+          styles.actionIcon,
+          primary && styles.actionIconPrimary,
+          danger && styles.actionIconDanger,
+        ]}
+      >
+        {icon}
+      </View>
+      <Text
+        style={[styles.actionLabel, danger && styles.actionLabelDanger]}
+        numberOfLines={1}
+      >
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -1302,37 +1334,37 @@ const useStyles = makeStyles((colors) => ({
   },
   actionsRow: {
     flexDirection: 'row',
-    gap: spacing.sm,
-    marginTop: spacing.sm,
+    gap: spacing.xs,
+    marginTop: spacing.md - 4,
   },
-  remixBtn: {
+  action: {
     flex: 1,
-    flexDirection: 'row',
+    minHeight: 64,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.sm,
-    minHeight: 44,
+    gap: 6,
+  },
+  actionIcon: {
+    width: 44,
+    height: 36,
     borderRadius: radii.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfacePressed,
+  },
+  actionIconPrimary: {
     backgroundColor: colors.brand,
   },
-  saveBtn: {
-    width: 44,
-    minHeight: 44,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.bgElevated,
-    alignItems: 'center',
-    justifyContent: 'center',
+  actionIconDanger: {
+    backgroundColor: colors.dangerSoft,
   },
-  saveBtnWide: {
-    flex: 1,
-    width: undefined,
+  actionLabel: {
+    color: colors.text,
+    fontFamily: typography.uiMedium,
+    fontSize: 12,
   },
-  remixText: {
-    color: colors.onBrand,
-    fontFamily: typography.uiSemiBold,
-    fontSize: typography.sizes.sm,
+  actionLabelDanger: {
+    color: colors.danger,
   },
   errorBox: {
     ...StyleSheet.absoluteFillObject,

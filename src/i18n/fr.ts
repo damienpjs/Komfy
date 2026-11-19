@@ -838,6 +838,8 @@ export default {
     library: 'Bibliothèque',
   },
   prompts: {
+    useInTitle: 'Utiliser dans…',
+    useInHint: 'Ouvre le workflow avec ce prompt déjà rempli.',
     search: 'Rechercher un prompt…',
     empty: 'Aucun prompt sauvegardé',
     emptyHint:
@@ -871,6 +873,11 @@ export default {
     deleteTitle: 'Supprimer « {{name}} » ?',
   },
   viewer: {
+    variant: 'Variante',
+    photos: 'Photos',
+    trash: 'Corbeille',
+    reuseSeed: 'Réutiliser',
+    reuseSeedA11y: 'Ouvrir une variante avec ce seed',
     imageUnavailable: 'Image indisponible',
     videoUnavailable: 'Vidéo indisponible',
     unavailableBody: 'Fichier indisponible sur le serveur, ou supprimé.',
@@ -924,6 +931,7 @@ export default {
     live: 'LIVE',
   },
   gallery: {
+    importA11y: 'Importer des photos dans input',
     updateExtTitle: 'Extension à mettre à jour',
     updateExtBody:
       'La route « {{action}} » manque côté serveur : redémarrer ComfyUI pour recharger komfy-listing.',

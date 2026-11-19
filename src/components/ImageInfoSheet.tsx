@@ -32,6 +32,11 @@ interface Props {
   dimensions?: { width: number; height: number };
   /** Clip duration in seconds, when known (videos only). */
   durationSec?: number;
+  /**
+   * Open a variant with the seed of this file applied (gallery only; the
+   * viewer closes on the way).
+   */
+  onReuseSeed?: () => Promise<void>;
   onClose: () => void;
 }
 
@@ -75,12 +80,24 @@ function InfoSheetBody({
   image,
   dimensions,
   durationSec,
+  onReuseSeed,
   onClose,
 }: Props & { image: GalleryImage }) {
   const styles = useStyles();
   const { colors } = useTheme();
   const { t, i18n } = useTranslation();
   const recipe = useRecipe(image);
+  const [reusing, setReusing] = useState(false);
+  const reuseSeed = onReuseSeed
+    ? async () => {
+        setReusing(true);
+        try {
+          await onReuseSeed();
+        } finally {
+          setReusing(false);
+        }
+      }
+    : undefined;
 
   const date = (epochS?: number) =>
     epochS
@@ -164,7 +181,21 @@ function InfoSheetBody({
               <Text style={styles.note}>{t('viewer.readingRecipe')}</Text>
             </View>
           )}
-          {recipe.status === 'ready' && <GraphSummary graph={recipe.graph} />}
+          {recipe.status === 'ready' && (
+            <GraphSummary
+              graph={recipe.graph}
+              seedAction={
+                reuseSeed
+                  ? {
+                      label: t('viewer.reuseSeed'),
+                      a11y: t('viewer.reuseSeedA11y'),
+                      onPress: reuseSeed,
+                      busy: reusing,
+                    }
+                  : undefined
+              }
+            />
+          )}
           {recipe.status === 'none' && (
             <Text style={styles.note}>{t('gallery.noMetadataBody')}</Text>
           )}

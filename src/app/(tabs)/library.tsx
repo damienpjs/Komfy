@@ -13,12 +13,12 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useRouter, type Href } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, Text, View } from 'react-native';
 import { GalleryBrowser } from '../../components/GalleryBrowser';
 import { PromptLibrary } from '../../components/PromptLibrary';
+import { usePromptIn } from '../../components/UseInSheet';
 import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../../theme/tokens';
 import { makeStyles, useTheme } from '../../theme/theme';
 
@@ -34,7 +34,7 @@ export default function LibraryScreen() {
   const styles = useStyles();
   const { colors } = useTheme();
   const { t } = useTranslation();
-  const router = useRouter();
+  const promptIn = usePromptIn();
   const [segment, setSegment] = useState<Segment>('images');
 
   return (
@@ -77,15 +77,12 @@ export default function LibraryScreen() {
         <GalleryBrowser />
       ) : (
         <PromptLibrary
-          onUse={(entry) =>
-            router.push(
-              `/workflow/krea2-text2img?prefill=${encodeURIComponent(
-                JSON.stringify({ prompt: entry.text }),
-              )}` as Href,
-            )
-          }
+          onUse={(entry) => {
+            if (entry.text) promptIn.open(entry.text);
+          }}
         />
       )}
+      {promptIn.sheet}
     </View>
   );
 }

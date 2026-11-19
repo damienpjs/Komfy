@@ -22,7 +22,12 @@ export default function TabsLayout() {
     <Tabs
       tabBar={(props) => <KomfyTabBar {...props} />}
       screenOptions={{
-        header: ({ options }) => <TabHeader title={options.title ?? ''} />,
+        header: ({ options }) => (
+          <TabHeader
+            title={options.title ?? ''}
+            action={options.headerRight?.({ canGoBack: false })}
+          />
+        ),
         sceneStyle: { backgroundColor: 'transparent' },
       }}
     >

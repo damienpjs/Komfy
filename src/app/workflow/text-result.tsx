@@ -1,8 +1,8 @@
 /**
  * Result screen for a text workflow (e.g. Image → Prompt): polls
  * /history/{promptId} until the `nodeId` node's text shows up (ShowText's
- * ui.text), then displays it with "Use as prompt" (prefills the t2i) and
- * "Copy" actions. Execution failures surface through the history entry's
+ * ui.text), then displays it with "Use as prompt" (pick a workflow with a
+ * prompt field, which opens prefilled) and "Copy" actions. Execution failures surface through the history entry's
  * status.status_str (the WS is not required).
  */
 
@@ -20,6 +20,7 @@ import {
   View,
 } from 'react-native';
 import { createClient } from '../../api/client';
+import { usePromptIn } from '../../components/UseInSheet';
 import { useGeneratedPrompts } from '../../store/generatedPrompts';
 import { useSettings } from '../../store/settings';
 import { useToast } from '../../store/toast';
@@ -40,6 +41,7 @@ export default function TextResultScreen() {
   const { t } = useTranslation();
   const serverUrl = useSettings((s) => s.serverUrl);
   const showToast = useToast((s) => s.show);
+  const promptIn = usePromptIn({ replace: true });
 
   const { data: entry, error: queryError } = useQuery({
     queryKey: ['textResult', promptId],
@@ -71,12 +73,7 @@ export default function TextResultScreen() {
   }, [text, promptId, workflowId, nodeId]);
 
   const usePrompt = () => {
-    if (!text) return;
-    router.replace(
-      `/workflow/krea2-text2img?prefill=${encodeURIComponent(
-        JSON.stringify({ prompt: text }),
-      )}` as Href,
-    );
+    if (text) promptIn.open(text);
   };
 
   const copy = async () => {
@@ -153,6 +150,7 @@ export default function TextResultScreen() {
           </Pressable>
         </>
       )}
+      {promptIn.sheet}
     </ScrollView>
   );
 }
