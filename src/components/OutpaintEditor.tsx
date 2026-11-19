@@ -42,7 +42,7 @@ import {
 } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
-import { makeStyles, useTheme } from '../theme/theme';
+import { makeStyles, ThemeOverride, useTheme } from '../theme/theme';
 import {
   applyTemplate,
   clampSides,
@@ -334,8 +334,9 @@ export function OutpaintEditor({
   onCancel,
   onDone,
 }: Props) {
-  const styles = useStyles();
-  const { colors } = useTheme();
+  // A media screen: dark in both themes, like the mask editor and the viewer.
+  const styles = useStyles('dark');
+  const { colors } = useTheme('dark');
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
   const [draft, setDraft] = useState(value);
@@ -487,17 +488,19 @@ export function OutpaintEditor({
       onRequestClose={onCancel}
       statusBarTranslucent
     >
+      <ThemeOverride name="dark">
       <GestureHandlerRootView style={styles.root}>
         <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-          <Pressable onPress={onCancel} hitSlop={8} style={styles.headerBtn}>
+          <Pressable onPress={onCancel} hitSlop={8} style={styles.headerBtn} accessibilityRole="button">
             <Text style={styles.cancel}>{t('common.cancel')}</Text>
           </Pressable>
           <Text style={styles.title}>{t('outpaint.editorTitle')}</Text>
           <Pressable
             // A side still being typed counts: Done must not drop it.
             onPress={() => onDone(fold(draft, typingRef.current))}
-            hitSlop={8}
-            style={styles.headerBtn}
+            hitSlop={4}
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.headerBtn, styles.donePill, pressed && { opacity: 0.85 }]}
           >
             <Text style={styles.done}>{t('common.done')}</Text>
           </Pressable>
@@ -692,12 +695,13 @@ export function OutpaintEditor({
           <InputAccessoryView nativeID={EDITOR_ACCESSORY_ID}>
             <View style={styles.accessoryBar}>
               <Pressable onPress={Keyboard.dismiss} hitSlop={8}>
-                <Text style={styles.done}>{t('launch.done')}</Text>
+                <Text style={styles.accessoryDone}>{t('launch.done')}</Text>
               </Pressable>
             </View>
           </InputAccessoryView>
         )}
       </GestureHandlerRootView>
+      </ThemeOverride>
     </Modal>
   );
 }
@@ -705,7 +709,7 @@ export function OutpaintEditor({
 const useStyles = makeStyles((colors) => ({
   root: {
     flex: 1,
-    backgroundColor: colors.bg,
+    backgroundColor: '#000', // the picture on black, like the viewer
   },
   header: {
     flexDirection: 'row',
@@ -713,8 +717,7 @@ const useStyles = makeStyles((colors) => ({
     justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.sm,
-    borderBottomColor: colors.border,
-    borderBottomWidth: 1,
+    backgroundColor: colors.bg,
   },
   headerBtn: {
     minHeight: MIN_TOUCH_TARGET,
@@ -723,17 +726,29 @@ const useStyles = makeStyles((colors) => ({
   title: {
     color: colors.text,
     fontFamily: typography.uiSemiBold,
-    fontSize: typography.sizes.md,
+    fontSize: 17,
   },
   cancel: {
-    color: colors.textMuted,
-    fontFamily: typography.ui,
-    fontSize: typography.sizes.sm,
+    color: colors.text,
+    fontFamily: typography.uiMedium,
+    fontSize: 15,
   },
   done: {
+    color: colors.onBrand,
+    fontFamily: typography.uiBold,
+    fontSize: 15,
+  },
+  donePill: {
+    minHeight: 40,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.full,
+    backgroundColor: colors.brand,
+    alignItems: 'center',
+  },
+  accessoryDone: {
     color: colors.accent,
     fontFamily: typography.uiSemiBold,
-    fontSize: typography.sizes.sm,
+    fontSize: 15,
   },
   body: {
     flex: 1,
@@ -795,8 +810,8 @@ const useStyles = makeStyles((colors) => ({
   panel: {
     flexGrow: 0,
     maxHeight: '55%',
-    borderTopColor: colors.border,
-    borderTopWidth: 1,
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
     backgroundColor: colors.bgElevated,
   },
   panelContent: {
