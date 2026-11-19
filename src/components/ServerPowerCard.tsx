@@ -27,6 +27,7 @@ import {
   parsePairingCode,
   type PairingResult,
 } from '../utils/pairing';
+import { AttentionModePicker } from './AttentionModePicker';
 import { PairingScanner } from './PairingScanner';
 import {
   MIN_TOUCH_TARGET,
@@ -192,6 +193,9 @@ export function ServerPowerCard() {
           </Pressable>
         )}
       </View>
+
+      {/* Applies to the next start, from here or from the offline panel. */}
+      {hasToken && state !== 'unconfigured' && <AttentionModePicker />}
 
       {/* Config: supervisor URL (optional) + token. Committed on blur. */}
       <View style={styles.config}>

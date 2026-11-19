@@ -47,6 +47,7 @@ const dark = {
   success: '#86d3a7',
   danger: '#f39189',
   dangerPressed: '#d97b74',
+  onDanger: '#15181b', // label on a danger fill: 7.9:1 on the coral
   dangerSoft: '#33201e',
   warning: '#ebb551',
   warningSoft: '#30271a',
@@ -90,6 +91,7 @@ const light: Palette = {
   success: '#17683c',
   danger: '#b3322a',
   dangerPressed: '#962920',
+  onDanger: '#ffffff', // 6.2:1 on the red (dark text would be 2.9:1)
   dangerSoft: '#fae8e5',
   warning: '#8a5200',
   warningSoft: '#faf0d9',

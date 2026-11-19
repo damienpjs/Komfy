@@ -1,283 +1,321 @@
 /**
- * "Running job" card: workflow label, progress, current node, elapsed time,
- * Interrupt button (with confirmation).
+ * "Running job" card, on the banner surface (same in both themes): live
+ * preview thumbnail, workflow, node and step, the percentage large enough
+ * to read at arm's length, time left and elapsed, a thick bar, then "Job
+ * details" and "Interrupt" (always through the confirmation sheet).
  * Fine-grained progress (%) only exists when the job was queued by Komfy
  * (WS routing by sid); otherwise indeterminate bar + local elapsed time.
  */
 
-import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
+import Svg, { Path, Rect } from 'react-native-svg';
 import type { QueueEntry } from '../api/types';
+import { formatClock, formatEta, useJobProgress } from '../hooks/useJobProgress';
+import { jobInfo } from '../hooks/useQueue';
 import { useExecution } from '../store/execution';
 import { useSettings } from '../store/settings';
-import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
-import { makeStyles, useTheme } from '../theme/theme';
-import { jobTitle } from '../hooks/useQueue';
+import { makeStyles } from '../theme/theme';
+import { radii, signature, spacing, typography } from '../theme/tokens';
+import { iconOf } from '../workflows/catalog';
+import { DotGrid } from './DotGrid';
+import { InterruptSheet } from './InterruptSheet';
 import { ProgressBar } from './ProgressBar';
+import { WorkflowIcon } from './WorkflowIcon';
 
 interface Props {
   entry: QueueEntry;
+  /** Jobs waiting behind this one (the sheet says they continue). */
+  pendingCount: number;
   onInterrupt: () => void;
   interrupting: boolean;
-  /** Tap on the card (outside the Interrupt button) → job detail. */
+  /** "Job details" → the job's parameters. */
   onPress: (entry: QueueEntry) => void;
   /** Tap on the preview thumbnail → full-screen live preview. */
   onPressPreview: () => void;
 }
 
-function formatElapsed(ms: number): string {
-  const s = Math.floor(ms / 1000);
-  const m = Math.floor(s / 60);
-  return `${m}:${String(s % 60).padStart(2, '0')}`;
-}
-
-function formatEta(sec: number): string {
-  const s = Math.max(0, Math.round(sec));
-  if (s < 60) return `${s} s`;
-  const m = Math.floor(s / 60);
-  return `${m}:${String(s % 60).padStart(2, '0')}`;
-}
+const THUMB = 108;
 
 export function CurrentJobCard({
   entry,
+  pendingCount,
   onInterrupt,
   interrupting,
   onPress,
   onPressPreview,
 }: Props) {
   const styles = useStyles();
-  const { colors } = useTheme();
   const [, promptId, graph] = entry;
   const { t } = useTranslation();
   const exec = useExecution();
   const previewsEnabled = useSettings((s) => s.previewsEnabled);
-  const isOurs = exec.promptId === promptId;
+  const progress = useJobProgress(promptId);
+  const { isOurs, fine, percent } = progress;
+  const info = jobInfo(promptId, graph);
+  const [confirming, setConfirming] = useState(false);
 
-  // Elapsed time: WS timestamp when the job is ours, else since the first
-  // time the app saw this prompt_id (lower-bound approximation).
-  const firstSeenRef = useRef<{ id: string; at: number }>({
-    id: promptId,
-    at: Date.now(),
-  });
-  if (firstSeenRef.current.id !== promptId) {
-    firstSeenRef.current = { id: promptId, at: Date.now() };
-  }
-  const since = isOurs && exec.startedAt ? exec.startedAt : firstSeenRef.current.at;
-
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
-
-  // ETA: average rate (steps/s) since the first measured step of the current
-  // node, extrapolated to the remaining steps. Only for our jobs (fine
-  // progress); resets on every node change or sampler reset.
-  const etaRef = useRef<{ key: string; at: number; value: number } | null>(null);
-  let eta: number | null = null;
-  if (isOurs && exec.max > 0 && exec.value > 0) {
-    const key = `${promptId}:${exec.node}`;
-    const anchor = etaRef.current;
-    if (!anchor || anchor.key !== key || exec.value < anchor.value) {
-      etaRef.current = { key, at: now, value: exec.value };
-    } else if (exec.value > anchor.value && now > anchor.at) {
-      const rate = (exec.value - anchor.value) / ((now - anchor.at) / 1000);
-      if (rate > 0) eta = (exec.max - exec.value) / rate;
-    }
-  } else if (isOurs && exec.value === 0) {
-    etaRef.current = null;
-  }
-
-  const confirmInterrupt = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    Alert.alert(t('job.interruptTitle'), t('job.interruptBody'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      { text: t('job.interrupt'), style: 'destructive', onPress: onInterrupt },
-    ]);
-  };
+  const clock = formatClock(progress.elapsedMs);
+  const elapsed = t('job.elapsed', { time: clock });
+  const etaText =
+    progress.etaSec != null ? t('job.etaRemaining', { eta: formatEta(progress.etaSec) }) : null;
+  const step = fine ? t('job.stepOf', { value: progress.value, max: progress.max }) : null;
+  // The node's type ("KSampler") says more than its id in the graph.
+  const nodeName =
+    progress.node != null ? (graph[progress.node]?.class_type ?? progress.node) : null;
+  const meta =
+    nodeName != null
+      ? [
+          nodeName,
+          fine ? t('job.stepShort', { value: progress.value, max: progress.max }) : null,
+        ]
+          .filter(Boolean)
+          .join(' · ')
+      : isOurs
+        ? ''
+        : t('job.noLiveProgress');
+  const preview = previewsEnabled && isOurs ? exec.preview : null;
 
   return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.card,
-        pressed && { backgroundColor: colors.surfacePressed },
-      ]}
-      onPress={() => onPress(entry)}
-    >
-      <View style={styles.headerRow}>
-        <View style={styles.liveDot} />
-        <Text style={styles.title} numberOfLines={1}>
-          {jobTitle(promptId, graph)}
-        </Text>
-        <View style={styles.timeCol}>
-          <Text style={styles.elapsed}>{formatElapsed(now - since)}</Text>
-          {eta != null && (
-            <Text style={styles.eta}>
-              {t('job.etaRemaining', { eta: formatEta(eta) })}
-            </Text>
-          )}
-        </View>
-      </View>
-
-      <ProgressBar
-        value={isOurs ? exec.value : 0}
-        max={isOurs ? exec.max : 0}
-        indeterminate={!isOurs || exec.max === 0}
-      />
-
-      {previewsEnabled && isOurs && exec.preview && (
-        <View style={styles.previewWrap}>
+    <View style={styles.card}>
+      <DotGrid color={signature.dot} spacing={14} />
+      <View style={styles.top}>
+        {preview ? (
           <Pressable
             onPress={onPressPreview}
             accessibilityRole="imagebutton"
             accessibilityLabel={t('job.expandPreview')}
-            style={({ pressed }) => pressed && { opacity: 0.8 }}
+            style={({ pressed }) => [styles.thumb, pressed && { opacity: 0.85 }]}
           >
             <Image
-              source={{ uri: exec.preview.dataUri }}
-              style={styles.previewImage}
-              contentFit="contain"
+              source={{ uri: preview.dataUri }}
+              style={styles.thumbImage}
+              contentFit="cover"
               transition={80}
             />
-            <View style={styles.expandBadge}>
-              <Ionicons name="expand-outline" size={16} color={colors.text} />
+            <Text style={styles.liveTag}>{t('job.liveTag')}</Text>
+            <View style={styles.expand}>
+              <Svg width={16} height={16} viewBox="0 0 24 24">
+                <Path
+                  d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"
+                  stroke={signature.text}
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
+                />
+              </Svg>
             </View>
           </Pressable>
-          <Text style={styles.previewLabel}>
-            {(exec.preview.displayNodeId ?? exec.preview.nodeId)
-              ? t('job.previewNode', {
-                  node: exec.preview.displayNodeId ?? exec.preview.nodeId,
-                })
-              : t('job.preview')}
-          </Text>
-        </View>
-      )}
+        ) : (
+          <View style={[styles.thumb, styles.thumbIcon]}>
+            <WorkflowIcon
+              name={info.manifestId ? iconOf(info.manifestId) : 'graph'}
+              color={signature.accent}
+              knockout={signature.chip}
+              size={44}
+            />
+          </View>
+        )}
 
-      <View style={styles.metaRow}>
-        <Text style={styles.meta} numberOfLines={1}>
-          {isOurs && exec.node != null
-            ? t('job.node', { node: exec.node })
-            : t('job.external')}
-        </Text>
-        <Text style={styles.promptId} numberOfLines={1}>
-          {promptId.slice(0, 8)}
-        </Text>
+        <View style={styles.info}>
+          <Text style={styles.title} numberOfLines={2}>
+            {info.title}
+          </Text>
+          {meta !== '' && (
+            <Text style={styles.meta} numberOfLines={1}>
+              {meta}
+            </Text>
+          )}
+          <View style={styles.figures}>
+            <Text style={styles.big} accessibilityLiveRegion="polite">
+              {percent != null ? `${percent} %` : clock}
+            </Text>
+            <Text style={styles.sub} numberOfLines={1}>
+              {percent != null
+                ? [etaText, elapsed].filter(Boolean).join(' · ')
+                : t('job.elapsedLabel')}
+            </Text>
+          </View>
+        </View>
       </View>
 
-      <Pressable
-        style={({ pressed }) => [
-          styles.interruptBtn,
-          pressed && { opacity: 0.7 },
-          interrupting && { opacity: 0.4 },
-        ]}
-        onPress={confirmInterrupt}
-        disabled={interrupting}
-      >
-        <Text style={styles.interruptText}>
-          {interrupting ? t('job.interrupting') : t('job.interrupt')}
-        </Text>
-      </Pressable>
-    </Pressable>
+      <ProgressBar
+        value={progress.value}
+        max={progress.max}
+        indeterminate={!fine}
+        signatureHeight={10}
+      />
+
+      <View style={styles.actions}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => onPress(entry)}
+          style={({ pressed }) => [styles.btn, pressed && styles.btnPressed]}
+        >
+          <Svg width={18} height={18} viewBox="0 0 24 24">
+            <Rect x={2.5} y={5} width={9} height={7} rx={2} stroke={signature.text} strokeWidth={1.8} fill="none" />
+            <Rect x={12.5} y={12} width={9} height={7} rx={2} stroke={signature.text} strokeWidth={1.8} fill="none" />
+            <Path d="M11.5 8.5c3 0 1 7 1 7" stroke={signature.text} strokeWidth={1.8} fill="none" strokeLinecap="round" />
+          </Svg>
+          <Text style={styles.btnText}>{t('job.details')}</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ disabled: interrupting, busy: interrupting }}
+          disabled={interrupting}
+          onPress={() => setConfirming(true)}
+          style={({ pressed }) => [
+            styles.btn,
+            styles.stop,
+            pressed && styles.stopPressed,
+            interrupting && { opacity: 0.5 },
+          ]}
+        >
+          <Svg width={18} height={18} viewBox="0 0 24 24">
+            <Rect x={6} y={6} width={12} height={12} rx={2.5} fill={signature.dangerText} />
+          </Svg>
+          <Text style={[styles.btnText, styles.stopText]}>
+            {interrupting ? t('job.interrupting') : t('job.interrupt')}
+          </Text>
+        </Pressable>
+      </View>
+
+      <InterruptSheet
+        visible={confirming}
+        title={info.title}
+        manifestId={info.manifestId}
+        progress={
+          percent != null
+            ? [step, `${percent} %`, etaText].filter(Boolean).join(' · ')
+            : elapsed
+        }
+        pendingCount={pendingCount}
+        onClose={() => setConfirming(false)}
+        onConfirm={() => {
+          setConfirming(false);
+          onInterrupt();
+        }}
+      />
+    </View>
   );
 }
 
-const useStyles = makeStyles((colors) => ({
+const useStyles = makeStyles(() => ({
   card: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radii.lg,
+    overflow: 'hidden',
+    gap: spacing.md - 2,
     padding: spacing.md,
-    gap: spacing.md,
+    borderRadius: radii.lg + 4,
+    backgroundColor: signature.bg,
+    borderWidth: 1,
+    borderColor: signature.border,
   },
-  headerRow: {
+  top: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
+    gap: spacing.md - 4,
   },
-  liveDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: colors.success,
+  thumb: {
+    width: THUMB,
+    height: THUMB,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: signature.chip,
+  },
+  thumbIcon: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: signature.chipBorder,
+  },
+  thumbImage: {
+    width: '100%',
+    height: '100%',
+  },
+  liveTag: {
+    position: 'absolute',
+    left: 6,
+    top: 6,
+    overflow: 'hidden',
+    paddingHorizontal: 5,
+    borderRadius: 4,
+    backgroundColor: signature.accent,
+    color: signature.bg,
+    fontFamily: typography.uiBold,
+    fontSize: 10,
+    lineHeight: 16,
+  },
+  expand: {
+    position: 'absolute',
+    right: 6,
+    bottom: 6,
+  },
+  info: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
   },
   title: {
-    flex: 1,
-    color: colors.text,
+    color: signature.text,
     fontFamily: typography.uiSemiBold,
-    fontSize: typography.sizes.md,
-  },
-  timeCol: {
-    alignItems: 'flex-end',
-    gap: 1,
-  },
-  elapsed: {
-    color: colors.textMuted,
-    fontFamily: typography.mono,
-    fontSize: typography.sizes.sm,
-  },
-  eta: {
-    color: colors.accent,
-    fontFamily: typography.mono,
-    fontSize: typography.sizes.xs,
-  },
-  previewWrap: {
-    gap: spacing.xs,
-  },
-  previewImage: {
-    width: '100%',
-    height: 220,
-    borderRadius: radii.md,
-    backgroundColor: colors.bg,
-  },
-  previewLabel: {
-    color: colors.textDisabled,
-    fontFamily: typography.mono,
-    fontSize: typography.sizes.xs,
-    textAlign: 'right',
-  },
-  expandBadge: {
-    position: 'absolute',
-    right: spacing.sm,
-    bottom: spacing.sm,
-    width: 28,
-    height: 28,
-    borderRadius: radii.sm,
-    backgroundColor: 'rgba(6, 4, 9, 0.75)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  metaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
+    fontSize: 16,
+    lineHeight: 21,
   },
   meta: {
-    flexShrink: 1,
-    color: colors.textMuted,
-    fontFamily: typography.ui,
-    fontSize: typography.sizes.xs,
-  },
-  promptId: {
-    color: colors.textDisabled,
+    color: signature.textMuted,
     fontFamily: typography.mono,
-    fontSize: typography.sizes.xs,
+    fontSize: 12,
   },
-  interruptBtn: {
-    minHeight: MIN_TOUCH_TARGET,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.danger,
+  figures: {
+    marginTop: 'auto',
+    gap: 2,
+  },
+  big: {
+    color: signature.text,
+    fontFamily: typography.uiBold,
+    fontSize: 28,
+    lineHeight: 32,
+  },
+  sub: {
+    color: signature.textMuted,
+    fontFamily: typography.ui,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  actions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  btn: {
+    flex: 1,
+    minHeight: 48,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: spacing.sm,
+    borderRadius: radii.md + 2,
+    backgroundColor: signature.chip,
+    borderWidth: 1,
+    borderColor: signature.chipBorder,
   },
-  interruptText: {
-    color: colors.danger,
+  btnPressed: {
+    opacity: 0.8,
+  },
+  btnText: {
+    color: signature.text,
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.sm,
+  },
+  stop: {
+    backgroundColor: signature.dangerFill,
+    borderColor: signature.dangerFill,
+  },
+  stopPressed: {
+    opacity: 0.8,
+  },
+  stopText: {
+    color: signature.dangerText,
   },
 }));

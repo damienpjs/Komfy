@@ -16,16 +16,37 @@ import type {
 
 const DEFAULT_TIMEOUT_MS = 8000;
 
+/**
+ * How a request failed, for the offline diagnostic:
+ * - `timeout`: no answer in time. Over Tailscale it means the packets never
+ *   reach the machine (dead tunnel, machine asleep or off).
+ * - `network`: refused or failed fast. The host answered, nothing listens on
+ *   the port (service stopped), or the URL is wrong.
+ * - `http`: the server answered with an error status.
+ */
+export type FailureKind = 'timeout' | 'network' | 'http';
+
 /** Network/HTTP error enriched with the ComfyUI error body when present. */
 export class ComfyApiError extends Error {
+  public readonly kind: FailureKind;
+
   constructor(
     message: string,
     public readonly status?: number,
     public readonly body?: PromptErrorResponse | unknown,
+    kind?: FailureKind,
   ) {
     super(message);
     this.name = 'ComfyApiError';
+    this.kind = kind ?? (status != null ? 'http' : 'network');
   }
+}
+
+/** Kind of any error thrown by a fetch-based client (ours or a raw fetch). */
+export function failureKind(e: unknown): FailureKind {
+  if (e instanceof ComfyApiError) return e.kind;
+  if (e instanceof Error && e.name === 'AbortError') return 'timeout';
+  return 'network';
 }
 
 async function request<T>(
@@ -35,12 +56,36 @@ async function request<T>(
   timeoutMs = DEFAULT_TIMEOUT_MS,
 ): Promise<T> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
   try {
-    const res = await fetch(`${baseUrl}${path}`, {
-      ...init,
-      signal: controller.signal,
-    });
+    let res: Response;
+    try {
+      res = await fetch(`${baseUrl}${path}`, {
+        ...init,
+        signal: controller.signal,
+      });
+    } catch (e) {
+      // RN reports an abort as a TypeError on some versions: the flag, not
+      // the error name, says whether our timer fired.
+      if (timedOut) {
+        throw new ComfyApiError(
+          `No answer within ${Math.round(timeoutMs / 1000)} s on ${path}`,
+          undefined,
+          undefined,
+          'timeout',
+        );
+      }
+      throw new ComfyApiError(
+        e instanceof Error ? e.message : String(e),
+        undefined,
+        undefined,
+        'network',
+      );
+    }
     if (!res.ok) {
       let body: unknown;
       try {

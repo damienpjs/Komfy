@@ -5,6 +5,8 @@
  * is down. See server/supervisor/README.md for the endpoints.
  */
 
+import type { FailureKind } from './client';
+
 const DEFAULT_TIMEOUT_MS = 6000;
 
 export type ComfyState = 'up' | 'down' | 'starting';
@@ -22,14 +24,21 @@ export type SupervisorWsMessage =
   | { type: 'state'; comfy: ComfyState; code?: number; at?: number };
 
 export class SupervisorError extends Error {
+  public readonly kind: FailureKind;
+
   constructor(
     message: string,
     public readonly status?: number,
+    kind?: FailureKind,
   ) {
     super(message);
     this.name = 'SupervisorError';
+    this.kind = kind ?? (status != null ? 'http' : 'network');
   }
 }
+
+/** Attention backend ComfyUI starts with (server/supervisor whitelist). */
+export type AttentionMode = 'sdpa' | 'split';
 
 /**
  * Default supervisor URL derived from the ComfyUI server URL: same host, port
@@ -51,7 +60,11 @@ async function request<T>(
   init?: RequestInit,
 ): Promise<T> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, DEFAULT_TIMEOUT_MS);
   try {
     const res = await fetch(`${baseUrl}${path}`, {
       ...init,
@@ -77,7 +90,13 @@ async function request<T>(
     if (e instanceof SupervisorError) throw e;
     // Network failure / timeout → the supervisor is unreachable.
     throw new SupervisorError(
-      e instanceof Error ? e.message : String(e),
+      timedOut
+        ? `No answer within ${Math.round(DEFAULT_TIMEOUT_MS / 1000)} s`
+        : e instanceof Error
+          ? e.message
+          : String(e),
+      undefined,
+      timedOut ? 'timeout' : 'network',
     );
   } finally {
     clearTimeout(timer);
@@ -88,12 +107,30 @@ export interface SupervisorClient {
   baseUrl: string;
   /** GET /health — no token required (up/down is harmless). */
   health(): Promise<SupervisorHealth>;
-  /** POST /start — 409 (SupervisorError.status) when ComfyUI already runs. */
-  start(): Promise<{ starting: boolean }>;
+  /**
+   * POST /start: 409 (SupervisorError.status) when ComfyUI already runs.
+   * `mode` picks the attention backend; omitted = the server's default.
+   */
+  start(mode?: AttentionMode): Promise<{ starting: boolean }>;
+  /**
+   * POST /restart: stop, wait for the port to free, start. Drops ComfyUI's
+   * in-memory queue. A supervisor older than this route answers 404.
+   */
+  restart(mode?: AttentionMode): Promise<{ starting: boolean }>;
   /** POST /stop. */
   stop(): Promise<{ stopped: boolean }>;
   /** WebSocket URL for the live console (token in the query string). */
   wsUrl(): string;
+}
+
+function modeInit(mode?: AttentionMode): RequestInit {
+  return mode
+    ? {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode }),
+      }
+    : { method: 'POST' };
 }
 
 export function createSupervisor(baseUrl: string, token: string): SupervisorClient {
@@ -101,8 +138,10 @@ export function createSupervisor(baseUrl: string, token: string): SupervisorClie
   return {
     baseUrl: base,
     health: () => request<SupervisorHealth>(base, '/health', token),
-    start: () =>
-      request<{ starting: boolean }>(base, '/start', token, { method: 'POST' }),
+    start: (mode) =>
+      request<{ starting: boolean }>(base, '/start', token, modeInit(mode)),
+    restart: (mode) =>
+      request<{ starting: boolean }>(base, '/restart', token, modeInit(mode)),
     stop: () =>
       request<{ stopped: boolean }>(base, '/stop', token, { method: 'POST' }),
     wsUrl: () =>

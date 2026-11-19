@@ -23,16 +23,34 @@ const POLL_MS = 5000;
  * generic describeGraph label. Matching walks every manifest, so the result
  * is cached per prompt id (a job's graph never changes).
  */
-const titleCache = new Map<string, string>();
+export interface JobInfo {
+  title: string;
+  /** Matched manifest (its catalogue icon), absent for an unknown graph. */
+  manifestId?: string;
+  /** The job's prompt text, when its workflow has a `prompt` field. */
+  prompt?: string;
+}
+
+const infoCache = new Map<string, JobInfo>();
 
 export function jobTitle(promptId: string, graph: QueueEntry[2]): string {
-  const cached = titleCache.get(promptId);
+  return jobInfo(promptId, graph).title;
+}
+
+/** Title of a job the app has already seen in the queue (no graph needed). */
+export function knownJobTitle(promptId: string): string | undefined {
+  return infoCache.get(promptId)?.title;
+}
+
+export function jobInfo(promptId: string, graph: QueueEntry[2]): JobInfo {
+  const cached = infoCache.get(promptId);
   if (cached != null) return cached;
   const outcome = matchGraph(graph, allWorkflows());
   const manifest =
     outcome.status === 'match'
       ? allWorkflows().find((w) => w.id === outcome.manifestId)
       : undefined;
+  const promptValue = outcome.status === 'match' ? outcome.values.prompt : undefined;
   // Catalogue name first (with the mode for a family member), so a job
   // reads the way its workflow does on the Create screen.
   const entry = manifest ? entryOf(manifest.id) : undefined;
@@ -44,9 +62,17 @@ export function jobTitle(promptId: string, graph: QueueEntry[2]): string {
     : manifest
       ? i18n.t(manifest.name)
       : describeGraph(graph);
-  if (titleCache.size > 200) titleCache.clear();
-  titleCache.set(promptId, title);
-  return title;
+  const info: JobInfo = {
+    title,
+    manifestId: manifest?.id,
+    prompt:
+      typeof promptValue === 'string' && promptValue.trim()
+        ? promptValue.trim().replace(/\s+/g, ' ')
+        : undefined,
+  };
+  if (infoCache.size > 200) infoCache.clear();
+  infoCache.set(promptId, info);
+  return info;
 }
 const POLL_WS_MS = 15000;
 

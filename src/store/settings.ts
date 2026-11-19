@@ -42,6 +42,11 @@ interface SettingsState {
   language: Lang;
   /** Colour theme: follow the system, or force light / dark. */
   themePreference: ThemePreference;
+  /**
+   * Attention backend asked of the supervisor when the app turns ComfyUI on.
+   * 'default' sends nothing: the server's COMFY_START_ARGS decide.
+   */
+  startMode: StartMode;
   /** true once the store has been rehydrated from AsyncStorage. */
   hydrated: boolean;
   setServerUrl: (url: string) => void;
@@ -51,9 +56,11 @@ interface SettingsState {
   setLoraMaxCount: (count: number | null) => void;
   setLanguage: (language: Lang) => void;
   setThemePreference: (preference: ThemePreference) => void;
+  setStartMode: (mode: StartMode) => void;
 }
 
 export type ThemePreference = 'auto' | 'light' | 'dark';
+export type StartMode = 'default' | 'sdpa' | 'split';
 
 export const useSettings = create<SettingsState>()(
   persist(
@@ -66,6 +73,7 @@ export const useSettings = create<SettingsState>()(
       loraMaxCount: 4,
       language: 'en',
       themePreference: 'auto',
+      startMode: 'default',
       hydrated: false,
       setServerUrl: (url) => set({ serverUrl: url.trim().replace(/\/+$/, '') }),
       setSupervisorUrl: (url) =>
@@ -78,6 +86,7 @@ export const useSettings = create<SettingsState>()(
         set({ language });
       },
       setThemePreference: (themePreference) => set({ themePreference }),
+      setStartMode: (startMode) => set({ startMode }),
     }),
     {
       name: 'komfy-settings',
@@ -91,6 +100,7 @@ export const useSettings = create<SettingsState>()(
         loraMaxCount,
         language,
         themePreference,
+        startMode,
       }) => ({
         serverUrl,
         supervisorUrl,
@@ -100,6 +110,7 @@ export const useSettings = create<SettingsState>()(
         loraMaxCount,
         language,
         themePreference,
+        startMode,
       }),
       onRehydrateStorage: () => () => {
         const { language } = useSettings.getState();

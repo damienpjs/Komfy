@@ -1,24 +1,28 @@
 /**
- * Queue screen (home): running job card, pending job list (swipe-to-delete),
- * interrupt / clear queue, empty and error states.
+ * Activity tab: the running job on the banner surface, the last failure with
+ * what to do about it, then the pending jobs (visible remove button, swipe
+ * kept). Offline, the offline diagnostic replaces the feed: what answers,
+ * what does not, and the likely cause.
  */
 
 import * as Haptics from 'expo-haptics';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, FlatList, Pressable, Text, View } from 'react-native';
+import { Alert, FlatList, Pressable, ScrollView, Text, View } from 'react-native';
+import type { QueueEntry } from '../../api/types';
 import { CurrentJobCard } from '../../components/CurrentJobCard';
+import { FailureCard } from '../../components/FailureCard';
 import { JobDetailSheet } from '../../components/JobDetailSheet';
 import { LivePreviewViewer } from '../../components/LivePreviewViewer';
+import { OfflinePanel } from '../../components/OfflinePanel';
 import { PendingJobRow } from '../../components/PendingJobRow';
-import { useState } from 'react';
-import type { QueueEntry } from '../../api/types';
-import { jobTitle, useQueue } from '../../hooks/useQueue';
+import { jobInfo, useQueue } from '../../hooks/useQueue';
 import { useConnection } from '../../store/connection';
 import { useExecution } from '../../store/execution';
-import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../../theme/tokens';
 import { makeStyles } from '../../theme/theme';
+import { radii, spacing, typography } from '../../theme/tokens';
 
-export default function QueueScreen() {
+export default function ActivityScreen() {
   const styles = useStyles();
   const { t } = useTranslation();
   const { query, interrupt, clearQueue, deleteItem } = useQueue();
@@ -29,9 +33,9 @@ export default function QueueScreen() {
   const [selectedJob, setSelectedJob] = useState<QueueEntry | null>(null);
   const [livePreviewOpen, setLivePreviewOpen] = useState(false);
   const running = query.data?.queue_running ?? [];
-  const pending = [...(query.data?.queue_pending ?? [])].sort(
-    (a, b) => a[0] - b[0],
-  );
+  const pending = [...(query.data?.queue_pending ?? [])].sort((a, b) => a[0] - b[0]);
+  const current = running[0];
+  const currentInfo = current ? jobInfo(current[1], current[2]) : undefined;
 
   const confirmClear = () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -45,46 +49,27 @@ export default function QueueScreen() {
     ]);
   };
 
-  // Server unreachable: full-page error state.
+  // Server unreachable: diagnostic instead of the feed.
   if (online === false || (query.isError && !query.data)) {
     return (
-      <View style={styles.centerBox}>
-        <Text style={styles.errorTitle}>{t('queue.offlineTitle')}</Text>
-        <Text style={styles.errorDetail}>{t('queue.offlineBody')}</Text>
-        <Pressable
-          style={({ pressed }) => [styles.retryBtn, pressed && { opacity: 0.7 }]}
-          onPress={() => query.refetch()}
-        >
-          <Text style={styles.retryText}>{t('common.retry')}</Text>
-        </Pressable>
-      </View>
+      <ScrollView contentContainerStyle={styles.listContent}>
+        <OfflinePanel />
+      </ScrollView>
     );
   }
 
   return (
     <View style={styles.container}>
-      {lastError && (
-        <Pressable style={styles.errorBanner} onPress={clearError}>
-          <Text style={styles.errorBannerTitle}>
-            {t('queue.errorTitle', { node: lastError.nodeType })}
-          </Text>
-          <Text style={styles.errorBannerDetail} numberOfLines={2}>
-            {lastError.message}
-          </Text>
-          <Text style={styles.errorBannerHint}>{t('queue.tapToDismiss')}</Text>
-        </Pressable>
-      )}
-
       <FlatList
         data={pending}
         keyExtractor={(e) => e[1]}
         contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
         ListHeaderComponent={
           <View style={styles.headerBlock}>
-            {running.length > 0 ? (
+            {current ? (
               <CurrentJobCard
-                entry={running[0]}
+                entry={current}
+                pendingCount={pending.length}
                 onInterrupt={() => interrupt.mutate()}
                 interrupting={interrupt.isPending}
                 onPress={setSelectedJob}
@@ -96,18 +81,28 @@ export default function QueueScreen() {
               </View>
             )}
 
-            <View style={styles.pendingHeader}>
+            {lastError && (
+              <FailureCard
+                error={lastError}
+                pendingCount={pending.length}
+                onDismiss={clearError}
+              />
+            )}
+
+            <View style={styles.sectionHead}>
               <Text style={styles.sectionTitle}>
                 {t('queue.pendingSection')}
-                {pending.length > 0 ? ` (${pending.length})` : ''}
+                {pending.length > 0 ? ` · ${pending.length}` : ''}
               </Text>
               {pending.length > 0 && (
                 <Pressable
+                  accessibilityRole="button"
                   onPress={confirmClear}
                   disabled={clearQueue.isPending}
-                  style={({ pressed }) => pressed && { opacity: 0.7 }}
+                  hitSlop={10}
+                  style={({ pressed }) => pressed && { opacity: 0.6 }}
                 >
-                  <Text style={styles.clearText}>{t('queue.clearQueue')}</Text>
+                  <Text style={styles.clearText}>{t('queue.clearAll')}</Text>
                 </Pressable>
               )}
             </View>
@@ -122,27 +117,28 @@ export default function QueueScreen() {
           <PendingJobRow
             entry={item}
             position={index + 1}
+            first={index === 0}
+            last={index === pending.length - 1}
             onPress={setSelectedJob}
-            onDelete={(id) => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              deleteItem.mutate(id);
-            }}
+            onDelete={(id) => deleteItem.mutate(id)}
           />
         )}
       />
 
       {selectedJob && (
-        <JobDetailSheet
-          entry={selectedJob}
-          onClose={() => setSelectedJob(null)}
-        />
+        <JobDetailSheet entry={selectedJob} onClose={() => setSelectedJob(null)} />
       )}
 
       {/* Mounted at screen level (not in the card): survives the job's end,
           so the viewer can show its "finished" state on the last frame. */}
       {livePreviewOpen && (
         <LivePreviewViewer
-          title={running.length > 0 ? jobTitle(running[0][1], running[0][2]) : undefined}
+          title={currentInfo?.title}
+          manifestId={currentInfo?.manifestId}
+          pendingCount={pending.length}
+          canInterrupt={!!current}
+          interrupting={interrupt.isPending}
+          onInterrupt={() => interrupt.mutate()}
           onClose={() => setLivePreviewOpen(false)}
         />
       )}
@@ -163,29 +159,31 @@ const useStyles = makeStyles((colors) => ({
     marginBottom: spacing.sm,
   },
   idleCard: {
-    backgroundColor: colors.bgElevated,
-    borderColor: colors.border,
+    alignItems: 'center',
+    padding: spacing.lg,
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderRadius: radii.lg,
-    padding: spacing.lg,
-    alignItems: 'center',
+    borderColor: colors.border,
   },
   idleText: {
     color: colors.textMuted,
     fontFamily: typography.ui,
     fontSize: typography.sizes.sm,
   },
-  pendingHeader: {
+  sectionHead: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginTop: spacing.xs,
     minHeight: 24,
   },
   sectionTitle: {
     color: colors.textMuted,
-    fontFamily: typography.uiSemiBold,
-    fontSize: typography.sizes.sm,
+    fontFamily: typography.mono,
+    fontSize: typography.sizes.xs,
+    letterSpacing: 0.7,
+    textTransform: 'uppercase',
   },
   clearText: {
     color: colors.danger,
@@ -193,67 +191,10 @@ const useStyles = makeStyles((colors) => ({
     fontSize: typography.sizes.sm,
   },
   emptyText: {
-    color: colors.textDisabled,
-    fontFamily: typography.ui,
-    fontSize: typography.sizes.sm,
-    textAlign: 'center',
-    paddingVertical: spacing.lg,
-  },
-  centerBox: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.lg,
-    gap: spacing.sm,
-  },
-  errorTitle: {
-    color: colors.danger,
-    fontFamily: typography.uiBold,
-    fontSize: typography.sizes.lg,
-  },
-  errorDetail: {
     color: colors.textMuted,
     fontFamily: typography.ui,
     fontSize: typography.sizes.sm,
     textAlign: 'center',
-  },
-  retryBtn: {
-    marginTop: spacing.md,
-    minHeight: MIN_TOUCH_TARGET,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radii.md,
-    backgroundColor: colors.strong,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  retryText: {
-    color: colors.onStrong,
-    fontFamily: typography.uiSemiBold,
-    fontSize: typography.sizes.sm,
-  },
-  errorBanner: {
-    backgroundColor: colors.dangerSoft,
-    borderColor: colors.danger,
-    borderWidth: 1,
-    borderRadius: radii.md,
-    marginHorizontal: spacing.md,
-    marginTop: spacing.sm,
-    padding: spacing.md,
-    gap: spacing.xs,
-  },
-  errorBannerTitle: {
-    color: colors.danger,
-    fontFamily: typography.uiSemiBold,
-    fontSize: typography.sizes.sm,
-  },
-  errorBannerDetail: {
-    color: colors.textMuted,
-    fontFamily: typography.mono,
-    fontSize: typography.sizes.xs,
-  },
-  errorBannerHint: {
-    color: colors.textDisabled,
-    fontFamily: typography.ui,
-    fontSize: typography.sizes.xs,
+    paddingVertical: spacing.md,
   },
 }));
