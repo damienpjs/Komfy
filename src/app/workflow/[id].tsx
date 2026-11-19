@@ -496,7 +496,7 @@ export default function WorkflowLaunchScreen() {
           ? t('launch.jobsQueued', { count: batchCount, number: firstNumber })
           : t('launch.jobQueued', { number: firstNumber }),
       );
-      router.replace('/');
+      router.replace('/activity' as Href);
     } catch (e) {
       Alert.alert(t('launch.launchFailed'), comfyErrorMessage(e));
     } finally {

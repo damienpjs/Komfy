@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { Pressable, Text } from 'react-native';
 import type { QueueEntry } from '../api/types';
-import { describeGraph } from '../hooks/useQueue';
+import { jobTitle } from '../hooks/useQueue';
 import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
 import { makeStyles, useTheme } from '../theme/theme';
 
@@ -50,7 +50,7 @@ export function PendingJobRow({ entry, position, onDelete, onPress }: Props) {
       >
         <Text style={styles.position}>#{position}</Text>
         <Text style={styles.title} numberOfLines={1}>
-          {describeGraph(graph)}
+          {jobTitle(promptId, graph)}
         </Text>
         <Text style={styles.promptId}>{promptId.slice(0, 8)}</Text>
         <Ionicons name="chevron-forward" size={14} color={colors.textDisabled} />

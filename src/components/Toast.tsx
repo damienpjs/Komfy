@@ -39,7 +39,7 @@ const useStyles = makeStyles((colors) => ({
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: 96, // above the tab bar
+    bottom: 160, // above the tab bar and the mini player
     alignItems: 'center',
     zIndex: 10,
   },

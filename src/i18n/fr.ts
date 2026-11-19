@@ -29,10 +29,19 @@ export default {
     library: 'Prompts sauvegardés',
   },
   tabs: {
-    queue: 'Queue',
-    workflows: 'Workflows',
+    create: 'Créer',
+    activity: 'Activité',
     library: 'Bibliothèque',
     settings: 'Réglages',
+  },
+  shell: {
+    step: 'Étape {{value}} / {{max}}',
+    running: 'En cours',
+    pending_one: '{{count}} en attente',
+    pending_other: '{{count}} en attente',
+    openActivity: "Ouvrir l'activité",
+    chipA11y: "Serveur : {{status}}. Ouvrir l'activité",
+    chipJobA11y: "Job en cours, {{percent}} pour cent. Ouvrir l'activité",
   },
   library: {
     images: 'Images',

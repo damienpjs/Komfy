@@ -1,84 +1,41 @@
-import { Ionicons } from '@expo/vector-icons';
+/**
+ * Tabs: Create (home), Activity, Library, Settings. The dotted ground comes
+ * from the root stack (screens stay transparent), the header is the large
+ * tab title with the server chip, and the tab bar carries the mini player.
+ */
+
 import { Tabs } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { ScreenGround } from '../../components/DotGrid';
-import { useVolumeBannerVisible } from '../../components/VolumeBanner';
+import { KomfyTabBar } from '../../components/KomfyTabBar';
+import { TabHeader } from '../../components/TabHeader';
 import { useQueue } from '../../hooks/useQueue';
 import { useConnection } from '../../store/connection';
-import { typography } from '../../theme/tokens';
-import { useTheme } from '../../theme/theme';
 
 export default function TabsLayout() {
-  const { colors } = useTheme();
   const { t } = useTranslation();
   // "N pending" badge: queue if available, else the WS status message counter.
   const { query } = useQueue();
   const queueRemaining = useConnection((s) => s.queueRemaining);
   const pendingCount = query.data?.queue_pending.length ?? queueRemaining ?? 0;
-  // The volume banner already covers the status bar: the JS header must not
-  // add its own status bar padding on top of it.
-  const bannerVisible = useVolumeBannerVisible();
 
   return (
     <Tabs
-      screenLayout={({ children }) => <ScreenGround>{children}</ScreenGround>}
+      tabBar={(props) => <KomfyTabBar {...props} />}
       screenOptions={{
-        headerStyle: { backgroundColor: colors.bgElevated },
-        headerTintColor: colors.text,
-        headerTitleStyle: { fontFamily: typography.uiSemiBold },
-        headerStatusBarHeight: bannerVisible ? 0 : undefined,
-        sceneStyle: { backgroundColor: colors.bg },
-        tabBarStyle: {
-          backgroundColor: colors.bgElevated,
-          borderTopColor: colors.border,
-        },
-        tabBarActiveTintColor: colors.tabActive,
-        tabBarInactiveTintColor: colors.textMuted,
-        tabBarLabelStyle: { fontFamily: typography.uiMedium },
+        header: ({ options }) => <TabHeader title={options.title ?? ''} />,
+        sceneStyle: { backgroundColor: 'transparent' },
       }}
     >
+      <Tabs.Screen name="index" options={{ title: t('tabs.create') }} />
       <Tabs.Screen
-        name="index"
+        name="activity"
         options={{
-          title: t('tabs.queue'),
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="layers-outline" size={size} color={color} />
-          ),
+          title: t('tabs.activity'),
           tabBarBadge: pendingCount > 0 ? pendingCount : undefined,
-          tabBarBadgeStyle: {
-            backgroundColor: colors.accent,
-            color: colors.onAccent,
-            fontFamily: typography.uiSemiBold,
-          },
         }}
       />
-      <Tabs.Screen
-        name="workflows"
-        options={{
-          title: t('tabs.workflows'),
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="color-wand-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="library"
-        options={{
-          title: t('tabs.library'),
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="albums-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: t('tabs.settings'),
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="settings-outline" size={size} color={color} />
-          ),
-        }}
-      />
+      <Tabs.Screen name="library" options={{ title: t('tabs.library') }} />
+      <Tabs.Screen name="settings" options={{ title: t('tabs.settings') }} />
     </Tabs>
   );
 }

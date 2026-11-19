@@ -29,10 +29,19 @@ export default {
     library: 'Saved prompts',
   },
   tabs: {
-    queue: 'Queue',
-    workflows: 'Workflows',
+    create: 'Create',
+    activity: 'Activity',
     library: 'Library',
     settings: 'Settings',
+  },
+  shell: {
+    step: 'Step {{value}} / {{max}}',
+    running: 'Running',
+    pending_one: '{{count}} pending',
+    pending_other: '{{count}} pending',
+    openActivity: 'Open activity',
+    chipA11y: 'Server: {{status}}. Open activity',
+    chipJobA11y: 'Job running, {{percent}} percent. Open activity',
   },
   library: {
     images: 'Images',

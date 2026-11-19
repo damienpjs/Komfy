@@ -16,7 +16,7 @@ import { useExecution } from '../store/execution';
 import { useSettings } from '../store/settings';
 import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
 import { makeStyles, useTheme } from '../theme/theme';
-import { describeGraph } from '../hooks/useQueue';
+import { jobTitle } from '../hooks/useQueue';
 import { ProgressBar } from './ProgressBar';
 
 interface Props {
@@ -111,7 +111,7 @@ export function CurrentJobCard({
       <View style={styles.headerRow}>
         <View style={styles.liveDot} />
         <Text style={styles.title} numberOfLines={1}>
-          {describeGraph(graph)}
+          {jobTitle(promptId, graph)}
         </Text>
         <View style={styles.timeCol}>
           <Text style={styles.elapsed}>{formatElapsed(now - since)}</Text>

@@ -12,8 +12,31 @@ import type { QueueEntry, QueueResponse } from '../api/types';
 import i18n from '../i18n';
 import { useConnection } from '../store/connection';
 import { useSettings } from '../store/settings';
+import { matchGraph } from '../workflows/match';
+import { allWorkflows } from '../workflows/registry';
 
 const POLL_MS = 5000;
+
+/**
+ * Workflow name of a job when its graph matches a known manifest, else the
+ * generic describeGraph label. Matching walks every manifest, so the result
+ * is cached per prompt id (a job's graph never changes).
+ */
+const titleCache = new Map<string, string>();
+
+export function jobTitle(promptId: string, graph: QueueEntry[2]): string {
+  const cached = titleCache.get(promptId);
+  if (cached != null) return cached;
+  const outcome = matchGraph(graph, allWorkflows());
+  const manifest =
+    outcome.status === 'match'
+      ? allWorkflows().find((w) => w.id === outcome.manifestId)
+      : undefined;
+  const title = manifest ? i18n.t(manifest.name) : describeGraph(graph);
+  if (titleCache.size > 200) titleCache.clear();
+  titleCache.set(promptId, title);
+  return title;
+}
 const POLL_WS_MS = 15000;
 
 /** Readable label for a job from its graph (checkpoint when present). */

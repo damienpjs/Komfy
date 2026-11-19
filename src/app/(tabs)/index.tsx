@@ -1,151 +1,178 @@
 /**
- * Queue screen (home): running job card, pending job list (swipe-to-delete),
- * interrupt / clear queue, empty and error states.
+ * Workflows screen: card grid of the embedded + imported workflows, plus an
+ * import card (paste an API-format graph). Cards whose requirements are
+ * missing on the connected server (custom nodes, model files — cf.
+ * useAvailability) carry a warning badge; opening them shows what is
+ * missing first (launch stays possible: POST /prompt is the final judge).
+ * Imported workflows: "cube" chip, long-press to delete.
  */
 
+import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { useRouter, type Href } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { Alert, FlatList, Pressable, Text, View } from 'react-native';
-import { CurrentJobCard } from '../../components/CurrentJobCard';
-import { JobDetailSheet } from '../../components/JobDetailSheet';
-import { LivePreviewViewer } from '../../components/LivePreviewViewer';
-import { PendingJobRow } from '../../components/PendingJobRow';
-import { useState } from 'react';
-import type { QueueEntry } from '../../api/types';
-import { describeGraph, useQueue } from '../../hooks/useQueue';
-import { useConnection } from '../../store/connection';
-import { useExecution } from '../../store/execution';
-import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../../theme/tokens';
-import { makeStyles } from '../../theme/theme';
+import { useAvailability } from '../../hooks/useAvailability';
+import { useCustomWorkflows } from '../../store/customWorkflows';
+import { showActionSheet } from '../../utils/actionSheet';
+import { radii, spacing, typography } from '../../theme/tokens';
+import { makeStyles, useTheme } from '../../theme/theme';
+import { useWorkflows } from '../../workflows/registry';
+import type { WorkflowAvailability } from '../../workflows/requirements';
 
-export default function QueueScreen() {
+function availabilityMessage(
+  t: TFunction,
+  check: WorkflowAvailability,
+): string {
+  const parts: string[] = [];
+  if (check.missingNodes.length > 0) {
+    parts.push(
+      t('availability.missingNodes', { list: check.missingNodes.join('\n') }),
+    );
+  }
+  if (check.missingValues.length > 0) {
+    const values = [...new Set(check.missingValues.map((v) => v.value))];
+    parts.push(t('availability.missingModels', { list: values.join('\n') }));
+  }
+  return parts.join('\n\n');
+}
+
+/** Sentinel appended to the grid: the "import a workflow" card. */
+const IMPORT_CARD_ID = '__import__';
+
+export default function WorkflowsScreen() {
   const styles = useStyles();
+  const { colors } = useTheme();
+  const router = useRouter();
   const { t } = useTranslation();
-  const { query, interrupt, clearQueue, deleteItem } = useQueue();
-  const online = useConnection((s) => s.online);
-  const lastError = useExecution((s) => s.lastError);
-  const clearError = useExecution((s) => s.clearError);
+  const availability = useAvailability();
+  const workflows = useWorkflows();
+  // Select the stable array reference — deriving (map/filter) inside a
+  // zustand selector returns a fresh object every render → infinite loop.
+  const customs = useCustomWorkflows((s) => s.manifests);
 
-  const [selectedJob, setSelectedJob] = useState<QueueEntry | null>(null);
-  const [livePreviewOpen, setLivePreviewOpen] = useState(false);
-  const running = query.data?.queue_running ?? [];
-  const pending = [...(query.data?.queue_pending ?? [])].sort(
-    (a, b) => a[0] - b[0],
-  );
+  const open = (id: string) => router.push(`/workflow/${id}` as Href);
 
-  const confirmClear = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    Alert.alert(t('queue.clearTitle'), t('queue.clearBody', { count: pending.length }), [
-      { text: t('common.cancel'), style: 'cancel' },
+  const customMenu = (id: string, name: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    showActionSheet(name, [
       {
-        text: t('queue.clear'),
-        style: 'destructive',
-        onPress: () => clearQueue.mutate(),
+        label: t('importWf.edit'),
+        onPress: () => router.push(`/workflow/edit?id=${id}` as Href),
+      },
+      {
+        label: t('common.delete'),
+        destructive: true,
+        onPress: () =>
+          Alert.alert(
+            t('importWf.deleteTitle'),
+            t('importWf.deleteBody', { name }),
+            [
+              { text: t('common.cancel'), style: 'cancel' },
+              {
+                text: t('common.delete'),
+                style: 'destructive',
+                onPress: () => useCustomWorkflows.getState().remove(id),
+              },
+            ],
+          ),
       },
     ]);
   };
 
-  // Server unreachable: full-page error state.
-  if (online === false || (query.isError && !query.data)) {
-    return (
-      <View style={styles.centerBox}>
-        <Text style={styles.errorTitle}>{t('queue.offlineTitle')}</Text>
-        <Text style={styles.errorDetail}>{t('queue.offlineBody')}</Text>
-        <Pressable
-          style={({ pressed }) => [styles.retryBtn, pressed && { opacity: 0.7 }]}
-          onPress={() => query.refetch()}
-        >
-          <Text style={styles.retryText}>{t('common.retry')}</Text>
-        </Pressable>
-      </View>
-    );
-  }
-
   return (
     <View style={styles.container}>
-      {lastError && (
-        <Pressable style={styles.errorBanner} onPress={clearError}>
-          <Text style={styles.errorBannerTitle}>
-            {t('queue.errorTitle', { node: lastError.nodeType })}
-          </Text>
-          <Text style={styles.errorBannerDetail} numberOfLines={2}>
-            {lastError.message}
-          </Text>
-          <Text style={styles.errorBannerHint}>{t('queue.tapToDismiss')}</Text>
-        </Pressable>
-      )}
-
       <FlatList
-        data={pending}
-        keyExtractor={(e) => e[1]}
+        data={[...workflows, IMPORT_CARD_ID]}
+        keyExtractor={(w) => (typeof w === 'string' ? w : w.id)}
+        numColumns={2}
+        columnWrapperStyle={{ gap: spacing.md }}
         contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
-        ListHeaderComponent={
-          <View style={styles.headerBlock}>
-            {running.length > 0 ? (
-              <CurrentJobCard
-                entry={running[0]}
-                onInterrupt={() => interrupt.mutate()}
-                interrupting={interrupt.isPending}
-                onPress={setSelectedJob}
-                onPressPreview={() => setLivePreviewOpen(true)}
-              />
-            ) : (
-              <View style={styles.idleCard}>
-                <Text style={styles.idleText}>{t('queue.noRunning')}</Text>
+        renderItem={({ item }) => {
+          if (typeof item === 'string') {
+            return (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.card,
+                  styles.importCard,
+                  pressed && { backgroundColor: colors.surfacePressed },
+                ]}
+                onPress={() => router.push('/workflow/import' as Href)}
+              >
+                <View style={styles.iconWrap}>
+                  <Ionicons name="add" size={28} color={colors.accent} />
+                </View>
+                <Text style={styles.name} numberOfLines={2}>
+                  {t('importWf.card')}
+                </Text>
+                <Text style={styles.description} numberOfLines={2}>
+                  {t('importWf.cardDescription')}
+                </Text>
+              </Pressable>
+            );
+          }
+          const check = availability?.[item.id];
+          const unavailable = check != null && !check.ok;
+          const isCustom = customs.some((m) => m.id === item.id);
+          return (
+            <Pressable
+              style={({ pressed }) => [
+                styles.card,
+                pressed && { backgroundColor: colors.surfacePressed },
+              ]}
+              onPress={() => {
+                if (unavailable) {
+                  Alert.alert(
+                    t('availability.title'),
+                    availabilityMessage(t, check),
+                    [
+                      { text: t('common.cancel'), style: 'cancel' },
+                      {
+                        text: t('availability.openAnyway'),
+                        onPress: () => open(item.id),
+                      },
+                    ],
+                  );
+                } else {
+                  open(item.id);
+                }
+              }}
+              onLongPress={
+                isCustom ? () => customMenu(item.id, t(item.name)) : undefined
+              }
+            >
+              <View style={styles.iconWrap}>
+                <Ionicons name={item.icon} size={28} color={colors.accent} />
               </View>
-            )}
-
-            <View style={styles.pendingHeader}>
-              <Text style={styles.sectionTitle}>
-                {t('queue.pendingSection')}
-                {pending.length > 0 ? ` (${pending.length})` : ''}
-              </Text>
-              {pending.length > 0 && (
-                <Pressable
-                  onPress={confirmClear}
-                  disabled={clearQueue.isPending}
-                  style={({ pressed }) => pressed && { opacity: 0.7 }}
-                >
-                  <Text style={styles.clearText}>{t('queue.clearQueue')}</Text>
-                </Pressable>
+              {unavailable && (
+                <Ionicons
+                  name="alert-circle"
+                  size={20}
+                  color={colors.warning}
+                  style={styles.badge}
+                  accessibilityLabel={t('availability.title')}
+                />
               )}
-            </View>
-          </View>
-        }
-        ListEmptyComponent={
-          <Text style={styles.emptyText}>
-            {query.isLoading ? t('common.loading') : t('queue.empty')}
-          </Text>
-        }
-        renderItem={({ item, index }) => (
-          <PendingJobRow
-            entry={item}
-            position={index + 1}
-            onPress={setSelectedJob}
-            onDelete={(id) => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              deleteItem.mutate(id);
-            }}
-          />
-        )}
+              {isCustom && !unavailable && (
+                <Ionicons
+                  name="cube-outline"
+                  size={16}
+                  color={colors.textMuted}
+                  style={styles.badge}
+                  accessibilityLabel={t('importWf.customBadge')}
+                />
+              )}
+              <Text style={styles.name} numberOfLines={2}>
+                {t(item.name)}
+              </Text>
+              <Text style={styles.description} numberOfLines={2}>
+                {t(item.description)}
+              </Text>
+            </Pressable>
+          );
+        }}
       />
-
-      {selectedJob && (
-        <JobDetailSheet
-          entry={selectedJob}
-          onClose={() => setSelectedJob(null)}
-        />
-      )}
-
-      {/* Mounted at screen level (not in the card): survives the job's end,
-          so the viewer can show its "finished" state on the last frame. */}
-      {livePreviewOpen && (
-        <LivePreviewViewer
-          title={running.length > 0 ? describeGraph(running[0][2]) : undefined}
-          onClose={() => setLivePreviewOpen(false)}
-        />
-      )}
     </View>
   );
 }
@@ -156,103 +183,41 @@ const useStyles = makeStyles((colors) => ({
   },
   listContent: {
     padding: spacing.md,
-    paddingBottom: spacing.xl,
-  },
-  headerBlock: {
     gap: spacing.md,
-    marginBottom: spacing.sm,
   },
-  idleCard: {
-    backgroundColor: colors.bgElevated,
+  card: {
+    flex: 1,
+    backgroundColor: colors.surface,
     borderColor: colors.border,
     borderWidth: 1,
-    borderStyle: 'dashed',
     borderRadius: radii.lg,
-    padding: spacing.lg,
-    alignItems: 'center',
-  },
-  idleText: {
-    color: colors.textMuted,
-    fontFamily: typography.ui,
-    fontSize: typography.sizes.sm,
-  },
-  pendingHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    minHeight: 24,
-  },
-  sectionTitle: {
-    color: colors.textMuted,
-    fontFamily: typography.uiSemiBold,
-    fontSize: typography.sizes.sm,
-  },
-  clearText: {
-    color: colors.danger,
-    fontFamily: typography.uiSemiBold,
-    fontSize: typography.sizes.sm,
-  },
-  emptyText: {
-    color: colors.textDisabled,
-    fontFamily: typography.ui,
-    fontSize: typography.sizes.sm,
-    textAlign: 'center',
-    paddingVertical: spacing.lg,
-  },
-  centerBox: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.lg,
-    gap: spacing.sm,
-  },
-  errorTitle: {
-    color: colors.danger,
-    fontFamily: typography.uiBold,
-    fontSize: typography.sizes.lg,
-  },
-  errorDetail: {
-    color: colors.textMuted,
-    fontFamily: typography.ui,
-    fontSize: typography.sizes.sm,
-    textAlign: 'center',
-  },
-  retryBtn: {
-    marginTop: spacing.md,
-    minHeight: MIN_TOUCH_TARGET,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radii.md,
-    backgroundColor: colors.strong,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  retryText: {
-    color: colors.onStrong,
-    fontFamily: typography.uiSemiBold,
-    fontSize: typography.sizes.sm,
-  },
-  errorBanner: {
-    backgroundColor: colors.dangerSoft,
-    borderColor: colors.danger,
-    borderWidth: 1,
-    borderRadius: radii.md,
-    marginHorizontal: spacing.md,
-    marginTop: spacing.sm,
     padding: spacing.md,
-    gap: spacing.xs,
+    gap: spacing.sm,
+    minHeight: 140,
   },
-  errorBannerTitle: {
-    color: colors.danger,
+  importCard: {
+    borderStyle: 'dashed',
+  },
+  iconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: radii.md,
+    backgroundColor: colors.bgElevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badge: {
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
+  },
+  name: {
+    color: colors.text,
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.sm,
   },
-  errorBannerDetail: {
+  description: {
     color: colors.textMuted,
-    fontFamily: typography.mono,
-    fontSize: typography.sizes.xs,
-  },
-  errorBannerHint: {
-    color: colors.textDisabled,
     fontFamily: typography.ui,
     fontSize: typography.sizes.xs,
   },

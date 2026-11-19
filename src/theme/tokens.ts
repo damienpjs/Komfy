@@ -53,7 +53,9 @@ const dark = {
 
   // Native controls
   switchThumb: '#ffffff',
-  tabActive: '#e7f950',
+  // Active tab: a yellow pill on charcoal, a charcoal pill on paper
+  tabPill: '#e7f950',
+  onTabPill: '#141719',
 } as const;
 
 export type Palette = { readonly [K in keyof typeof dark]: string };
@@ -93,7 +95,8 @@ const light: Palette = {
   warningSoft: '#faf0d9',
 
   switchThumb: '#ffffff',
-  tabActive: '#15181b',
+  tabPill: '#181b1e',
+  onTabPill: '#e7f950',
 };
 
 export const palettes: Record<ThemeName, Palette> = { dark, light };
