@@ -25,8 +25,8 @@ export default {
     copied: 'Prompt copié ✓',
     analyzing: 'Gemma-4 analyse…',
     pendingHint:
-      'Quelques secondes en général — le job est visible dans la Queue.',
-    serverError: 'Serveur injoignable — {{message}}',
+      'Quelques secondes en général. Le job est visible dans la Queue.',
+    serverError: 'Serveur injoignable : {{message}}',
     failed:
       "✗ Le job a échoué. Si Ollama n'est pas lancé sur le serveur, le démarrer puis relancer le workflow (détail dans l'accueil ou le journal WS).",
     usePrompt: 'Utiliser comme prompt',
@@ -125,7 +125,7 @@ export default {
     offlineTitle: 'Serveur injoignable',
     offlineBody:
       'Vérifier que ComfyUI tourne (port 8188, IP Tailscale) et que Tailscale est actif sur ce téléphone.',
-    errorTitle: '✗ Échec — {{node}}',
+    errorTitle: '✗ Échec : {{node}}',
     tapToDismiss: 'toucher pour masquer',
     noRunning: 'Aucun job en cours',
     pendingSection: 'En attente',
@@ -163,7 +163,7 @@ export default {
       modelGgufHint:
         "Modèles de diffusion installés sur le serveur. Un fichier GGUF (.gguf) demande environ deux fois moins de mémoire : choisis-le si les rendus ralentissent ou si le Mac swappe. Le Q8_0 rend presque comme le modèle complet",
       modelHint:
-        'Modèles de diffusion installés sur le serveur — famille compatible uniquement',
+        'Modèles de diffusion installés sur le serveur (famille compatible uniquement)',
       negativePrompt: 'Prompt négatif',
       lorasHint:
         'Chaînés sur le modèle (LoraLoaderModelOnly), force ~0,9 recommandée',
@@ -187,7 +187,7 @@ export default {
       diffusionBadge: 'Diffusion',
       clipType: 'Type d’encodeur CLIP',
       diffusionHint:
-        'Un modèle de diffusion a besoin de son encodeur CLIP et de son VAE — présélectionnés d’après le nom, à ajuster si besoin',
+        'Un modèle de diffusion a besoin de son encodeur CLIP et de son VAE : présélectionnés d’après le nom, à ajuster si besoin',
     },
     t2i: {
       name: 'Créer une image (Krea 2)',
@@ -202,20 +202,20 @@ export default {
     },
     i2i: {
       name: 'Image → Image (Krea 2)',
-      description: 'Retravaille une image existante — denoise réglable',
+      description: 'Retravaille une image existante, denoise réglable',
       promptPlaceholder: 'Décrire le résultat attendu…',
       denoiseHint: 'Faible = fidèle à la source · 1 = régénération complète',
     },
     edit: {
       name: 'Éditer une image (Krea 2)',
       description:
-        'Décrit la modification à faire — identité et scène sont préservées, sans masque',
+        'Décrit la modification à faire : identité et scène sont préservées, sans masque',
       promptPlaceholder:
         'sa main droite se pose sur la table, rien d’autre ne bouge…',
       promptHint:
-        'Décrire la MODIFICATION, pas l’image entière — et préciser ce qui ne doit pas changer',
+        'Décrire la MODIFICATION, pas l’image entière, et préciser ce qui ne doit pas changer',
       lorasHint:
-        'Chaînés après le LoRA d’identité — garder les autres légers (~0,4), ils entrent en concurrence avec lui',
+        'Chaînés après le LoRA d’identité : garder les autres légers (~0,4), ils entrent en concurrence avec lui',
       refs: 'Images de référence',
       refsHint:
         'Deux images : la première est le décor (elle fixe le cadre de sortie), la seconde la personne à y placer. L’ordre compte. Écrire la consigne comme « place cette personne à la table, un café à la main ». Sur un Mac 64 Go, lancer ComfyUI en attention découpée (start-comfy.sh split) : avec l’attention par défaut, deux références à 1 MP saturent la mémoire',
@@ -229,48 +229,48 @@ export default {
         '1 = neutre. Au-dessus, le résultat colle davantage à l’apparence de la source ; en dessous, il s’en détache. Toute valeur autre que 1 fait passer l’attention par une matrice complète qui demande plusieurs Go de mémoire en plus (le double avec deux images) : sur un Mac 64 Go, à réserver aux canvas de moins d’1 MP',
       canvas: 'Canvas de sortie',
       canvasHint:
-        '« Source » garde exactement le cadre de la source (arrondi au multiple de 16 inférieur). 1/2 MP conservent son ratio dans un format plus léger — pour une photo trop grande à générer en taille réelle',
+        '« Source » garde exactement le cadre de la source (arrondi au multiple de 16 inférieur). 1/2 MP conservent son ratio dans un format plus léger, pour une photo trop grande à générer en taille réelle',
       canvasSource: 'Source',
       canvasManual: 'Manuel',
-      formatHint: 'Format de l’image générée — la source y est ajustée',
+      formatHint: 'Format de l’image générée : la source y est ajustée',
     },
     ltx: {
       name: 'Image → Vidéo + audio (LTX 2.3)',
       description:
-        'Anime une image fixe en court clip avec audio synchronisé — LTX 2.3, deux passes (base puis upscale latent)',
+        'Anime une image fixe en court clip avec audio synchronisé. LTX 2.3 en deux passes (base, puis upscale latent)',
       promptPlaceholder:
-        'Décris la scène, le mouvement et le son — ce qui bouge, la caméra, l’ambiance…',
+        'Décris la scène, le mouvement et le son : ce qui bouge, la caméra, l’ambiance…',
       duration: 'Durée (secondes)',
       durationHint:
-        'Durée du clip en secondes (images = durée × FPS + 1). LTX est surtout entraîné autour de ~10 s. Attention : la passe upscale garde en mémoire une matrice d’attention qui croît avec le CARRÉ de résolution × durée — doubler l’un des deux la quadruple. Si le serveur abandonne sur la seconde passe, raccourcis le clip, baisse la résolution, ou relance ComfyUI avec le backend d’attention split',
+        'Durée du clip en secondes (images = durée × FPS + 1). LTX est surtout entraîné autour de ~10 s. Attention : la passe upscale garde en mémoire une matrice d’attention qui croît avec le CARRÉ de résolution × durée : doubler l’un des deux la quadruple. Si le serveur abandonne sur la seconde passe, raccourcis le clip, baisse la résolution, ou relance ComfyUI avec le backend d’attention split',
       fpsHint: 'Fréquence d’images de base gravée dans le clip (LTX par défaut 24)',
       targetFps: 'Fréquence cible (RIFE)',
       targetFpsHint:
-        'Fréquence d’images après interpolation RIFE — utilisée seulement si l’interpolation est active',
+        'Fréquence d’images après interpolation RIFE, utilisée seulement si l’interpolation est active',
       firstFrameStrength: 'Force de la première image',
       firstFrameStrengthHint:
-        'À quel point l’image de référence ancre les premières images — plus haut colle à la photo mais limite le mouvement',
+        'À quel point l’image de référence ancre les premières images. Plus haut colle à la photo mais limite le mouvement',
       audioVolume: 'Volume audio (dB)',
       audioVolumeHint: 'Ajuste l’audio généré : +6 double le volume, −6 le divise par deux',
       model: 'Modèle de diffusion (GGUF)',
       modelHint: 'UNet LTX 2.3 (GGUF) installé sur le serveur',
       clip: 'Encodeur de texte (Gemma)',
       clipHint:
-        'Encodeur Gemma-3 pour LTX — garde-le sauf si tu as une variante',
+        'Encodeur Gemma-3 pour LTX : garde-le sauf si tu as une variante',
       vae: 'VAE vidéo',
       audioVae: 'VAE audio',
       upscaleModel: 'Modèle d’upscale',
       upscaleModelHint:
-        'Modèle ESRGAN pour l’upscale final des images — utilisé seulement si l’upscale final est actif',
+        'Modèle ESRGAN pour l’upscale final des images, utilisé seulement si l’upscale final est actif',
       loras: 'LoRAs',
       distilled: 'LoRA distillé',
       distilledHint:
-        'Applique le LoRA accélérateur distillé LTX 2.3 sur les deux passes. Désactive-le quand le modèle de diffusion est déjà distillé — le LoRA n’est alors pas chargé du tout',
+        'Applique le LoRA accélérateur distillé LTX 2.3 sur les deux passes. Désactive-le quand le modèle de diffusion est déjà distillé : le LoRA n’est alors pas chargé du tout',
       distilledOn: 'On',
       distilledOff: 'Off',
-      distilledFirst: 'Force distillé — première passe',
+      distilledFirst: 'Force distillé, première passe',
       distilledFirstHint: 'Poids du LoRA sur la passe de base (0 = aucun effet)',
-      distilledUpscale: 'Force distillé — passe d’upscale',
+      distilledUpscale: 'Force distillé, passe d’upscale',
       distilledUpscaleHint:
         'Poids du LoRA sur la passe d’upscale latent (0 = aucun effet)',
       scheduler: 'Planification d’échantillonnage',
@@ -283,13 +283,13 @@ export default {
         'Programme de bruit de la seconde passe, du niveau de départ jusqu’à 0. La valeur par défaut (0,92 → 0 en 3 pas) suppose un modèle distillé : si l’upscale sort grisâtre et flou, partez plus bas (ex. 0.65, 0.45, 0.28, 0.14, 0.0) ou ajoutez des pas',
       upscaleSteps: 'Pas de l’upscale',
       upscaleStepsHint:
-        'Pas d’échantillonnage de la seconde passe — trop peu de pas à fort débruitage donne une image délavée et pâteuse',
+        'Pas d’échantillonnage de la seconde passe. Trop peu de pas à fort débruitage donne une image délavée et pâteuse',
       upscaleDenoise: 'Débruitage de l’upscale',
       upscaleDenoiseHint:
         'Part de la passe de base que l’upscale régénère. ≤ 0,45 affine l’image existante · au-delà il la réinvente et exige plus de pas',
       finalUpscale: 'Upscale final',
       finalUpscaleHint:
-        'Passe ESRGAN + redimensionnement des images (→ 1080×1920). Appliquée sur la branche RIFE — active l’interpolation pour t’en servir',
+        'Passe ESRGAN + redimensionnement des images (→ 1080×1920). Appliquée sur la branche RIFE : active l’interpolation pour t’en servir',
       finalUpscaleOff: 'Off',
       finalUpscaleOn: 'On',
       interpolation: 'Interpolation d’images (RIFE)',
@@ -299,7 +299,7 @@ export default {
       interpOff: 'Off',
       lastFrame: 'Enregistrer la dernière image',
       lastFrameHint:
-        'Enregistre aussi la dernière image du clip — utile pour enchaîner des segments (boucle / continuation)',
+        'Enregistre aussi la dernière image du clip, utile pour enchaîner des segments (boucle / continuation)',
       lastFrameOff: 'Off',
       lastFrameOn: 'Enregistrer',
     },
@@ -353,10 +353,10 @@ export default {
     upscale: {
       name: 'Upscale (Krea 2)',
       description:
-        'Agrandissement non destructif — détails affinés, visages préservés',
+        'Agrandissement non destructif : détails affinés, visages préservés',
       mode: 'Mode',
       modeHint:
-        'Génératif = l’upscaler pixel, puis une passe KREA2 qui synthétise de la vraie texture · Sans diffusion = l’upscaler seul, déterministe, zéro dérive d’identité — mais il n’invente aucun détail et amplifie les artefacts existants',
+        'Génératif = l’upscaler pixel, puis une passe KREA2 qui synthétise de la vraie texture · Sans diffusion = l’upscaler seul, déterministe, zéro dérive d’identité, mais il n’invente aucun détail et amplifie les artefacts existants',
       modeGenerative: 'Génératif (KREA2)',
       modePixel: 'Sans diffusion',
       factor: 'Facteur d’agrandissement',
@@ -371,10 +371,10 @@ export default {
         'Force de la passe de détail KREA2. ≤ 0,25 = ajoute de la texture sans toucher à l’identité · plus haut commence à réinventer',
       promptPlaceholder: 'ex. photo portrait, peau détaillée, netteté…',
       promptHint:
-        'Optionnel — décrire brièvement l’image peut guider le détail ajouté',
+        'Optionnel. Décrire brièvement l’image peut guider le détail ajouté',
       upscaler: 'Modèle d’upscale',
       upscalerHint:
-        'Upscaler pixel — tout le travail en mode « Sans diffusion », la passe avant le raffinement KREA2 sinon (UltraSharp = plus net, ESRGAN = plus doux)',
+        'Upscaler pixel : tout le travail en mode « Sans diffusion », la passe avant le raffinement KREA2 sinon (UltraSharp = plus net, ESRGAN = plus doux)',
       tileSize: 'Taille des tuiles',
       tileSizeHint:
         'Le raffinement se fait tuile par tuile. Plus grand = moins de raccords et visages plus cohérents, mais plus de mémoire par tuile',
@@ -384,9 +384,9 @@ export default {
       description:
         'Génère depuis un prompt en gardant la structure de profondeur d’une photo source',
       imageHint:
-        'Sa carte de profondeur guide la composition — le contenu vient du prompt',
+        'Sa carte de profondeur guide la composition, le contenu vient du prompt',
       promptPlaceholder:
-        'Décrire la nouvelle scène — elle suivra la composition de la source…',
+        'Décrire la nouvelle scène, elle suivra la composition de la source…',
       channelMode: 'Mode de la carte de profondeur',
       channelModeHint:
         'Niveaux de gris = un seul canal, recommandé pour la profondeur · RVB envoie telles quelles les couleurs du préprocesseur',
@@ -398,22 +398,22 @@ export default {
       depthModel: 'Estimateur de profondeur',
       depthModelHint:
         'Plus grand = carte plus fine et plus stable, mais plus lent (ViT-B est téléchargé par le serveur au premier usage)',
-      vits: 'ViT-S — le plus rapide',
-      vitb: 'ViT-B — équilibré',
-      vitl: 'ViT-L — le meilleur, le plus lent',
+      vits: 'ViT-S (le plus rapide)',
+      vitb: 'ViT-B (équilibré)',
+      vitl: 'ViT-L (le meilleur, le plus lent)',
       depthResolution: 'Résolution de la carte de profondeur',
       depthResolutionHint:
-        'Résolution du calcul de profondeur avant adaptation au format de sortie — plus haut = structures plus fines',
+        'Résolution du calcul de profondeur avant adaptation au format de sortie. Plus haut = structures plus fines',
       dimensionsHint:
-        'Garder l’orientation de la source (« Inverser » pour portrait) — la carte est recadrée au centre à ce format',
+        'Garder l’orientation de la source (« Inverser » pour portrait) : la carte est recadrée au centre à ce format',
     },
     detectReplace: {
       name: 'Détecter & Remplacer (Krea 2)',
       description:
-        'Remplace les zones détectées — un même contenu pour toutes, ou un par zone',
+        'Remplace les zones détectées : un même contenu pour toutes, ou un par zone',
       detector: 'Quoi détecter',
       detectorHint:
-        'Le modèle qui repère les zones à remplacer — les visages par défaut, mais n’importe quel détecteur installé sur le serveur (mains, personne entière…) fonctionne pareil',
+        'Le modèle qui repère les zones à remplacer : les visages par défaut, mais n’importe quel détecteur installé sur le serveur (mains, personne entière…) fonctionne pareil',
       dilation: 'Zone modifiée (autour de la détection)',
       dilationHint:
         'Agrandit la zone régénérée à partir de la zone détectée (en pixels). ~10 = zone serrée · 80–150 = alentours larges. Si la zone est coupée, augmenter le « Cadrage ».',
@@ -421,7 +421,7 @@ export default {
         'Monter (0,6–0,7) élimine les fausses détections qui décalent les n° de zones ; baisser si une zone n’est pas trouvée',
       cropFactor: 'Cadrage autour de la zone',
       cropFactorHint:
-        'Contexte fourni au re-générateur (× la zone détectée). Doit rester assez grand pour contenir la zone dilatée — à augmenter si une grande dilatation est rognée',
+        'Contexte fourni au re-générateur (× la zone détectée). Doit rester assez grand pour contenir la zone dilatée : à augmenter si une grande dilatation est rognée',
       zones: 'Remplacements',
       zonesHint:
         'Un même contenu pour toutes les zones, ou un par zone (numérotées de gauche à droite sur la photo)',
@@ -496,7 +496,7 @@ export default {
     t2p: {
       name: 'Texte → Prompt',
       description:
-        'Gemma-4 développe une idée brute en prompt complet (KREA2, SDXL, Pony…) — résultat texte',
+        'Gemma-4 développe une idée brute en prompt complet (KREA2, SDXL, Pony…). Résultat texte',
       idea: 'Idée',
       ideaPlaceholder: 'ex. un chat noir cyberpunk sous la pluie…',
       seedHint: 'Re-tirer le seed donne une variante différente',
@@ -504,7 +504,7 @@ export default {
     i2p: {
       name: 'Image → Prompt',
       description:
-        'Gemma-4 décrit l’image en prompt (KREA2, SDXL, Pony…) — résultat texte',
+        'Gemma-4 décrit l’image en prompt (KREA2, SDXL, Pony…). Résultat texte',
       image: 'Image à décrire',
       instruction: 'Consigne (optionnelle)',
       instructionPlaceholder: 'ex. insister sur la lumière et l’ambiance…',
@@ -521,7 +521,7 @@ export default {
       description: 'Peindre une zone au doigt et la régénérer',
       mask: 'Zone à régénérer',
       maskHint:
-        "Peindre sur l'image — le pinceau marque ce qui sera régénéré",
+        "Peindre sur l'image : le pinceau marque ce qui sera régénéré",
       promptPlaceholder: 'Ce qui doit apparaître dans la zone peinte…',
       maskMode: 'Méthode de masquage',
       maskModeNoise: 'Masque de bruit',
@@ -538,7 +538,7 @@ export default {
         'Élargit (ou rétrécit, si négatif) la zone peinte de ce nombre de pixels',
       feather: 'Adoucir',
       featherHint:
-        'Adoucit le bord du masque — plus la valeur est haute, plus le fondu est progressif',
+        'Adoucit le bord du masque : plus la valeur est haute, plus le fondu est progressif',
       denoiseHint:
         "1 = la zone est entièrement réécrite, moins en conserve une partie de l'original",
       cfgHint:
@@ -551,7 +551,7 @@ export default {
     ggufUnavailable:
       'Aucun fichier GGUF sur le serveur (dossier models/unet), ou ComfyUI-GGUF non installé',
     search: 'Rechercher un modèle…',
-    missing: 'Introuvable sur le serveur — choisir un autre fichier',
+    missing: 'Introuvable sur le serveur. Choisir un autre fichier',
     noResult: 'Aucun modèle correspondant',
   },
   importWf: {
@@ -563,13 +563,13 @@ export default {
     paste: 'Coller depuis le presse-papiers',
     analyze: 'Analyser',
     invalid:
-      'Graphe illisible — exporter au format API (« Save (API Format) »), pas au format éditeur.',
+      'Graphe illisible : exporter au format API (« Save (API Format) »), pas au format éditeur.',
     tooBig: 'Fichier trop volumineux pour un graphe de workflow (max 512 Ko).',
     name: 'Nom',
     defaultName: 'Workflow importé',
     defaultDescription: 'Importé depuis un graphe au format API',
     fields: 'Champs détectés',
-    noFields: 'Aucun champ réglable détecté — le workflow sera lancé tel quel.',
+    noFields: 'Aucun champ réglable détecté. Le workflow sera lancé tel quel.',
     import: 'Importer',
     imported: 'Workflow importé ✓',
     startOver: 'Recommencer',
@@ -584,7 +584,7 @@ export default {
     moveDown: 'Descendre',
     removeField: 'Retirer ce champ',
     notFound:
-      'Workflow introuvable — seuls les workflows importés sont éditables.',
+      'Workflow introuvable. Seuls les workflows importés sont éditables.',
     fields: 'Champs (libellé, ordre, suppression)',
     addField: 'Ajouter un champ',
     addLoras: 'Champ LoRAs (chaîne modèle détectée)',
@@ -592,7 +592,7 @@ export default {
       'Plus rien à ajouter : chaque input littéral a déjà son champ.',
     saved: 'Workflow mis à jour ✓',
     export: 'Copier le JSON du manifeste (partage)',
-    copied: 'Manifeste copié ✓ — à coller dans Importer sur un autre téléphone',
+    copied: 'Manifeste copié ✓ (à coller dans Importer sur un autre téléphone)',
   },
   availability: {
     title: 'Indisponible sur ce serveur',
@@ -610,7 +610,7 @@ export default {
     dimRange: 'Entre {{min}} et {{max}} px',
     dimStep: 'Multiples de {{step}} requis',
     atLeastOneZone: 'Au moins un remplacement',
-    allBypassed: 'Toutes les zones sont en bypass — rien à générer',
+    allBypassed: 'Toutes les zones sont en bypass : rien à générer',
     promptRequired: 'Prompt requis pour chaque zone active',
     maxLorasPerZone: 'Maximum {{count}} LoRAs par zone',
     denoiseRange: 'Denoise entre 0,05 et 1 pour chaque zone active',
@@ -665,7 +665,7 @@ export default {
     launchX: 'Lancer ×{{count}}',
     launch: 'Lancer',
     done: 'Terminé',
-    sourceSeed: "Seed d'origine {{seed}} — réutiliser",
+    sourceSeed: "Seed d'origine {{seed}} : réutiliser",
     sourceSeedActive: "Seed d'origine de l'image réutilisé.",
     sourceSeedA11y: "Réutiliser le seed de l'image d'origine, {{seed}}",
   },
@@ -685,7 +685,7 @@ export default {
   },
   saveToPhotos: {
     denied: 'Accès à la photothèque refusé (réglages système → Komfy).',
-    httpError: 'HTTP {{status}} — fichier indisponible sur le serveur ?',
+    httpError: 'HTTP {{status}} : fichier indisponible sur le serveur ?',
   },
   status: {
     offline: 'hors ligne',
@@ -695,7 +695,7 @@ export default {
   volume: {
     title: '⚠︎ Dossier de sortie indisponible sur le serveur',
     detail:
-      'Le dossier output est introuvable — la galerie est indisponible. Nouvelle vérification automatique en cours…',
+      'Le dossier output est introuvable : la galerie est indisponible. Nouvelle vérification automatique en cours…',
   },
   wsLog: {
     events_one: '{{count}} événement',
@@ -707,11 +707,11 @@ export default {
     allZonesLabel: 'Même contenu pour toutes les zones',
     allZonesTitle: 'Toutes les zones détectées',
     allZonesNote:
-      'Ce contenu remplace toutes les zones trouvées sur la photo, quel qu’en soit le nombre — pas de numérotation, rien à énumérer. Les zones ratées par la détection restent intactes : baisser le « Seuil de détection » pour en attraper davantage.',
+      'Ce contenu remplace toutes les zones trouvées sur la photo, quel qu’en soit le nombre : pas de numérotation, rien à énumérer. Les zones ratées par la détection restent intactes : baisser le « Seuil de détection » pour en attraper davantage.',
     zoneTitle: 'Zone n°{{number}} (gauche → droite)',
     bypassLabel: 'Ne pas modifier cette zone (bypass)',
     bypassNote:
-      'Zone conservée telle quelle — aucune passe générée, elle garde son numéro dans l’ordre gauche → droite.',
+      'Zone conservée telle quelle : aucune passe générée, elle garde son numéro dans l’ordre gauche → droite.',
     promptPlaceholder: 'Contenu de la zone (ex. a man’s face…)',
     denoiseLabel: 'Denoise de cette zone',
     denoiseLabelAll: 'Denoise de chaque zone',
@@ -742,7 +742,7 @@ export default {
   },
   remix: {
     unknownNote:
-      'Workflow inconnu de Komfy — paramètres extraits des métadonnées de l’image (lecture seule).',
+      'Workflow inconnu de Komfy : paramètres extraits des métadonnées de l’image (lecture seule).',
     requeue: 'Relancer en variante (nouveaux seeds)',
     import: 'Importer comme workflow…',
   },
@@ -757,7 +757,7 @@ export default {
     accessDeniedBody: "Autoriser l'accès aux photos dans les réglages système.",
     tooLarge: 'Image trop lourde',
     tooLargeBody:
-      '{{size}} Mo — la limite est de {{limit}} Mo. Choisir une image plus légère.',
+      '{{size}} Mo, la limite est de {{limit}} Mo. Choisir une image plus légère.',
     uploadFailed: 'Upload impossible',
     choose: 'Choisir une image',
     heic: 'Photo HEIC',
@@ -915,7 +915,7 @@ export default {
     title: 'Job #{{number}}',
     ok: 'OK',
     unknownWorkflow:
-      "Workflow inconnu de Komfy — variante impossible depuis l'app (paramètres affichés en lecture seule).",
+      "Workflow inconnu de Komfy : variante impossible depuis l'app (paramètres affichés en lecture seule).",
   },
   job: {
     interruptConfirm: 'Interrompre le job',
@@ -938,7 +938,7 @@ export default {
     preview: 'aperçu',
     previewNode: 'aperçu · nœud {{node}}',
     node: 'nœud {{node}}',
-    external: 'lancé hors Komfy — pas de suivi fin',
+    external: 'lancé hors Komfy, pas de suivi fin',
     expandPreview: "Agrandir l'aperçu",
     livePreviewFinished: 'Génération terminée',
     livePreviewFinishedHint: "L'image finale est maintenant dans la galerie.",
@@ -970,7 +970,7 @@ export default {
     saveFailed: 'Enregistrement impossible',
     noMetadataTitle: 'Image sans métadonnées ComfyUI',
     noMetadataBody:
-      "Impossible d'en extraire la recette (chunk `prompt` absent — image retouchée ou importée ?).",
+      "Impossible d'en extraire la recette (chunk `prompt` absent : image retouchée ou importée ?).",
     extractFailed: 'Extraction impossible',
     unavailable: 'Galerie indisponible',
     volumeBody:
@@ -980,7 +980,7 @@ export default {
     select: 'Sélectionner',
     empty: "Aucune image ici pour l'instant.",
     emptyLimited:
-      "\n(Listing limité à la session ComfyUI en cours — redémarrer ComfyUI pour activer l'extension komfy-listing.)",
+      "\n(Listing limité à la session ComfyUI en cours. Redémarrer ComfyUI pour activer l'extension komfy-listing.)",
     selectedCount_one: '{{count}} sélectionné',
     selectedCount_other: '{{count}} sélectionnés',
     save: 'Enregistrer dans Photos',
@@ -1049,7 +1049,7 @@ export default {
     unreachableHint:
       'La machine est éteinte, ou Tailscale est coupé. Rien à démarrer à distance.',
     off: 'ComfyUI est éteint',
-    offHint: 'La machine est allumée — vous pouvez démarrer ComfyUI à distance.',
+    offHint: 'La machine est allumée : vous pouvez démarrer ComfyUI à distance.',
     on: 'ComfyUI est en marche',
     onHint: 'Joignable et prêt à générer.',
     starting: 'Démarrage de ComfyUI…',
@@ -1079,9 +1079,9 @@ export default {
     copy: 'Copier les lignes visibles',
     copied: 'Lignes copiées',
     title: 'Console ComfyUI',
-    empty: 'Aucune sortie — démarrez ComfyUI pour voir ses logs.',
+    empty: 'Aucune sortie. Démarrez ComfyUI pour voir ses logs.',
     connecting: 'Connexion au superviseur…',
-    disconnected: 'Console déconnectée — reconnexion…',
+    disconnected: 'Console déconnectée, reconnexion…',
     clear: 'Effacer',
     lines_one: '{{count}} ligne',
     lines_other: '{{count}} lignes',
@@ -1094,7 +1094,7 @@ export default {
     scanTitle: 'Scannez le QR d’appairage',
     scanHint:
       'Lancez `npm run pair` sur le serveur, puis visez le QR avec la caméra.',
-    cameraDenied: 'Accès caméra désactivé — activez-le dans les réglages système.',
+    cameraDenied: 'Accès caméra désactivé. Activez-le dans les réglages système.',
     grantCamera: 'Autoriser la caméra',
     invalid: 'Code d’appairage Komfy invalide.',
     pasteEmpty: 'Le presse-papier est vide.',
@@ -1107,7 +1107,7 @@ export default {
     sectionStorage: 'Stockage',
     serverUrl: 'URL du serveur ComfyUI',
     serverHint:
-      "IP Tailscale du serveur — une seule URL, à la maison comme en 4G/5G. Jamais d'exposition internet.",
+      "IP Tailscale du serveur : une seule URL, à la maison comme en 4G/5G. Jamais d'exposition internet.",
     test: 'Tester la connexion',
     saved: 'Enregistré ✓',
     testOk: '✓ ComfyUI {{version}} répond',
@@ -1119,7 +1119,7 @@ export default {
       'Limite le nombre de LoRAs par champ, dans tous les workflows (Détecter & Remplacer : par zone). Désactivé = aucune limite.',
     loraMaxValue: 'Maximum',
     trashTitle: 'Corbeille',
-    trashEmptyState: 'Vide — rien à supprimer.',
+    trashEmptyState: 'Vide, rien à supprimer.',
     trashSummary_one: '{{count}} fichier · {{size}}',
     trashSummary_other: '{{count}} fichiers · {{size}}',
     trashEmpty: 'Vider',
@@ -1128,9 +1128,9 @@ export default {
       'Supprime définitivement {{count}} fichier ({{size}}) de output/ et input/. Action irréversible.',
     trashConfirmBody_other:
       'Supprime définitivement {{count}} fichiers ({{size}}) de output/ et input/. Action irréversible.',
-    trashEmptied_one: 'Corbeille vidée — {{count}} fichier, {{size}} libéré ✓',
+    trashEmptied_one: 'Corbeille vidée : {{count}} fichier, {{size}} libéré ✓',
     trashEmptied_other:
-      'Corbeille vidée — {{count}} fichiers, {{size}} libérés ✓',
+      'Corbeille vidée : {{count}} fichiers, {{size}} libérés ✓',
     trashEmptyFailed: 'Impossible de vider la corbeille',
     language: 'Langue',
     theme: 'Thème',
