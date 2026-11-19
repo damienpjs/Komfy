@@ -31,6 +31,7 @@ import { ModelField } from '../../components/ModelField';
 import { ModelSourceField } from '../../components/ModelSourceField';
 import { OutpaintField } from '../../components/OutpaintField';
 import { OutputDirPicker } from '../../components/OutputDirPicker';
+import { FamilySwitch } from '../../components/FamilySwitch';
 import { PresetBar } from '../../components/PresetBar';
 import { PresetNameDialog } from '../../components/PresetNameDialog';
 import { PromptField } from '../../components/PromptField';
@@ -38,6 +39,7 @@ import { SourceSeedChip } from '../../components/SourceSeedChip';
 import { ZonesField } from '../../components/ZonesField';
 import type { ZoneDragScroller } from '../../components/ZonesField';
 import { useBatchPrefs } from '../../store/batchPrefs';
+import { useCatalogPrefs } from '../../store/catalogPrefs';
 import { useFieldPrefs } from '../../store/fieldPrefs';
 import { useGeneratedPrompts } from '../../store/generatedPrompts';
 import { useOutputPrefs } from '../../store/outputPrefs';
@@ -60,6 +62,7 @@ import { useNodeInfo } from '../../hooks/useAvailability';
 import type { SourceSeeds } from '../../workflows/match';
 import { pickVariantFile, variantOf } from '../../workflows/modelVariant';
 import { initialOutpaintValue } from '../../workflows/outpaint';
+import { entryOf } from '../../workflows/catalog';
 import { getAnyWorkflow } from '../../workflows/registry';
 import {
   DEFAULT_OUTPUT_DIR,
@@ -223,6 +226,7 @@ export default function WorkflowLaunchScreen() {
     seeds?: string;
   }>();
   const manifest = getAnyWorkflow(id ?? '');
+  const catalogEntry = manifest ? entryOf(manifest.id) : undefined;
   const router = useRouter();
   const { t } = useTranslation();
   const serverUrl = useSettings((s) => s.serverUrl);
@@ -410,6 +414,7 @@ export default function WorkflowLaunchScreen() {
     const commit = () => {
       store.save(manifest.id, name, snapshot);
       setSavingPreset(false);
+      useCatalogPrefs.getState().markLaunched(manifest.id);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast(t('presets.saved', { name }));
     };
@@ -449,6 +454,7 @@ export default function WorkflowLaunchScreen() {
           promptId: res.prompt_id,
           nodeId: manifest.textNodeId!,
         });
+        useCatalogPrefs.getState().markLaunched(manifest.id);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         router.replace(
           `/workflow/text-result?promptId=${encodeURIComponent(
@@ -506,7 +512,9 @@ export default function WorkflowLaunchScreen() {
 
   return (
     <View style={{ flex: 1 }} ref={pageRef} onLayout={measureViewport}>
-      <Stack.Screen options={{ title: t(manifest.name) }} />
+      <Stack.Screen
+        options={{ title: catalogEntry ? t(catalogEntry.name) : t(manifest.name) }}
+      />
       <ScrollView
         ref={scrollRef}
         style={styles.container}
@@ -533,6 +541,8 @@ export default function WorkflowLaunchScreen() {
         automaticallyAdjustKeyboardInsets
       >
         <Text style={styles.description}>{t(manifest.description)}</Text>
+
+        <FamilySwitch manifest={manifest} values={values} />
 
         <PresetBar
           workflowId={manifest.id}

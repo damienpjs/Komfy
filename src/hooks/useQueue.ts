@@ -12,6 +12,7 @@ import type { QueueEntry, QueueResponse } from '../api/types';
 import i18n from '../i18n';
 import { useConnection } from '../store/connection';
 import { useSettings } from '../store/settings';
+import { entryOf, isFamily } from '../workflows/catalog';
 import { matchGraph } from '../workflows/match';
 import { allWorkflows } from '../workflows/registry';
 
@@ -32,7 +33,17 @@ export function jobTitle(promptId: string, graph: QueueEntry[2]): string {
     outcome.status === 'match'
       ? allWorkflows().find((w) => w.id === outcome.manifestId)
       : undefined;
-  const title = manifest ? i18n.t(manifest.name) : describeGraph(graph);
+  // Catalogue name first (with the mode for a family member), so a job
+  // reads the way its workflow does on the Create screen.
+  const entry = manifest ? entryOf(manifest.id) : undefined;
+  const member = entry?.members.find((m) => m.manifestId === manifest?.id);
+  const title = entry
+    ? isFamily(entry) && member
+      ? `${i18n.t(entry.name)} · ${i18n.t(member.mode)}`
+      : i18n.t(entry.name)
+    : manifest
+      ? i18n.t(manifest.name)
+      : describeGraph(graph);
   if (titleCache.size > 200) titleCache.clear();
   titleCache.set(promptId, title);
   return title;
