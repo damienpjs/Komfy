@@ -8,15 +8,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import type { PromptGraph } from '../api/types';
-import {
-  colors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../theme/tokens';
+import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 import { GraphSummary } from './GraphSummary';
 
 export interface RemixSheetState {
@@ -34,6 +29,8 @@ interface Props {
 }
 
 export function RemixSheet({ state, onClose, onRequeue, onImport }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   // Anti double-tap during the POST /prompt.
   const [queuing, setQueuing] = useState(false);
@@ -83,7 +80,7 @@ export function RemixSheet({ state, onClose, onRequeue, onImport }: Props) {
             disabled={queuing}
             onPress={requeue}
           >
-            <Ionicons name="shuffle-outline" size={18} color={colors.text} />
+            <Ionicons name="shuffle-outline" size={18} color={colors.onStrong} />
             <Text style={styles.requeueText}>{t('remix.requeue')}</Text>
           </Pressable>
 
@@ -103,7 +100,7 @@ export function RemixSheet({ state, onClose, onRequeue, onImport }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     backgroundColor: colors.bg,
@@ -148,11 +145,11 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     minHeight: MIN_TOUCH_TARGET,
     borderRadius: radii.md,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.strong,
     marginTop: spacing.sm,
   },
   requeueText: {
-    color: colors.text,
+    color: colors.onStrong,
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.sm,
   },
@@ -172,4 +169,4 @@ const styles = StyleSheet.create({
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.sm,
   },
-});
+}));

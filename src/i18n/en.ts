@@ -949,5 +949,9 @@ export default {
     trashEmptyFailed: 'Could not empty the trash',
     wsLog: 'WebSocket event log →',
     language: 'Language',
+    theme: 'Theme',
+    themeAuto: 'Auto',
+    themeLight: 'Light',
+    themeDark: 'Dark',
   },
 };

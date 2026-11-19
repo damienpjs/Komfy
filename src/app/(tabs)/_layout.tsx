@@ -1,12 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { ScreenGround } from '../../components/DotGrid';
 import { useVolumeBannerVisible } from '../../components/VolumeBanner';
 import { useQueue } from '../../hooks/useQueue';
 import { useConnection } from '../../store/connection';
-import { colors, typography } from '../../theme/tokens';
+import { typography } from '../../theme/tokens';
+import { useTheme } from '../../theme/theme';
 
 export default function TabsLayout() {
+  const { colors } = useTheme();
   const { t } = useTranslation();
   // "N pending" badge: queue if available, else the WS status message counter.
   const { query } = useQueue();
@@ -18,6 +21,7 @@ export default function TabsLayout() {
 
   return (
     <Tabs
+      screenLayout={({ children }) => <ScreenGround>{children}</ScreenGround>}
       screenOptions={{
         headerStyle: { backgroundColor: colors.bgElevated },
         headerTintColor: colors.text,
@@ -28,7 +32,7 @@ export default function TabsLayout() {
           backgroundColor: colors.bgElevated,
           borderTopColor: colors.border,
         },
-        tabBarActiveTintColor: colors.brand,
+        tabBarActiveTintColor: colors.tabActive,
         tabBarInactiveTintColor: colors.textMuted,
         tabBarLabelStyle: { fontFamily: typography.uiMedium },
       }}
@@ -43,6 +47,7 @@ export default function TabsLayout() {
           tabBarBadge: pendingCount > 0 ? pendingCount : undefined,
           tabBarBadgeStyle: {
             backgroundColor: colors.accent,
+            color: colors.onAccent,
             fontFamily: typography.uiSemiBold,
           },
         }}

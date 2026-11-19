@@ -1,10 +1,13 @@
 /** Global toast display, above the tab bar. */
 
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { useToast } from '../store/toast';
-import { colors, radii, spacing, typography } from '../theme/tokens';
+import { radii, spacing, typography } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 
 export function Toast() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const message = useToast((s) => s.message);
   const kind = useToast((s) => s.kind);
 
@@ -31,7 +34,7 @@ export function Toast() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   wrap: {
     position: 'absolute',
     left: 0,
@@ -53,4 +56,4 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.sm,
     textAlign: 'center',
   },
-});
+}));

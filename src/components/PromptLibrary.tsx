@@ -18,7 +18,6 @@ import {
   ActivityIndicator,
   FlatList,
   Pressable,
-  StyleSheet,
   Text,
   TextInput,
   View,
@@ -35,13 +34,8 @@ import { useToast } from '../store/toast';
 import { showActionSheet } from '../utils/actionSheet';
 import { formatAgo } from '../utils/format';
 import { getAnyWorkflow } from '../workflows/registry';
-import {
-  colors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../theme/tokens';
+import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 
 /** Lines of prompt shown per row before ellipsis. */
 const PREVIEW_LINES = 3;
@@ -59,6 +53,8 @@ interface Props {
 }
 
 export function PromptLibrary({ onUse }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   const showToast = useToast((s) => s.show);
   const entries = useGeneratedPrompts((s) => s.entries);
@@ -219,7 +215,7 @@ export function PromptLibrary({ onUse }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   content: {
     padding: spacing.md,
     gap: spacing.sm,
@@ -306,4 +302,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     maxWidth: 260,
   },
-});
+}));

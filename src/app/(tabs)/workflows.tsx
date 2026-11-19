@@ -12,11 +12,12 @@ import * as Haptics from 'expo-haptics';
 import { useRouter, type Href } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, Pressable, Text, View } from 'react-native';
 import { useAvailability } from '../../hooks/useAvailability';
 import { useCustomWorkflows } from '../../store/customWorkflows';
 import { showActionSheet } from '../../utils/actionSheet';
-import { colors, radii, spacing, typography } from '../../theme/tokens';
+import { radii, spacing, typography } from '../../theme/tokens';
+import { makeStyles, useTheme } from '../../theme/theme';
 import { useWorkflows } from '../../workflows/registry';
 import type { WorkflowAvailability } from '../../workflows/requirements';
 
@@ -41,6 +42,8 @@ function availabilityMessage(
 const IMPORT_CARD_ID = '__import__';
 
 export default function WorkflowsScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const router = useRouter();
   const { t } = useTranslation();
   const availability = useAvailability();
@@ -174,10 +177,9 @@ export default function WorkflowsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
-    backgroundColor: colors.bg,
   },
   listContent: {
     padding: spacing.md,
@@ -195,7 +197,6 @@ const styles = StyleSheet.create({
   },
   importCard: {
     borderStyle: 'dashed',
-    backgroundColor: colors.bg,
   },
   iconWrap: {
     width: 48,
@@ -220,4 +221,4 @@ const styles = StyleSheet.create({
     fontFamily: typography.ui,
     fontSize: typography.sizes.xs,
   },
-});
+}));

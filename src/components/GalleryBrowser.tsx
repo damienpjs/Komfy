@@ -56,13 +56,8 @@ import {
   useGalleryPrefs,
 } from '../store/galleryPrefs';
 import { showActionSheet } from '../utils/actionSheet';
-import {
-  colors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../theme/tokens';
+import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 import { ImageViewer, type Rect, type Size } from './ImageViewer';
 import { OutputDirPicker } from './OutputDirPicker';
 import { RemixSheet, type RemixSheetState } from './RemixSheet';
@@ -92,6 +87,8 @@ function inputSubfolder(dir: string): string {
 }
 
 export function GalleryBrowser() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   const gallery = useGallery();
   const remix = useRemix();
@@ -1115,10 +1112,9 @@ export function GalleryBrowser() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
-    backgroundColor: colors.bg,
   },
   breadcrumb: {
     flexDirection: 'row',
@@ -1305,10 +1301,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     borderRadius: radii.md,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.strong,
   },
   retryText: {
-    color: colors.text,
+    color: colors.onStrong,
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.sm,
   },
@@ -1320,4 +1316,4 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xl,
     lineHeight: 20,
   },
-});
+}));

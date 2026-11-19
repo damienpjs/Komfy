@@ -25,13 +25,8 @@ import {
   View,
 } from 'react-native';
 import { useGallery } from '../hooks/useGallery';
-import {
-  colors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../theme/tokens';
+import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 import { listDirectory } from '../utils/pathTree';
 import { sanitizeOutputDir } from '../workflows/patch';
 
@@ -64,6 +59,8 @@ export function OutputDirPicker({
   confirmVerb,
   scope = 'output',
 }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   const gallery = useGallery();
 
@@ -236,7 +233,7 @@ export function OutputDirPicker({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     backgroundColor: colors.bg,
@@ -350,7 +347,7 @@ const styles = StyleSheet.create({
   confirmBtn: {
     minHeight: MIN_TOUCH_TARGET,
     borderRadius: radii.md,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.strong,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.md,
@@ -359,8 +356,8 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   confirmText: {
-    color: colors.text,
+    color: colors.onStrong,
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.sm,
   },
-});
+}));

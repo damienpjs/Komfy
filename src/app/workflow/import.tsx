@@ -14,7 +14,6 @@ import { useTranslation } from 'react-i18next';
 import {
   Pressable,
   ScrollView,
-  StyleSheet,
   Switch,
   Text,
   TextInput,
@@ -25,13 +24,8 @@ import { useNodeInfo } from '../../hooks/useAvailability';
 import { makeCustomId, useCustomWorkflows } from '../../store/customWorkflows';
 import { useImportDraft } from '../../store/importDraft';
 import { useToast } from '../../store/toast';
-import {
-  colors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../../theme/tokens';
+import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../../theme/tokens';
+import { makeStyles, useTheme } from '../../theme/theme';
 import {
   inferManifest,
   MAX_GRAPH_JSON_BYTES,
@@ -43,6 +37,8 @@ import { checkAvailability } from '../../workflows/requirements';
 import type { WorkflowManifest } from '../../workflows/types';
 
 export default function ImportWorkflowScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const router = useRouter();
   const { t } = useTranslation();
   const showToast = useToast((s) => s.show);
@@ -244,7 +240,7 @@ export default function ImportWorkflowScreen() {
             ]}
             onPress={save}
           >
-            <Ionicons name="download-outline" size={18} color={colors.text} />
+            <Ionicons name="download-outline" size={18} color={colors.onStrong} />
             <Text style={styles.primaryText}>{t('importWf.import')}</Text>
           </Pressable>
 
@@ -268,10 +264,9 @@ export default function ImportWorkflowScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
-    backgroundColor: colors.bg,
   },
   content: {
     padding: spacing.md,
@@ -311,11 +306,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: radii.md,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.strong,
   },
   primaryText: {
     flexShrink: 1,
-    color: colors.text,
+    color: colors.onStrong,
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.sm,
     textAlign: 'center',
@@ -403,4 +398,4 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.xs,
     lineHeight: 18,
   },
-});
+}));

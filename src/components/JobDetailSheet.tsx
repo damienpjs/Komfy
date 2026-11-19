@@ -7,15 +7,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import type { QueueEntry } from '../api/types';
-import {
-  colors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../theme/tokens';
+import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 import { remixHref } from '../utils/remixHref';
 import { matchGraph } from '../workflows/match';
 import { allWorkflows } from '../workflows/registry';
@@ -27,6 +22,8 @@ interface Props {
 }
 
 export function JobDetailSheet({ entry, onClose }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const router = useRouter();
   const { t } = useTranslation();
   if (!entry) return null;
@@ -74,7 +71,7 @@ export function JobDetailSheet({ entry, onClose }: Props) {
               ]}
               onPress={remix}
             >
-              <Ionicons name="color-wand-outline" size={18} color={colors.text} />
+              <Ionicons name="color-wand-outline" size={18} color={colors.onStrong} />
               <Text style={styles.remixText}>{t('gallery.remixAction')}</Text>
             </Pressable>
           ) : (
@@ -88,7 +85,7 @@ export function JobDetailSheet({ entry, onClose }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     backgroundColor: colors.bg,
@@ -125,11 +122,11 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     minHeight: MIN_TOUCH_TARGET,
     borderRadius: radii.md,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.strong,
     marginTop: spacing.sm,
   },
   remixText: {
-    color: colors.text,
+    color: colors.onStrong,
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.sm,
   },
@@ -140,4 +137,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: spacing.sm,
   },
-});
+}));

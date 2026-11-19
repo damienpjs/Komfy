@@ -6,11 +6,14 @@
  */
 
 import { useTranslation } from 'react-i18next';
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { useConnection } from '../store/connection';
-import { colors, spacing, typography } from '../theme/tokens';
+import { spacing, typography } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 
 export function StatusDot() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   const online = useConnection((s) => s.online);
   const wsConnected = useConnection((s) => s.wsConnected);
@@ -33,7 +36,7 @@ export function StatusDot() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -48,4 +51,4 @@ const styles = StyleSheet.create({
     fontFamily: typography.ui,
     fontSize: typography.sizes.xs,
   },
-});
+}));

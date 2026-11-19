@@ -7,16 +7,19 @@
 
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, Text, View } from 'react-native';
 import { deriveSupervisorUrl } from '../api/supervisor';
 import { useSupervisorLogs } from '../hooks/useSupervisorLogs';
 import { useSettings } from '../store/settings';
 import { useSupervisorStore } from '../store/supervisor';
-import { colors, spacing, typography } from '../theme/tokens';
+import { spacing, typography } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 
 const ERROR_RE = /error|traceback|exception|failed|fatal/i;
 
 export default function ComfyConsoleScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   useSupervisorLogs(); // open the WS while this screen is mounted
 
@@ -78,10 +81,9 @@ export default function ComfyConsoleScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
-    backgroundColor: colors.bg,
     padding: spacing.md,
   },
   toolbar: {
@@ -130,4 +132,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: spacing.md,
   },
-});
+}));

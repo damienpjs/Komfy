@@ -16,16 +16,11 @@ import * as Haptics from 'expo-haptics';
 import { useRouter, type Href } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { GalleryBrowser } from '../../components/GalleryBrowser';
 import { PromptLibrary } from '../../components/PromptLibrary';
-import {
-  colors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../../theme/tokens';
+import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../../theme/tokens';
+import { makeStyles, useTheme } from '../../theme/theme';
 
 type Segment = 'images' | 'prompts';
 
@@ -36,6 +31,8 @@ const SEGMENTS: { key: Segment; label: string; icon: 'images' | 'bookmark' }[] =
   ];
 
 export default function LibraryScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   const router = useRouter();
   const [segment, setSegment] = useState<Segment>('images');
@@ -93,10 +90,9 @@ export default function LibraryScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
-    backgroundColor: colors.bg,
   },
   segmentBar: {
     flexDirection: 'row',
@@ -130,4 +126,4 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontFamily: typography.uiSemiBold,
   },
-});
+}));

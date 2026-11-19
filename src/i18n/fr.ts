@@ -960,5 +960,9 @@ export default {
     trashEmptyFailed: 'Impossible de vider la corbeille',
     wsLog: 'Journal des événements WebSocket →',
     language: 'Langue',
+    theme: 'Thème',
+    themeAuto: 'Auto',
+    themeLight: 'Clair',
+    themeDark: 'Sombre',
   },
 };

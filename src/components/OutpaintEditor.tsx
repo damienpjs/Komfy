@@ -41,13 +41,8 @@ import {
   GestureHandlerRootView,
 } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  colors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../theme/tokens';
+import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 import {
   applyTemplate,
   clampSides,
@@ -132,6 +127,7 @@ function CanvasDrawing({
   layout: StageLayout;
   activeSide?: OutpaintSide | null;
 }) {
+  const styles = useStyles();
   const f = finalSize(value);
   const { scale, srcX, srcY } = layout;
   const canvas = {
@@ -195,6 +191,7 @@ export function OutpaintDiagram({
   sourceUrl: string;
   height: number;
 }) {
+  const styles = useStyles();
   const [box, setBox] = useState({ width: 0, height });
   const layout = useMemo(() => {
     const f = finalSize(value);
@@ -226,6 +223,7 @@ export function OutpaintDiagram({
 
 /** Size, ratio, generated share and working size, in a few mono lines. */
 export function OutpaintReadout({ value }: { value: OutpaintValue }) {
+  const styles = useStyles();
   const { t } = useTranslation();
   const f = finalSize(value);
   const plan = planOutpaint(value);
@@ -272,6 +270,8 @@ export function OutpaintTemplates({
   /** One horizontal scrolling line (form row) instead of wrapped rows. */
   scroll?: boolean;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { t, i18n } = useTranslation();
   const chips = [
     ...RATIO_TEMPLATES.map((r) => ({ id: ratioTemplateId(r.id), label: r.id })),
@@ -334,6 +334,8 @@ export function OutpaintEditor({
   onCancel,
   onDone,
 }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
   const [draft, setDraft] = useState(value);
@@ -700,7 +702,7 @@ export function OutpaintEditor({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   root: {
     flex: 1,
     backgroundColor: colors.bg,
@@ -729,7 +731,7 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.sm,
   },
   done: {
-    color: colors.brand,
+    color: colors.accent,
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.sm,
   },
@@ -992,4 +994,4 @@ const styles = StyleSheet.create({
   chipTextSelected: {
     color: colors.text,
   },
-});
+}));

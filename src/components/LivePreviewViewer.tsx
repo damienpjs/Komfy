@@ -36,7 +36,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useExecution } from '../store/execution';
-import { colors, radii, spacing, typography } from '../theme/tokens';
+import { radii, spacing, typography } from '../theme/tokens';
+import { makeStyles, ThemeOverride, useTheme } from '../theme/theme';
 import type { WsPreview } from '../utils/wsPreview';
 import { ProgressBar } from './ProgressBar';
 
@@ -67,6 +68,8 @@ function TimelineScrubber({
   viewIndex: number | null;
   onScrub: (index: number | null) => void;
 }) {
+  const styles = useStyles('dark');
+  const { colors } = useTheme('dark');
   const { t } = useTranslation();
   const [width, setWidth] = useState(0);
 
@@ -130,7 +133,7 @@ function TimelineScrubber({
         ) : (
           <Ionicons name="play-skip-forward" size={10} color={colors.text} />
         )}
-        <Text style={[styles.liveText, !live && { color: colors.text }]}>
+        <Text style={[styles.liveText, !live && { color: colors.onAccent }]}>
           {t('job.live')}
         </Text>
       </Pressable>
@@ -139,6 +142,8 @@ function TimelineScrubber({
 }
 
 export function LivePreviewViewer({ title, onClose }: Props) {
+  const styles = useStyles('dark');
+  const { colors } = useTheme('dark');
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const exec = useExecution();
@@ -227,94 +232,96 @@ export function LivePreviewViewer({ title, onClose }: Props) {
       onRequestClose={onClose}
     >
       {/* RNGH gestures require their own root INSIDE a RN Modal. */}
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <View
-          style={styles.container}
-          onLayout={(e) => setHeight(e.nativeEvent.layout.height)}
-        >
-          <GestureDetector gesture={dismissPan}>
-            <Animated.View style={[styles.imageWrap, animatedStyle]}>
-              {frame ? (
-                <Image
-                  source={{ uri: frame.dataUri }}
-                  style={StyleSheet.absoluteFill}
-                  contentFit="contain"
-                  transition={80}
+      <ThemeOverride name="dark">
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <View
+            style={styles.container}
+            onLayout={(e) => setHeight(e.nativeEvent.layout.height)}
+          >
+            <GestureDetector gesture={dismissPan}>
+              <Animated.View style={[styles.imageWrap, animatedStyle]}>
+                {frame ? (
+                  <Image
+                    source={{ uri: frame.dataUri }}
+                    style={StyleSheet.absoluteFill}
+                    contentFit="contain"
+                    transition={80}
+                  />
+                ) : (
+                  <View style={styles.waitingBox}>
+                    <ActivityIndicator color={colors.brand} size="large" />
+                    <Text style={styles.waitingText}>
+                      {t('job.livePreviewWaiting')}
+                    </Text>
+                  </View>
+                )}
+              </Animated.View>
+            </GestureDetector>
+
+            <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm }]}>
+              <Pressable
+                onPress={onClose}
+                hitSlop={12}
+                style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.6 }]}
+              >
+                <Ionicons name="close" size={24} color={colors.text} />
+              </Pressable>
+              {title != null && (
+                <Text style={styles.title} numberOfLines={1}>
+                  {title}
+                </Text>
+              )}
+            </View>
+
+            <View
+              style={[styles.bottomBar, { paddingBottom: insets.bottom + spacing.md }]}
+            >
+              {history.length > 0 && (
+                <TimelineScrubber
+                  count={history.length}
+                  viewIndex={viewIndex}
+                  onScrub={setViewIndex}
                 />
+              )}
+              {running ? (
+                <>
+                  <ProgressBar
+                    value={exec.value}
+                    max={exec.max}
+                    indeterminate={exec.max === 0}
+                  />
+                  {nodeLabel != null && (
+                    <Text style={styles.nodeText} numberOfLines={1}>
+                      {t('job.node', { node: nodeLabel })}
+                    </Text>
+                  )}
+                </>
               ) : (
-                <View style={styles.waitingBox}>
-                  <ActivityIndicator color={colors.brand} size="large" />
-                  <Text style={styles.waitingText}>
-                    {t('job.livePreviewWaiting')}
-                  </Text>
+                <View style={styles.finishedRow}>
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={22}
+                    color={colors.success}
+                  />
+                  <View style={styles.finishedCol}>
+                    <Text style={styles.finishedTitle}>
+                      {t('job.livePreviewFinished')}
+                    </Text>
+                    <Text style={styles.finishedHint}>
+                      {t('job.livePreviewFinishedHint')}
+                    </Text>
+                  </View>
                 </View>
               )}
-            </Animated.View>
-          </GestureDetector>
-
-          <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm }]}>
-            <Pressable
-              onPress={onClose}
-              hitSlop={12}
-              style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.6 }]}
-            >
-              <Ionicons name="close" size={24} color={colors.text} />
-            </Pressable>
-            {title != null && (
-              <Text style={styles.title} numberOfLines={1}>
-                {title}
-              </Text>
-            )}
+            </View>
           </View>
-
-          <View
-            style={[styles.bottomBar, { paddingBottom: insets.bottom + spacing.md }]}
-          >
-            {history.length > 0 && (
-              <TimelineScrubber
-                count={history.length}
-                viewIndex={viewIndex}
-                onScrub={setViewIndex}
-              />
-            )}
-            {running ? (
-              <>
-                <ProgressBar
-                  value={exec.value}
-                  max={exec.max}
-                  indeterminate={exec.max === 0}
-                />
-                {nodeLabel != null && (
-                  <Text style={styles.nodeText} numberOfLines={1}>
-                    {t('job.node', { node: nodeLabel })}
-                  </Text>
-                )}
-              </>
-            ) : (
-              <View style={styles.finishedRow}>
-                <Ionicons
-                  name="checkmark-circle"
-                  size={22}
-                  color={colors.success}
-                />
-                <View style={styles.finishedCol}>
-                  <Text style={styles.finishedTitle}>
-                    {t('job.livePreviewFinished')}
-                  </Text>
-                  <Text style={styles.finishedHint}>
-                    {t('job.livePreviewFinishedHint')}
-                  </Text>
-                </View>
-              </View>
-            )}
-          </View>
-        </View>
-      </GestureHandlerRootView>
+        </GestureHandlerRootView>
+      </ThemeOverride>
     </Modal>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     backgroundColor: '#000',
@@ -454,4 +461,4 @@ const styles = StyleSheet.create({
     fontFamily: typography.mono,
     fontSize: typography.sizes.xs,
   },
-});
+}));

@@ -20,6 +20,7 @@ import '../i18n';
 import { queryClient } from '../api/queryClient';
 import { useComfyWs } from '../api/ws';
 import { ensureNotificationSetup } from '../notifications';
+import { ScreenGround } from '../components/DotGrid';
 import { HeaderBackButton } from '../components/HeaderBackButton';
 import { HeaderTitle } from '../components/HeaderTitle';
 import { SetupWizard } from '../components/SetupWizard';
@@ -32,12 +33,14 @@ import {
 import { useHealthCheck } from '../hooks/useHealthCheck';
 import { useSettings } from '../store/settings';
 import { applyPairing, parsePairingCode } from '../utils/pairing';
-import { colors, spacing, typography } from '../theme/tokens';
+import { spacing, typography } from '../theme/tokens';
+import { ThemeProvider, useTheme } from '../theme/theme';
 
 SplashScreen.preventAutoHideAsync();
 
 /** Mounted below the providers: global connections (WS + health probe). */
 function AppShell() {
+  const { colors } = useTheme();
   useComfyWs();
   useHealthCheck();
   const insets = useSafeAreaInsets();
@@ -65,13 +68,28 @@ function AppShell() {
   if (!hydrated) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
   // Mandatory server address (no fallback): gate the whole app on first launch
   // — and again if the URL is ever cleared — behind the setup wizard.
-  if (!serverUrl) return <SetupWizard />;
+  if (!serverUrl) {
+    return (
+      <ScreenGround>
+        <SetupWizard />
+      </ScreenGround>
+    );
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <VolumeBanner />
       <View style={{ flex: 1 }}>
         <Stack
+          // Each screen gets its own opaque dotted ground (screens keep a
+          // transparent root). The tabs bring their own, per tab.
+          screenLayout={({ route, children }) =>
+            route.name === '(tabs)' ? (
+              children
+            ) : (
+              <ScreenGround>{children}</ScreenGround>
+            )
+          }
           screenOptions={{
             headerStyle: { backgroundColor: colors.bgElevated },
             headerTintColor: colors.text,
@@ -147,9 +165,17 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
-        <StatusBar style="light" />
-        <AppShell />
+        <ThemeProvider>
+          <ThemedStatusBar />
+          <AppShell />
+        </ThemeProvider>
       </QueryClientProvider>
     </GestureHandlerRootView>
   );
+}
+
+/** Light status bar text on the dark theme, dark text on the light one. */
+function ThemedStatusBar() {
+  const { name } = useTheme();
+  return <StatusBar style={name === 'dark' ? 'light' : 'dark'} />;
 }

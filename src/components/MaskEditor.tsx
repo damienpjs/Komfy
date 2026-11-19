@@ -55,14 +55,8 @@ import {
   type MaskPoint,
   type MaskStroke,
 } from '../utils/maskRaster';
-import {
-  colors,
-  maskBrushColors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../theme/tokens';
+import { maskBrushColors, MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 
 /** Long side of the whole-image overlay raster. */
 const FULL_MAX_SIDE = 384;
@@ -154,6 +148,8 @@ export function MaskEditor({
   onCancel,
   onDone,
 }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
 
@@ -1093,9 +1089,9 @@ export function MaskEditor({
                   onValueChange={changeBrush}
                   onSlidingStart={() => setSizingBrush(true)}
                   onSlidingComplete={() => setSizingBrush(false)}
-                  minimumTrackTintColor={colors.brand}
+                  minimumTrackTintColor={colors.accent}
                   maximumTrackTintColor={colors.border}
-                  thumbTintColor={colors.brand}
+                  thumbTintColor={colors.accent}
                 />
                 <Text style={styles.brushValue}>{Math.round(brush)}</Text>
               </>
@@ -1154,6 +1150,7 @@ function rectStyle(rect: Rect) {
 
 /** Two concentric rings, so the outline reads on light and dark pictures. */
 function BrushRing({ size }: { size: number }) {
+  const styles = useStyles();
   return (
     <View
       style={[
@@ -1177,6 +1174,8 @@ function ModeButton({
   active: boolean;
   onPress: () => void;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   return (
     <Pressable
       onPress={onPress}
@@ -1211,6 +1210,8 @@ function IconButton({
   disabled: boolean;
   onPress: () => void;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   return (
     <Pressable
       onPress={onPress}
@@ -1242,6 +1243,8 @@ function FloatingButton({
   onPressIn?: () => void;
   onPressOut?: () => void;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   return (
     <Pressable
       onPress={onPress}
@@ -1259,7 +1262,7 @@ function FloatingButton({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   root: {
     flex: 1,
     backgroundColor: colors.bg,
@@ -1288,7 +1291,7 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.sm,
   },
   done: {
-    color: colors.brand,
+    color: colors.accent,
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.sm,
   },
@@ -1441,4 +1444,4 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.xs,
     textAlign: 'center',
   },
-});
+}));

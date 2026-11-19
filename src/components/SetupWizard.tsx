@@ -14,7 +14,6 @@ import {
   ActivityIndicator,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   View,
@@ -28,13 +27,8 @@ import {
   normalizeServerUrl,
   parsePairingCode,
 } from '../utils/pairing';
-import {
-  colors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../theme/tokens';
+import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 import { PairingScanner } from './PairingScanner';
 
 type TestState =
@@ -44,6 +38,8 @@ type TestState =
   | { phase: 'error'; message: string };
 
 export function SetupWizard() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   const setServerUrl = useSettings((s) => s.setServerUrl);
   const showToast = useToast((s) => s.show);
@@ -174,7 +170,9 @@ export function SetupWizard() {
         onPress={commit}
         disabled={test.phase !== 'ok'}
       >
-        <Text style={styles.buttonText}>{t('setup.save')}</Text>
+        <Text style={[styles.buttonText, styles.buttonTextPrimary]}>
+          {t('setup.save')}
+        </Text>
       </Pressable>
 
       {/* "Save anyway": always available with a valid URL (the server may just
@@ -205,10 +203,9 @@ export function SetupWizard() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
-    backgroundColor: colors.bg,
   },
   content: {
     flexGrow: 1,
@@ -217,7 +214,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   brand: {
-    color: colors.brand,
+    color: colors.accent,
     fontFamily: typography.uiBold,
     fontSize: typography.sizes.lg,
     letterSpacing: 1,
@@ -287,7 +284,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   buttonPrimary: {
-    backgroundColor: colors.accent,
+    backgroundColor: colors.strong,
   },
   buttonSecondary: {
     backgroundColor: colors.surface,
@@ -301,6 +298,9 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.sm,
+  },
+  buttonTextPrimary: {
+    color: colors.onStrong,
   },
   testOk: {
     color: colors.success,
@@ -329,4 +329,4 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.xs,
     textAlign: 'center',
   },
-});
+}));

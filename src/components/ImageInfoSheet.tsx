@@ -14,14 +14,14 @@ import {
   Modal,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   View,
 } from 'react-native';
 import type { PromptGraph } from '../api/types';
 import type { GalleryImage } from '../hooks/useGallery';
 import { useRemix } from '../hooks/useRemix';
-import { colors, spacing, typography } from '../theme/tokens';
+import { spacing, typography } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 import { formatBytes } from '../utils/format';
 import { GraphSummary, Row } from './GraphSummary';
 
@@ -77,6 +77,8 @@ function InfoSheetBody({
   durationSec,
   onClose,
 }: Props & { image: GalleryImage }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { t, i18n } = useTranslation();
   const recipe = useRecipe(image);
 
@@ -184,7 +186,7 @@ export function ImageInfoSheet({ image, ...rest }: Props) {
   return <InfoSheetBody key={image.path} image={image} {...rest} />;
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     backgroundColor: colors.bg,
@@ -241,4 +243,4 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.xs,
     lineHeight: 18,
   },
-});
+}));

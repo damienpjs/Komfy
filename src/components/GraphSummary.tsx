@@ -9,10 +9,11 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { useTranslation } from 'react-i18next';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import type { PromptGraph } from '../api/types';
 import { useToast } from '../store/toast';
-import { colors, radii, spacing, typography } from '../theme/tokens';
+import { radii, spacing, typography } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 import { describeJob } from '../utils/describeJob';
 import { loraDirName, loraDisplayName } from '../utils/pathTree';
 
@@ -25,6 +26,7 @@ export function Row({
   value?: string;
   mono?: boolean;
 }) {
+  const styles = useStyles();
   if (value == null || value === '') return null;
   return (
     <View style={styles.row}>
@@ -48,6 +50,8 @@ function PromptBlock({
   muted?: boolean;
   onCopy: (text: string, label: string) => void;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   return (
     <View style={styles.block}>
@@ -74,6 +78,7 @@ function PromptBlock({
 /** Parameter rows extracted from the graph (no container: place inside a
  *  parent that handles spacing, e.g. a ScrollView `gap`). */
 export function GraphSummary({ graph }: { graph: PromptGraph }) {
+  const styles = useStyles();
   const { t } = useTranslation();
   const showToast = useToast((s) => s.show);
   const job = describeJob(graph);
@@ -143,7 +148,7 @@ export function GraphSummary({ graph }: { graph: PromptGraph }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   row: {
     gap: spacing.xs,
   },
@@ -224,4 +229,4 @@ const styles = StyleSheet.create({
     fontFamily: typography.mono,
     fontSize: typography.sizes.sm,
   },
-});
+}));

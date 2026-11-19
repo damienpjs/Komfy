@@ -22,16 +22,15 @@ import { ComfyApiError, createClient, testConnection } from '../../api/client';
 import { queryClient } from '../../api/queryClient';
 import { ServerPowerCard } from '../../components/ServerPowerCard';
 import type { Lang } from '../../i18n';
-import { SERVER_URL_PLACEHOLDER, useSettings } from '../../store/settings';
+import {
+  SERVER_URL_PLACEHOLDER,
+  useSettings,
+  type ThemePreference,
+} from '../../store/settings';
 import { useConnection } from '../../store/connection';
 import { useToast } from '../../store/toast';
-import {
-  colors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../../theme/tokens';
+import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../../theme/tokens';
+import { makeStyles, useTheme } from '../../theme/theme';
 import { formatBytes } from '../../utils/format';
 
 type TestState =
@@ -45,7 +44,15 @@ const LANGUAGES: { code: Lang; label: string }[] = [
   { code: 'fr', label: 'Français' },
 ];
 
+const THEMES: { code: ThemePreference; label: string }[] = [
+  { code: 'auto', label: 'settings.themeAuto' },
+  { code: 'light', label: 'settings.themeLight' },
+  { code: 'dark', label: 'settings.themeDark' },
+];
+
 export default function Settings() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   const serverUrl = useSettings((s) => s.serverUrl);
   const setServerUrl = useSettings((s) => s.setServerUrl);
@@ -56,6 +63,8 @@ export default function Settings() {
   const setLoraMaxCount = useSettings((s) => s.setLoraMaxCount);
   const language = useSettings((s) => s.language);
   const setLanguage = useSettings((s) => s.setLanguage);
+  const themePreference = useSettings((s) => s.themePreference);
+  const setThemePreference = useSettings((s) => s.setThemePreference);
   const online = useConnection((s) => s.online);
   const showToast = useToast((s) => s.show);
 
@@ -224,7 +233,7 @@ export default function Settings() {
           onPress={save}
           disabled={!isValid || !isDirty}
         >
-          <Text style={styles.buttonText}>
+          <Text style={[styles.buttonText, styles.buttonTextPrimary]}>
             {isDirty ? t('common.save') : t('settings.saved')}
           </Text>
         </Pressable>
@@ -250,7 +259,7 @@ export default function Settings() {
           value={previewsEnabled}
           onValueChange={setPreviewsEnabled}
           trackColor={{ false: colors.bgElevated, true: colors.accent }}
-          thumbColor={colors.text}
+          thumbColor={colors.switchThumb}
         />
       </View>
 
@@ -264,7 +273,7 @@ export default function Settings() {
             value={loraMaxCount != null}
             onValueChange={toggleLoraLimit}
             trackColor={{ false: colors.bgElevated, true: colors.accent }}
-            thumbColor={colors.text}
+            thumbColor={colors.switchThumb}
           />
         </View>
         {loraMaxCount != null && (
@@ -303,6 +312,33 @@ export default function Settings() {
                 ]}
               >
                 {label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.toggleRow}>
+        <Text style={styles.toggleLabel}>{t('settings.theme')}</Text>
+        <View style={styles.langRow}>
+          {THEMES.map(({ code, label }) => (
+            <Pressable
+              key={code}
+              accessibilityRole="button"
+              accessibilityState={{ selected: themePreference === code }}
+              style={[
+                styles.langButton,
+                themePreference === code && styles.langButtonActive,
+              ]}
+              onPress={() => setThemePreference(code)}
+            >
+              <Text
+                style={[
+                  styles.langText,
+                  themePreference === code && styles.langTextActive,
+                ]}
+              >
+                {t(label)}
               </Text>
             </Pressable>
           ))}
@@ -354,10 +390,9 @@ export default function Settings() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
-    backgroundColor: colors.bg,
   },
   content: {
     flexGrow: 1,
@@ -445,7 +480,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   buttonPrimary: {
-    backgroundColor: colors.accent,
+    backgroundColor: colors.strong,
   },
   buttonSecondary: {
     backgroundColor: colors.surface,
@@ -459,6 +494,9 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.sm,
+  },
+  buttonTextPrimary: {
+    color: colors.onStrong,
   },
   testOk: {
     color: colors.success,
@@ -511,8 +549,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   langButtonActive: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
+    backgroundColor: colors.strong,
+    borderColor: colors.strong,
   },
   langText: {
     color: colors.textMuted,
@@ -520,7 +558,7 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.sm,
   },
   langTextActive: {
-    color: colors.text,
+    color: colors.onStrong,
     fontFamily: typography.uiSemiBold,
   },
   trashBtn: {
@@ -563,4 +601,4 @@ const styles = StyleSheet.create({
     fontFamily: typography.mono,
     fontSize: typography.sizes.sm,
   },
-});
+}));

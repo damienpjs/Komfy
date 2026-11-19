@@ -50,13 +50,8 @@ import {
   presetValues,
   suggestPresetName,
 } from '../../utils/presets';
-import {
-  colors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../../theme/tokens';
+import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../../theme/tokens';
+import { makeStyles, useTheme } from '../../theme/theme';
 import {
   accessoryId,
   KEYBOARD_ACCESSORY_ID,
@@ -220,6 +215,8 @@ function comfyErrorMessage(e: unknown): string {
 }
 
 export default function WorkflowLaunchScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { id, prefill, seeds } = useLocalSearchParams<{
     id: string;
     prefill?: string;
@@ -849,7 +846,7 @@ export default function WorkflowLaunchScreen() {
                           false: colors.bgElevated,
                           true: colors.accent,
                         }}
-                        thumbColor={colors.text}
+                        thumbColor={colors.switchThumb}
                       />
                     </View>
                     <Text style={styles.dimSummary}>
@@ -1174,10 +1171,9 @@ export default function WorkflowLaunchScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
-    backgroundColor: colors.bg,
   },
   // Sits above the page, out of the scroll, low enough to stay clear of the
   // card being dragged around the middle of the screen.
@@ -1207,7 +1203,6 @@ const styles = StyleSheet.create({
   },
   center: {
     flex: 1,
-    backgroundColor: colors.bg,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1413,7 +1408,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   batchChipActive: {
-    backgroundColor: colors.accent,
+    backgroundColor: colors.accentSoft,
     borderColor: colors.accent,
   },
   batchChipText: {
@@ -1422,7 +1417,7 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.md,
   },
   batchChipTextActive: {
-    color: colors.text,
+    color: colors.accent,
   },
   batchRow: {
     flexDirection: 'row',
@@ -1507,4 +1502,4 @@ const styles = StyleSheet.create({
     fontFamily: typography.uiBold,
     fontSize: typography.sizes.md,
   },
-});
+}));

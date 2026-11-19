@@ -14,7 +14,6 @@ import {
   ActivityIndicator,
   Alert,
   Pressable,
-  StyleSheet,
   Text,
   View,
 } from 'react-native';
@@ -22,13 +21,8 @@ import { createClient } from '../api/client';
 import { useSettings } from '../store/settings';
 import { PICK_FOR_UPLOAD } from '../utils/imageUpload';
 import { isHeif } from '../utils/media';
-import {
-  colors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../theme/tokens';
+import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 
 /**
  * Guard against filling up the output volume: locally reject an upload
@@ -44,6 +38,8 @@ interface Props {
 }
 
 export function ImageInputField({ value, onChange }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   const serverUrl = useSettings((s) => s.serverUrl);
   const [uploading, setUploading] = useState(false);
@@ -160,7 +156,7 @@ export function ImageInputField({ value, onChange }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   emptyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -213,4 +209,4 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderWidth: 1,
   },
-});
+}));

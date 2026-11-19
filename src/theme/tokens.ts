@@ -1,55 +1,131 @@
 /**
- * Komfy — style guide tokens.
- * Charte sobre : base graphite quasi-noir neutre (sans dominante violette), accent
- * discreet slate/steel, a touch of yellow (#e2e34f) reserved for signature
- * moments (Launch CTA, progress, active tab). No hardcoded styles in screens:
- * tout passe par ces tokens.
+ * Komfy style guide tokens.
+ *
+ * Two palettes with the same keys, picked at runtime by the ThemeProvider
+ * (src/theme/theme.tsx): a charcoal dark one and a paper light one, both laid
+ * over the banner's dot grid. The yellow of the logo's K (#e7f950) is the
+ * signature: launch CTA, progress, active tab. It is only ever a fill or used
+ * on dark grounds; on paper, links and selection use the olive `accent`.
+ * No hardcoded styles in screens: everything goes through these tokens.
  */
 
-export const colors = {
-  // Backgrounds — neutral black, no violet tint
-  bg: '#07090a',
-  bgElevated: '#0d1012',
-  surface: '#14181b', // node-style cards, neutral graphite
-  surfacePressed: '#1c2124',
-  border: '#272d31',
+export type ThemeName = 'dark' | 'light';
 
-  // Texte (neutres, sans dominante)
-  text: '#edf0f2',
-  textMuted: '#98a2a8',
-  textDisabled: '#5c6469',
-
-  // Everyday accent — sober slate/steel (icons, links, active states, buttons)
-  accent: '#3d5163',
-  accentPressed: '#2f3f4d',
-  // Accent readable as a line or text on the dark backgrounds (6.6:1 on bg,
-  // 5.7:1 on accentSoft): drop outlines, a card in the air or just landed.
-  accentStrong: '#7f97ab',
-  // Accent tint filling an area (a drop slot) without passing for a card.
-  accentSoft: '#131b21',
-
-  // Signature yellow — reserved (main CTA, progress, active tab)
-  brand: '#e2e34f',
-  brandPressed: '#c9ca41',
-  onBrand: '#0d1012', // text / icon sitting on the yellow
-
-  success: '#7fcea1', // pastel mint green — connected / OK
-  danger: '#e08b84', // corail pastel — interrompre / vider / supprimer
-  dangerPressed: '#d0756d', // pressed coral (destructive button background)
-  warning: '#d29922', // output folder unavailable on the server
-
+const dark = {
+  // Grounds
+  bg: '#141719',
+  bgElevated: '#191c1f', // headers, tab bar, sheets
+  surface: '#1c2023', // cards, list groups
+  surfacePressed: '#252a2e',
+  field: '#252a2e', // text inputs, segmented tracks
+  border: '#2b3135',
+  dot: '#272c30', // the banner's dot grid
   overlay: 'rgba(0, 0, 0, 0.6)', // backdrop behind a centred dialog
+
+  // Ink
+  text: '#eef1f3',
+  textMuted: '#aab2b8',
+  textDisabled: '#8f989e', // still 4.9:1 on `field`
+
+  // Interactive text, icons, selection (yellow on charcoal)
+  accent: '#e7f950',
+  onAccent: '#141719', // text on an `accent` fill (badges)
+  accentStrong: '#e7f950',
+  accentSoft: '#2b3017', // selected chip / tile fill
+  // Filled buttons: an ink slab, never the signature yellow
+  strong: '#eef1f3',
+  onStrong: '#141719',
+  accentPressed: '#c9d0d4', // pressed `strong` fill
+
+  // Signature yellow (fills only)
+  brand: '#e7f950',
+  brandPressed: '#cbdc3f',
+  onBrand: '#15181b',
+  progress: '#e7f950',
+
+  // States
+  success: '#86d3a7',
+  danger: '#f39189',
+  dangerPressed: '#d97b74',
+  dangerSoft: '#33201e',
+  warning: '#ebb551',
+  warningSoft: '#30271a',
+
+  // Native controls
+  switchThumb: '#ffffff',
+  tabActive: '#e7f950',
 } as const;
+
+export type Palette = { readonly [K in keyof typeof dark]: string };
+
+const light: Palette = {
+  bg: '#f3f3ef',
+  bgElevated: '#fbfbf8',
+  surface: '#ffffff',
+  surfacePressed: '#ebebe5',
+  field: '#ebebe5',
+  border: '#e1e1da',
+  dot: '#cdcec7',
+  overlay: 'rgba(0, 0, 0, 0.45)',
+
+  text: '#15181b',
+  textMuted: '#4f565b',
+  textDisabled: '#62696e',
+
+  accent: '#556000',
+  onAccent: '#ffffff',
+  accentStrong: '#556000',
+  accentSoft: '#f1f7c2',
+  strong: '#15181b',
+  onStrong: '#f3f3ef',
+  accentPressed: '#2c3034',
+
+  brand: '#e7f950',
+  brandPressed: '#d4e43f',
+  onBrand: '#15181b',
+  progress: '#556000',
+
+  success: '#17683c',
+  danger: '#b3322a',
+  dangerPressed: '#962920',
+  dangerSoft: '#fae8e5',
+  warning: '#8a5200',
+  warningSoft: '#faf0d9',
+
+  switchThumb: '#ffffff',
+  tabActive: '#15181b',
+};
+
+export const palettes: Record<ThemeName, Palette> = { dark, light };
+
+/**
+ * The signature surface: a piece of the banner (charcoal + dot grid), the
+ * same in both themes. Launch bar, running job, mini player, server card.
+ */
+export const signature = {
+  bg: '#181b1e',
+  dot: '#31373c',
+  border: '#2e3439',
+  text: '#eef1f3',
+  textMuted: '#aab2b8',
+  chip: '#22262a',
+  chipBorder: '#393f45',
+  track: '#323840',
+} as const;
+
+/** Dot grid geometry, shared by every DotGrid. */
+export const dotGrid = { spacing: 18, radius: 1.1 } as const;
 
 /**
  * Brush colours of the mask editor (the overlay only: the uploaded mask is
  * always grayscale). Bright and saturated so they read over any photo at
- * the overlay's partial opacity; the first is the default.
+ * the overlay's partial opacity; the first is the default. Theme-independent:
+ * the editor works over the image, not over the UI ground.
  */
 export const maskBrushColors = [
-  { id: 'coral', hex: colors.danger },
-  { id: 'yellow', hex: colors.brand },
-  { id: 'mint', hex: colors.success },
+  { id: 'coral', hex: '#f39189' },
+  { id: 'yellow', hex: '#e7f950' },
+  { id: 'mint', hex: '#86d3a7' },
   { id: 'cyan', hex: '#5cc8e6' },
   { id: 'magenta', hex: '#e070c8' },
 ] as const;
@@ -90,5 +166,5 @@ export const typography = {
   },
 } as const;
 
-/** Cible tactile minimale (pt) — actions destructives incluses. */
+/** Minimum touch target (pt), destructive actions included. */
 export const MIN_TOUCH_TARGET = 44;

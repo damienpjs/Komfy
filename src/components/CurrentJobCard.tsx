@@ -10,17 +10,12 @@ import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, Text, View } from 'react-native';
 import type { QueueEntry } from '../api/types';
 import { useExecution } from '../store/execution';
 import { useSettings } from '../store/settings';
-import {
-  colors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../theme/tokens';
+import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 import { describeGraph } from '../hooks/useQueue';
 import { ProgressBar } from './ProgressBar';
 
@@ -54,6 +49,8 @@ export function CurrentJobCard({
   onPress,
   onPressPreview,
 }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [, promptId, graph] = entry;
   const { t } = useTranslation();
   const exec = useExecution();
@@ -188,7 +185,7 @@ export function CurrentJobCard({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   card: {
     backgroundColor: colors.surface,
     borderColor: colors.border,
@@ -283,4 +280,4 @@ const styles = StyleSheet.create({
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.sm,
   },
-});
+}));

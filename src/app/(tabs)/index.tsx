@@ -5,7 +5,7 @@
 
 import * as Haptics from 'expo-haptics';
 import { useTranslation } from 'react-i18next';
-import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, Pressable, Text, View } from 'react-native';
 import { CurrentJobCard } from '../../components/CurrentJobCard';
 import { JobDetailSheet } from '../../components/JobDetailSheet';
 import { LivePreviewViewer } from '../../components/LivePreviewViewer';
@@ -15,15 +15,11 @@ import type { QueueEntry } from '../../api/types';
 import { describeGraph, useQueue } from '../../hooks/useQueue';
 import { useConnection } from '../../store/connection';
 import { useExecution } from '../../store/execution';
-import {
-  colors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../../theme/tokens';
+import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../../theme/tokens';
+import { makeStyles } from '../../theme/theme';
 
 export default function QueueScreen() {
+  const styles = useStyles();
   const { t } = useTranslation();
   const { query, interrupt, clearQueue, deleteItem } = useQueue();
   const online = useConnection((s) => s.online);
@@ -154,10 +150,9 @@ export default function QueueScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
-    backgroundColor: colors.bg,
   },
   listContent: {
     padding: spacing.md,
@@ -206,7 +201,6 @@ const styles = StyleSheet.create({
   },
   centerBox: {
     flex: 1,
-    backgroundColor: colors.bg,
     alignItems: 'center',
     justifyContent: 'center',
     padding: spacing.lg,
@@ -228,17 +222,17 @@ const styles = StyleSheet.create({
     minHeight: MIN_TOUCH_TARGET,
     paddingHorizontal: spacing.lg,
     borderRadius: radii.md,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.strong,
     alignItems: 'center',
     justifyContent: 'center',
   },
   retryText: {
-    color: colors.text,
+    color: colors.onStrong,
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.sm,
   },
   errorBanner: {
-    backgroundColor: '#3a1a22', // darkened danger background on the violet base, derived from colors.danger
+    backgroundColor: colors.dangerSoft,
     borderColor: colors.danger,
     borderWidth: 1,
     borderRadius: radii.md,
@@ -262,4 +256,4 @@ const styles = StyleSheet.create({
     fontFamily: typography.ui,
     fontSize: typography.sizes.xs,
   },
-});
+}));

@@ -6,16 +6,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { Pressable, Text } from 'react-native';
 import type { QueueEntry } from '../api/types';
 import { describeGraph } from '../hooks/useQueue';
-import {
-  colors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../theme/tokens';
+import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 
 interface Props {
   entry: QueueEntry;
@@ -26,6 +21,8 @@ interface Props {
 }
 
 export function PendingJobRow({ entry, position, onDelete, onPress }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [, promptId, graph] = entry;
   const { t } = useTranslation();
 
@@ -62,7 +59,7 @@ export function PendingJobRow({ entry, position, onDelete, onPress }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -104,4 +101,4 @@ const styles = StyleSheet.create({
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.sm,
   },
-});
+}));

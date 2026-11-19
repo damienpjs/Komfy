@@ -17,20 +17,14 @@ import {
   Modal,
   Platform,
   Pressable,
-  StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useToast } from '../store/toast';
-import {
-  colors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../theme/tokens';
+import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 
 interface PromptFieldProps {
   /** Field label, reused as the editor title. */
@@ -56,6 +50,8 @@ export function PromptField({
   onChange,
   onPickSaved,
 }: PromptFieldProps) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   const showToast = useToast((s) => s.show);
   const insets = useSafeAreaInsets();
@@ -215,7 +211,7 @@ export function PromptField({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   actions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
@@ -300,4 +296,4 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     minHeight: MIN_TOUCH_TARGET,
   },
-});
+}));

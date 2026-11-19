@@ -16,7 +16,6 @@ import {
   ActivityIndicator,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   View,
 } from 'react-native';
@@ -24,17 +23,14 @@ import { createClient } from '../../api/client';
 import { useGeneratedPrompts } from '../../store/generatedPrompts';
 import { useSettings } from '../../store/settings';
 import { useToast } from '../../store/toast';
-import {
-  colors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../../theme/tokens';
+import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../../theme/tokens';
+import { makeStyles, useTheme } from '../../theme/theme';
 
 const POLL_MS = 2000;
 
 export default function TextResultScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { promptId, nodeId, workflowId } = useLocalSearchParams<{
     promptId: string;
     nodeId: string;
@@ -128,7 +124,7 @@ export default function TextResultScreen() {
             ]}
             onPress={usePrompt}
           >
-            <Ionicons name="color-wand-outline" size={18} color={colors.text} />
+            <Ionicons name="color-wand-outline" size={18} color={colors.onStrong} />
             <Text style={styles.primaryText}>{t('textResult.usePrompt')}</Text>
           </Pressable>
 
@@ -161,10 +157,9 @@ export default function TextResultScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
-    backgroundColor: colors.bg,
   },
   content: {
     padding: spacing.md,
@@ -210,12 +205,12 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     minHeight: MIN_TOUCH_TARGET + 4,
     borderRadius: radii.md,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.strong,
     alignItems: 'center',
     justifyContent: 'center',
   },
   primaryText: {
-    color: colors.text,
+    color: colors.onStrong,
     fontFamily: typography.uiBold,
     fontSize: typography.sizes.md,
   },
@@ -235,4 +230,4 @@ const styles = StyleSheet.create({
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.md,
   },
-});
+}));

@@ -17,19 +17,13 @@ import {
   ActivityIndicator,
   Image as RNImage,
   Pressable,
-  StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { createClient } from '../api/client';
 import { useSettings } from '../store/settings';
-import {
-  colors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../theme/tokens';
+import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 import { reconcileSource } from '../workflows/outpaint';
 import type { OutpaintField as OutpaintFieldDef, OutpaintValue } from '../workflows/types';
 import {
@@ -48,6 +42,8 @@ interface Props {
 }
 
 export function OutpaintField({ field, value, onChange, sourceFilename }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   const serverUrl = useSettings((s) => s.serverUrl);
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
@@ -164,7 +160,7 @@ export function OutpaintField({ field, value, onChange, sourceFilename }: Props)
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   wrap: {
     gap: spacing.sm,
   },
@@ -206,4 +202,4 @@ const styles = StyleSheet.create({
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.sm,
   },
-});
+}));

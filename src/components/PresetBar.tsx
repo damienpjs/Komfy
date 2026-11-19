@@ -8,16 +8,11 @@
 import * as Haptics from 'expo-haptics';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { type Preset, sameName, usePresets } from '../store/presets';
 import { showActionSheet } from '../utils/actionSheet';
-import {
-  colors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../theme/tokens';
+import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 import type { FieldValues } from '../workflows/types';
 import { PresetNameDialog } from './PresetNameDialog';
 
@@ -29,6 +24,8 @@ interface Props {
 }
 
 export function PresetBar({ workflowId, onApply, capture }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   const presets = usePresets((s) => s.byWorkflow[workflowId]);
   const [renaming, setRenaming] = useState<Preset | null>(null);
@@ -141,7 +138,7 @@ export function PresetBar({ workflowId, onApply, capture }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   wrap: {
     gap: spacing.xs,
   },
@@ -170,4 +167,4 @@ const styles = StyleSheet.create({
     fontFamily: typography.uiMedium,
     fontSize: typography.sizes.xs,
   },
-});
+}));

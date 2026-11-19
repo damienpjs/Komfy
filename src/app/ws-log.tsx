@@ -6,15 +6,16 @@
 import { useTranslation } from 'react-i18next';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useConnection } from '../store/connection';
-import { colors, spacing, typography } from '../theme/tokens';
+import { spacing, typography, type Palette } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 
-const EVENT_COLORS: Record<string, string> = {
+const eventColors = (colors: Palette): Record<string, string> => ({
   execution_error: colors.danger,
   execution_success: colors.success,
   progress: colors.accent,
   progress_state: colors.accent,
   executed: colors.success,
-};
+});
 
 function formatTime(at: number): string {
   const d = new Date(at);
@@ -23,6 +24,8 @@ function formatTime(at: number): string {
 }
 
 export default function WsLogScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   const wsLog = useConnection((s) => s.wsLog);
   const clearWsLog = useConnection((s) => s.clearWsLog);
@@ -52,7 +55,7 @@ export default function WsLogScreen() {
             <Text
               style={[
                 styles.type,
-                { color: EVENT_COLORS[item.type] ?? colors.textMuted },
+                { color: eventColors(colors)[item.type] ?? colors.textMuted },
               ]}
             >
               {item.type}
@@ -67,10 +70,9 @@ export default function WsLogScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
-    backgroundColor: colors.bg,
     padding: spacing.md,
   },
   toolbar: {
@@ -119,4 +121,4 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.xs,
     flexShrink: 1,
   },
-});
+}));

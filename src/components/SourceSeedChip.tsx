@@ -9,8 +9,9 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import { Pressable, StyleSheet, Text } from 'react-native';
-import { colors, radii, spacing, typography } from '../theme/tokens';
+import { Pressable, Text } from 'react-native';
+import { radii, spacing, typography } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 
 interface Props {
   /** Seed extracted from the remixed image — undefined hides the chip. */
@@ -21,6 +22,8 @@ interface Props {
 }
 
 export function SourceSeedChip({ seed, current, onReuse }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   if (seed == null) return null;
 
@@ -50,7 +53,7 @@ export function SourceSeedChip({ seed, current, onReuse }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -73,4 +76,4 @@ const styles = StyleSheet.create({
     fontFamily: typography.ui,
     fontSize: typography.sizes.xs,
   },
-});
+}));

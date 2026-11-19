@@ -8,16 +8,11 @@ import Slider from '@react-native-community/slider';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { useSettings } from '../store/settings';
 import { loraDirName, loraDisplayName } from '../utils/pathTree';
-import {
-  colors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../theme/tokens';
+import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 import type { LoraSelection, LorasField } from '../workflows/types';
 import { LoraPicker } from './LoraPicker';
 
@@ -90,6 +85,8 @@ function crossesNotch(from: number, to: number) {
 }
 
 export function LoraField({ field, value, onChange }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   const [pickerOpen, setPickerOpen] = useState(false);
   // Global cap (Settings), applied to every workflow type. null = no limit.
@@ -349,7 +346,7 @@ export function LoraField({ field, value, onChange }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   wrap: {
     gap: spacing.sm,
   },
@@ -435,4 +432,4 @@ const styles = StyleSheet.create({
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.sm,
   },
-});
+}));

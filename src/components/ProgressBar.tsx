@@ -13,7 +13,8 @@ import {
   Text,
   View,
 } from 'react-native';
-import { colors, radii, spacing, typography } from '../theme/tokens';
+import { radii, spacing, typography } from '../theme/tokens';
+import { makeStyles } from '../theme/theme';
 
 /** Width of one diagonal; the two-tone period is 2× (repeating pattern). */
 const STRIPE_W = 12;
@@ -32,6 +33,7 @@ interface Props {
 
 /** Two-tone diagonal strip translated in a loop of exactly one period. */
 function IndeterminateStripes() {
+  const styles = useStyles();
   const [width, setWidth] = useState(0);
   const tx = useRef(new Animated.Value(0)).current;
 
@@ -81,6 +83,7 @@ function IndeterminateStripes() {
 }
 
 export function ProgressBar({ value, max, indeterminate }: Props) {
+  const styles = useStyles();
   const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
 
   return (
@@ -97,7 +100,7 @@ export function ProgressBar({ value, max, indeterminate }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -113,7 +116,7 @@ const styles = StyleSheet.create({
   fill: {
     height: '100%',
     borderRadius: radii.full,
-    backgroundColor: colors.brand, // neon yellow: the "it's generating" moment (style guide)
+    backgroundColor: colors.progress, // the "it's generating" moment: yellow on dark, olive on paper
   },
   stripeRow: {
     position: 'absolute',
@@ -141,4 +144,4 @@ const styles = StyleSheet.create({
     minWidth: 44,
     textAlign: 'right',
   },
-});
+}));

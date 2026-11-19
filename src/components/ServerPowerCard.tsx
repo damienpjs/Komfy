@@ -29,23 +29,26 @@ import {
 } from '../utils/pairing';
 import { PairingScanner } from './PairingScanner';
 import {
-  colors,
   MIN_TOUCH_TARGET,
   radii,
   spacing,
   typography,
+  type Palette,
 } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 
-const DOT_COLOR: Record<PowerState, string> = {
+const dotColors = (colors: Palette): Record<PowerState, string> => ({
   on: colors.success,
   off: colors.warning,
-  starting: colors.brand,
+  starting: colors.accent,
   unreachable: colors.danger,
   loading: colors.textDisabled,
   unconfigured: colors.textDisabled,
-};
+});
 
 export function ServerPowerCard() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   const { state, hasToken, effectiveUrl, start, stop } = useSupervisor();
   const showToast = useToast((s) => s.show);
@@ -149,7 +152,7 @@ export function ServerPowerCard() {
       <View style={styles.header}>
         <View style={styles.statusWrap}>
           <View style={styles.statusRow}>
-            <View style={[styles.dot, { backgroundColor: DOT_COLOR[state] }]} />
+            <View style={[styles.dot, { backgroundColor: dotColors(colors)[state] }]} />
             <Text style={styles.title}>{statusLabel[state]}</Text>
             {(state === 'starting' || busy) && (
               <ActivityIndicator size="small" color={colors.textMuted} />
@@ -264,7 +267,7 @@ export function ServerPowerCard() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   card: {
     backgroundColor: colors.surface,
     borderColor: colors.border,
@@ -389,4 +392,4 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.sm,
     paddingVertical: spacing.xs,
   },
-});
+}));

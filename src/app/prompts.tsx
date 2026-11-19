@@ -13,12 +13,14 @@
 
 import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { StyleSheet, View } from 'react-native';
+import { View } from 'react-native';
 import { PromptLibrary } from '../components/PromptLibrary';
 import { usePromptPick } from '../store/promptPick';
-import { colors } from '../theme/tokens';
+
+import { makeStyles } from '../theme/theme';
 
 export default function PromptsScreen() {
+  const styles = useStyles();
   const { pick } = useLocalSearchParams<{ pick?: string }>();
   const router = useRouter();
   const { t } = useTranslation();
@@ -44,9 +46,8 @@ export default function PromptsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
-    backgroundColor: colors.bg,
   },
-});
+}));

@@ -1,5 +1,6 @@
-import { StyleSheet, Text, useWindowDimensions } from 'react-native';
-import { colors, spacing, typography } from '../theme/tokens';
+import { Text, useWindowDimensions } from 'react-native';
+import { spacing, typography } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 
 /**
  * Stack header title that never runs under the status dot.
@@ -23,6 +24,8 @@ export function HeaderTitle({
   children: string;
   tintColor?: string;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { width } = useWindowDimensions();
   return (
     <Text
@@ -40,9 +43,9 @@ export function HeaderTitle({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   title: {
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.headerTitle,
   },
-});
+}));
