@@ -16,7 +16,12 @@
  * HTTP surface (JSON):
  *   GET  /health        → { supervisor, comfy: "up"|"down"|"starting", pid, since }   (no auth: up/down is harmless)
  *   POST /start         → 202 { starting:true } | 409 { error }                        (auth)
+ *   POST /restart       → 202 { starting:true } | 409 { error }                        (auth)
  *   POST /stop          → 200 { stopped:true }  | 409 { error }                        (auth)
+ *
+ * /start and /restart take an optional JSON body { "mode": "sdpa" | "split" }:
+ * the attention backend passed to scripts/start-comfy.* (it replaces the one
+ * in COMFY_START_ARGS, the other args stay). No body = COMFY_START_ARGS as is.
  *   GET  /ws?token=…     → WebSocket, replays recent lines then tails live             (auth)
  *
  * Config (env, all optional):
@@ -49,6 +54,12 @@ const LOG_FILE =
   process.env.KOMFY_LOG_FILE || path.join(BASE_DIR, 'logs', 'comfyui.log');
 const LOG_RING_MAX = 500; // lines replayed to a freshly connected client
 const PROBE_TIMEOUT_MS = 4000;
+/** Attention backends the app may ask for (whitelist: forwarded as an arg). */
+const ATTENTION_MODES = new Set(['sdpa', 'split']);
+/** Every attention keyword start-comfy.* understands, to swap the env one. */
+const ATTENTION_KEYWORDS = new Set(['sdpa', 'split', 'subquad']);
+const RESTART_STOP_TIMEOUT_MS = 20_000;
+const BODY_MAX_BYTES = 1024;
 
 // ── Auth token ─────────────────────────────────────────────────────────────
 const TOKEN = resolveToken();
@@ -158,7 +169,15 @@ function pollLog() {
 }
 
 // ── Process control ─────────────────────────────────────────────────────────
-async function startComfy() {
+/** COMFY_START_ARGS with the attention backend swapped for `mode` (when set). */
+function startArgs(mode) {
+  const args = (process.env.COMFY_START_ARGS || '').split(' ').filter(Boolean);
+  if (!mode) return args;
+  if (args.length > 0 && ATTENTION_KEYWORDS.has(args[0])) return [mode, ...args.slice(1)];
+  return [mode, ...args];
+}
+
+async function startComfy(mode) {
   if (await probeComfy()) {
     const err = new Error('ComfyUI already running');
     err.code = 409;
@@ -173,7 +192,8 @@ async function startComfy() {
   startedAt = Date.now();
   broadcast({ type: 'state', comfy: 'starting', at: startedAt });
 
-  const args = (process.env.COMFY_START_ARGS || '').split(' ').filter(Boolean);
+  const args = startArgs(mode);
+  log(`starting comfy${args.length ? ` (${args.join(' ')})` : ''}`);
   // Reuse the OS-agnostic dispatcher: node scripts/comfy.js [args].
   // detached: own process group so /stop can signal the whole tree.
   child = spawn(process.execPath, [path.join(ROOT, 'scripts', 'comfy.js'), ...args], {
@@ -256,6 +276,72 @@ async function stopComfy() {
   throw err;
 }
 
+/**
+ * Stop then start, server side: /stop returns before ComfyUI has exited, so a
+ * client chaining /stop and /start would hit "already running". Waits until
+ * the port stops answering and the tracked child is gone.
+ */
+async function restartComfy(mode) {
+  if (starting) {
+    const err = new Error('a start is already in progress');
+    err.code = 409;
+    throw err;
+  }
+  if (child || (await probeComfy())) {
+    await stopComfy();
+    const deadline = Date.now() + RESTART_STOP_TIMEOUT_MS;
+    while (child || (await probeComfy())) {
+      if (Date.now() > deadline) {
+        const err = new Error('ComfyUI did not stop in time');
+        err.code = 409;
+        throw err;
+      }
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  }
+  await startComfy(mode);
+}
+
+/** Optional JSON body of /start and /restart → a whitelisted mode, or null. */
+function readMode(req) {
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    const chunks = [];
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > BODY_MAX_BYTES) {
+        const err = new Error('body too large');
+        err.code = 413;
+        reject(err);
+        req.destroy();
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on('end', () => {
+      const text = Buffer.concat(chunks).toString('utf8').trim();
+      if (!text) return resolve(null);
+      let body;
+      try {
+        body = JSON.parse(text);
+      } catch {
+        const err = new Error('invalid JSON body');
+        err.code = 400;
+        return reject(err);
+      }
+      const mode = body && body.mode;
+      if (mode == null) return resolve(null);
+      if (!ATTENTION_MODES.has(mode)) {
+        const err = new Error(`unknown mode (expected ${[...ATTENTION_MODES].join(' or ')})`);
+        err.code = 400;
+        return reject(err);
+      }
+      resolve(mode);
+    });
+    req.on('error', reject);
+  });
+}
+
 /** Best-effort: PID listening on the ComfyUI port (external session). */
 function pidOnComfyPort() {
   try {
@@ -290,9 +376,11 @@ const server = http.createServer(async (req, res) => {
   // Everything below mutates or streams → auth required.
   if (!authorized(req, url)) return json(res, 401, { error: 'unauthorized' });
 
-  if (req.method === 'POST' && url.pathname === '/start') {
+  if (req.method === 'POST' && (url.pathname === '/start' || url.pathname === '/restart')) {
     try {
-      await startComfy();
+      const mode = await readMode(req);
+      if (url.pathname === '/restart') await restartComfy(mode);
+      else await startComfy(mode);
       return json(res, 202, { starting: true });
     } catch (e) {
       return json(res, e.code || 500, { error: e.message });

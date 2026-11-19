@@ -48,8 +48,18 @@ header of each script.
 |---|---|---|---|
 | GET  | `/health`      | no  | `{ supervisor, comfy: "up"\|"down"\|"starting", pid, since }` |
 | POST | `/start`       | yes | `202 { starting:true }` · `409` if ComfyUI already runs |
+| POST | `/restart`     | yes | `202 { starting:true }` · `409` if it does not stop within 20 s |
 | POST | `/stop`        | yes | `200 { stopped:true }` · `409` if nothing to stop |
 | GET  | `/ws?token=…`  | yes | WebSocket: replays recent log lines, then tails live |
+
+`/start` and `/restart` accept an optional JSON body `{ "mode": "sdpa" }` or
+`{ "mode": "split" }`: the attention backend handed to `scripts/start-comfy.*`.
+It replaces the backend in `COMFY_START_ARGS` and keeps the other arguments
+(`sdpa local` becomes `split local`). Any other value gets a `400`; no body
+starts with `COMFY_START_ARGS` unchanged. `/restart` stops ComfyUI, waits
+until its port stops answering, then starts it: chaining `/stop` and `/start`
+from a client would hit the anti-double-launch `409`, since `/stop` returns
+before the process has exited. A restart drops ComfyUI's in-memory queue.
 
 Auth = a shared token via `Authorization: Bearer <token>` (HTTP) or `?token=`
 (WebSocket). `/health` is open on purpose: up/down is harmless and lets the app
