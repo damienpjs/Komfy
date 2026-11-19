@@ -3,6 +3,8 @@
  * Indeterminate mode when fine progress is unavailable (job submitted by
  * another client, or interrupted): looping strip of two-tone diagonals
  * ("barber pole") rather than a frozen bar.
+ * `signature`: the same bar on the dark banner surface (job card, live
+ * preview), identical in both themes, with the percentage left to the caller.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -13,7 +15,8 @@ import {
   Text,
   View,
 } from 'react-native';
-import { colors, radii, spacing, typography } from '../theme/tokens';
+import { radii, signature, spacing, typography } from '../theme/tokens';
+import { makeStyles } from '../theme/theme';
 
 /** Width of one diagonal; the two-tone period is 2× (repeating pattern). */
 const STRIPE_W = 12;
@@ -28,10 +31,13 @@ interface Props {
   max: number;
   /** No progress info (third-party or interrupted job): animated strip. */
   indeterminate?: boolean;
+  /** On the signature surface: its colours, no percentage, given height. */
+  signatureHeight?: number;
 }
 
 /** Two-tone diagonal strip translated in a loop of exactly one period. */
-function IndeterminateStripes() {
+function IndeterminateStripes({ onSignature }: { onSignature?: boolean }) {
+  const styles = useStyles();
   const [width, setWidth] = useState(0);
   const tx = useRef(new Animated.Value(0)).current;
 
@@ -71,7 +77,13 @@ function IndeterminateStripes() {
             key={i}
             style={[
               styles.stripe,
-              i % 2 === 0 ? styles.stripeA : styles.stripeB,
+              i % 2 === 0
+                ? onSignature
+                  ? styles.sigStripeA
+                  : styles.stripeA
+                : onSignature
+                  ? styles.sigStripeB
+                  : styles.stripeB,
             ]}
           />
         ))}
@@ -80,8 +92,29 @@ function IndeterminateStripes() {
   );
 }
 
-export function ProgressBar({ value, max, indeterminate }: Props) {
+export function ProgressBar({ value, max, indeterminate, signatureHeight }: Props) {
+  const styles = useStyles();
   const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
+
+  if (signatureHeight != null) {
+    return (
+      <View
+        style={[
+          styles.track,
+          styles.sigTrack,
+          { height: signatureHeight, borderRadius: signatureHeight / 2 },
+        ]}
+        accessibilityRole="progressbar"
+        accessibilityValue={indeterminate ? undefined : { min: 0, max: 100, now: pct }}
+      >
+        {indeterminate ? (
+          <IndeterminateStripes onSignature />
+        ) : (
+          <View style={[styles.fill, styles.sigFill, { width: `${pct}%` }]} />
+        )}
+      </View>
+    );
+  }
 
   return (
     <View style={styles.row}>
@@ -97,7 +130,7 @@ export function ProgressBar({ value, max, indeterminate }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -113,7 +146,7 @@ const styles = StyleSheet.create({
   fill: {
     height: '100%',
     borderRadius: radii.full,
-    backgroundColor: colors.brand, // neon yellow: the "it's generating" moment (style guide)
+    backgroundColor: colors.progress, // the "it's generating" moment: yellow on dark, olive on paper
   },
   stripeRow: {
     position: 'absolute',
@@ -134,6 +167,19 @@ const styles = StyleSheet.create({
   stripeB: {
     backgroundColor: colors.textDisabled,
   },
+  sigTrack: {
+    flex: 0,
+    backgroundColor: signature.track,
+  },
+  sigFill: {
+    backgroundColor: signature.accent,
+  },
+  sigStripeA: {
+    backgroundColor: signature.track,
+  },
+  sigStripeB: {
+    backgroundColor: signature.textMuted,
+  },
   pct: {
     color: colors.text,
     fontFamily: typography.mono,
@@ -141,4 +187,4 @@ const styles = StyleSheet.create({
     minWidth: 44,
     textAlign: 'right',
   },
-});
+}));

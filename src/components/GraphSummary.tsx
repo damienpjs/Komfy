@@ -9,22 +9,35 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { useTranslation } from 'react-i18next';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import type { PromptGraph } from '../api/types';
 import { useToast } from '../store/toast';
-import { colors, radii, spacing, typography } from '../theme/tokens';
+import { radii, spacing, typography } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 import { describeJob } from '../utils/describeJob';
 import { loraDirName, loraDisplayName } from '../utils/pathTree';
+
+export interface RowAction {
+  label: string;
+  a11y?: string;
+  onPress: () => void;
+  busy?: boolean;
+}
 
 export function Row({
   label,
   value,
   mono,
+  action,
 }: {
   label: string;
   value?: string;
   mono?: boolean;
+  /** Text button at the end of the row (e.g. reuse the seed). */
+  action?: RowAction;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   if (value == null || value === '') return null;
   return (
     <View style={styles.row}>
@@ -32,6 +45,22 @@ export function Row({
       <Text style={[styles.rowValue, mono && styles.mono]} selectable>
         {value}
       </Text>
+      {action && (
+        <Pressable
+          onPress={action.onPress}
+          disabled={action.busy}
+          accessibilityRole="button"
+          accessibilityLabel={action.a11y ?? action.label}
+          hitSlop={8}
+          style={({ pressed }) => [styles.rowAction, pressed && { opacity: 0.6 }]}
+        >
+          {action.busy ? (
+            <ActivityIndicator size="small" color={colors.accent} />
+          ) : (
+            <Text style={styles.copyText}>{action.label}</Text>
+          )}
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -48,6 +77,8 @@ function PromptBlock({
   muted?: boolean;
   onCopy: (text: string, label: string) => void;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   return (
     <View style={styles.block}>
@@ -73,7 +104,15 @@ function PromptBlock({
 
 /** Parameter rows extracted from the graph (no container: place inside a
  *  parent that handles spacing, e.g. a ScrollView `gap`). */
-export function GraphSummary({ graph }: { graph: PromptGraph }) {
+export function GraphSummary({
+  graph,
+  seedAction,
+}: {
+  graph: PromptGraph;
+  /** Offered on the seed row (the gallery: open a variant with this seed). */
+  seedAction?: RowAction;
+}) {
+  const styles = useStyles();
   const { t } = useTranslation();
   const showToast = useToast((s) => s.show);
   const job = describeJob(graph);
@@ -104,6 +143,7 @@ export function GraphSummary({ graph }: { graph: PromptGraph }) {
         label={t('graph.seed')}
         value={job.seed != null ? String(job.seed) : undefined}
         mono
+        action={seedAction}
       />
       <Row
         label={t('graph.sampling')}
@@ -143,9 +183,17 @@ export function GraphSummary({ graph }: { graph: PromptGraph }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   row: {
     gap: spacing.xs,
+  },
+  rowAction: {
+    position: 'absolute',
+    top: -10,
+    right: 0,
+    minHeight: 36,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xs,
   },
   block: {
     gap: spacing.xs,
@@ -224,4 +272,4 @@ const styles = StyleSheet.create({
     fontFamily: typography.mono,
     fontSize: typography.sizes.sm,
   },
-});
+}));

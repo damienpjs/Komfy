@@ -8,16 +8,11 @@
 import * as Haptics from 'expo-haptics';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { type Preset, sameName, usePresets } from '../store/presets';
 import { showActionSheet } from '../utils/actionSheet';
-import {
-  colors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../theme/tokens';
+import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 import type { FieldValues } from '../workflows/types';
 import { PresetNameDialog } from './PresetNameDialog';
 
@@ -26,9 +21,13 @@ interface Props {
   onApply: (preset: Preset) => void;
   /** The form's current preset values, for "Update with current settings". */
   capture: () => FieldValues;
+  /** Save the form as a new preset: a trailing chip, so the bar always shows. */
+  onSave?: () => void;
 }
 
-export function PresetBar({ workflowId, onApply, capture }: Props) {
+export function PresetBar({ workflowId, onApply, capture, onSave }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   const presets = usePresets((s) => s.byWorkflow[workflowId]);
   const [renaming, setRenaming] = useState<Preset | null>(null);
@@ -41,7 +40,7 @@ export function PresetBar({ workflowId, onApply, capture }: Props) {
     [presets],
   );
 
-  if (ordered.length === 0) return null;
+  if (ordered.length === 0 && !onSave) return null;
 
   const store = usePresets.getState;
 
@@ -128,6 +127,21 @@ export function PresetBar({ workflowId, onApply, capture }: Props) {
             </Text>
           </Pressable>
         ))}
+        {onSave && (
+          <Pressable
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.chip,
+              styles.saveChip,
+              pressed && { backgroundColor: colors.surfacePressed },
+            ]}
+            onPress={onSave}
+          >
+            <Text style={[styles.chipLabel, styles.saveLabel]} numberOfLines={1}>
+              + {t('presets.saveShort')}
+            </Text>
+          </Pressable>
+        )}
       </ScrollView>
 
       <PresetNameDialog
@@ -141,7 +155,7 @@ export function PresetBar({ workflowId, onApply, capture }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   wrap: {
     gap: spacing.xs,
   },
@@ -170,4 +184,12 @@ const styles = StyleSheet.create({
     fontFamily: typography.uiMedium,
     fontSize: typography.sizes.xs,
   },
-});
+  saveChip: {
+    borderStyle: 'dashed',
+    backgroundColor: 'transparent',
+  },
+  saveLabel: {
+    color: colors.accent,
+    fontFamily: typography.uiSemiBold,
+  },
+}));

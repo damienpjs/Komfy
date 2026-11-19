@@ -12,7 +12,8 @@ import { useTranslation } from 'react-i18next';
 import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useConnection } from '../store/connection';
-import { colors, spacing, typography } from '../theme/tokens';
+import { spacing, typography } from '../theme/tokens';
+import { makeStyles } from '../theme/theme';
 
 /** True while the banner is on screen (it then owns the top safe area). */
 export function useVolumeBannerVisible() {
@@ -20,6 +21,7 @@ export function useVolumeBannerVisible() {
 }
 
 export function VolumeBanner() {
+  const styles = useStyles();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const visible = useVolumeBannerVisible();
@@ -37,9 +39,9 @@ export function VolumeBanner() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   banner: {
-    backgroundColor: '#3a2d10', // darkened warning background, derived from colors.warning
+    backgroundColor: colors.warningSoft,
     borderBottomColor: colors.warning,
     borderBottomWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: spacing.md,
@@ -56,4 +58,4 @@ const styles = StyleSheet.create({
     fontFamily: typography.ui,
     fontSize: typography.sizes.xs,
   },
-});
+}));

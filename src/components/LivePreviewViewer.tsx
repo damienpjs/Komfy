@@ -3,7 +3,9 @@
  * thumbnail). Reads the execution store directly, so every WS preview frame
  * refreshes the image in real time while it is open. A timeline scrubber
  * lets the user step back through the frames received so far while the job
- * keeps running; the rightmost position snaps back to the live feed. The
+ * keeps running; the rightmost position snaps back to the live feed.
+ * Interrupt sits at the bottom and always asks first (InterruptSheet, whose
+ * "Continue" lands where the button was). The
  * scrubber is deliberately styled unlike the job ProgressBar (thin steel
  * track + round thumb + film icon + k/n counter + LIVE chip vs the thick
  * yellow bar + %): they answer different questions. Keeps the last frame on
@@ -35,14 +37,25 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { formatEta, useJobProgress } from '../hooks/useJobProgress';
 import { useExecution } from '../store/execution';
-import { colors, radii, spacing, typography } from '../theme/tokens';
+import { radii, signature, spacing, typography } from '../theme/tokens';
+import { makeStyles, ThemeOverride, useTheme } from '../theme/theme';
 import type { WsPreview } from '../utils/wsPreview';
+import { InterruptSheet } from './InterruptSheet';
 import { ProgressBar } from './ProgressBar';
 
 interface Props {
   /** Workflow label of the running entry (hidden once the job is gone). */
   title?: string;
+  /** Matched manifest of the running entry (icon in the confirmation). */
+  manifestId?: string;
+  /** Jobs waiting behind it (the confirmation says they continue). */
+  pendingCount: number;
+  /** A job is running and can be interrupted from here. */
+  canInterrupt: boolean;
+  interrupting: boolean;
+  onInterrupt: () => void;
   onClose: () => void;
 }
 
@@ -67,6 +80,8 @@ function TimelineScrubber({
   viewIndex: number | null;
   onScrub: (index: number | null) => void;
 }) {
+  const styles = useStyles('dark');
+  const { colors } = useTheme('dark');
   const { t } = useTranslation();
   const [width, setWidth] = useState(0);
 
@@ -130,7 +145,7 @@ function TimelineScrubber({
         ) : (
           <Ionicons name="play-skip-forward" size={10} color={colors.text} />
         )}
-        <Text style={[styles.liveText, !live && { color: colors.text }]}>
+        <Text style={[styles.liveText, !live && { color: colors.onAccent }]}>
           {t('job.live')}
         </Text>
       </Pressable>
@@ -138,7 +153,17 @@ function TimelineScrubber({
   );
 }
 
-export function LivePreviewViewer({ title, onClose }: Props) {
+export function LivePreviewViewer({
+  title,
+  manifestId,
+  pendingCount,
+  canInterrupt,
+  interrupting,
+  onInterrupt,
+  onClose,
+}: Props) {
+  const styles = useStyles('dark');
+  const { colors } = useTheme('dark');
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const exec = useExecution();
@@ -149,6 +174,13 @@ export function LivePreviewViewer({ title, onClose }: Props) {
   const lastFrameRef = useRef<WsPreview | null>(null);
   if (exec.preview) lastFrameRef.current = exec.preview;
   const running = exec.promptId != null;
+  const progress = useJobProgress(null);
+  const [confirming, setConfirming] = useState(false);
+  const etaText =
+    progress.etaSec != null ? t('job.etaRemaining', { eta: formatEta(progress.etaSec) }) : null;
+  const stepText = progress.fine
+    ? t('job.stepOf', { value: progress.value, max: progress.max })
+    : null;
 
   const history = exec.previewHistory;
   const [viewIndex, setViewIndex] = useState<number | null>(null);
@@ -227,94 +259,148 @@ export function LivePreviewViewer({ title, onClose }: Props) {
       onRequestClose={onClose}
     >
       {/* RNGH gestures require their own root INSIDE a RN Modal. */}
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <View
-          style={styles.container}
-          onLayout={(e) => setHeight(e.nativeEvent.layout.height)}
-        >
-          <GestureDetector gesture={dismissPan}>
-            <Animated.View style={[styles.imageWrap, animatedStyle]}>
-              {frame ? (
-                <Image
-                  source={{ uri: frame.dataUri }}
-                  style={StyleSheet.absoluteFill}
-                  contentFit="contain"
-                  transition={80}
-                />
-              ) : (
-                <View style={styles.waitingBox}>
-                  <ActivityIndicator color={colors.brand} size="large" />
-                  <Text style={styles.waitingText}>
-                    {t('job.livePreviewWaiting')}
-                  </Text>
-                </View>
-              )}
-            </Animated.View>
-          </GestureDetector>
-
-          <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm }]}>
-            <Pressable
-              onPress={onClose}
-              hitSlop={12}
-              style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.6 }]}
-            >
-              <Ionicons name="close" size={24} color={colors.text} />
-            </Pressable>
-            {title != null && (
-              <Text style={styles.title} numberOfLines={1}>
-                {title}
-              </Text>
-            )}
-          </View>
-
+      <ThemeOverride name="dark">
+        <GestureHandlerRootView style={{ flex: 1 }}>
           <View
-            style={[styles.bottomBar, { paddingBottom: insets.bottom + spacing.md }]}
+            style={styles.container}
+            onLayout={(e) => setHeight(e.nativeEvent.layout.height)}
           >
-            {history.length > 0 && (
-              <TimelineScrubber
-                count={history.length}
-                viewIndex={viewIndex}
-                onScrub={setViewIndex}
-              />
-            )}
-            {running ? (
-              <>
-                <ProgressBar
-                  value={exec.value}
-                  max={exec.max}
-                  indeterminate={exec.max === 0}
-                />
-                {nodeLabel != null && (
-                  <Text style={styles.nodeText} numberOfLines={1}>
-                    {t('job.node', { node: nodeLabel })}
+            <GestureDetector gesture={dismissPan}>
+              <Animated.View style={[styles.imageWrap, animatedStyle]}>
+                {frame ? (
+                  <Image
+                    source={{ uri: frame.dataUri }}
+                    style={StyleSheet.absoluteFill}
+                    contentFit="contain"
+                    transition={80}
+                  />
+                ) : (
+                  <View style={styles.waitingBox}>
+                    <ActivityIndicator color={colors.brand} size="large" />
+                    <Text style={styles.waitingText}>
+                      {t('job.livePreviewWaiting')}
+                    </Text>
+                  </View>
+                )}
+              </Animated.View>
+            </GestureDetector>
+
+            <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm }]}>
+              <Pressable
+                onPress={onClose}
+                hitSlop={12}
+                style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.6 }]}
+              >
+                <Ionicons name="close" size={24} color={colors.text} />
+              </Pressable>
+              <View style={styles.titleCol}>
+                {title != null && (
+                  <Text style={styles.title} numberOfLines={1}>
+                    {title}
                   </Text>
                 )}
-              </>
-            ) : (
-              <View style={styles.finishedRow}>
-                <Ionicons
-                  name="checkmark-circle"
-                  size={22}
-                  color={colors.success}
-                />
-                <View style={styles.finishedCol}>
-                  <Text style={styles.finishedTitle}>
-                    {t('job.livePreviewFinished')}
+                {nodeLabel != null && (
+                  <Text style={styles.subtitle} numberOfLines={1}>
+                    {t('job.previewNode', { node: nodeLabel })}
                   </Text>
-                  <Text style={styles.finishedHint}>
-                    {t('job.livePreviewFinishedHint')}
-                  </Text>
-                </View>
+                )}
               </View>
-            )}
+              <View style={styles.liveSlot}>
+                {running && <Text style={styles.liveTag}>{t('job.liveTag')}</Text>}
+              </View>
+            </View>
+
+            <View
+              style={[styles.bottomBar, { paddingBottom: insets.bottom + spacing.md }]}
+            >
+              {history.length > 0 && (
+                <TimelineScrubber
+                  count={history.length}
+                  viewIndex={viewIndex}
+                  onScrub={setViewIndex}
+                />
+              )}
+              {running ? (
+                <>
+                  <View style={styles.progressBlock}>
+                    {(stepText != null || etaText != null) && (
+                      <View style={styles.progressRow}>
+                        <Text style={styles.stepText}>
+                          {stepText ?? ''}
+                          {progress.percent != null ? ` · ${progress.percent} %` : ''}
+                        </Text>
+                        {etaText != null && <Text style={styles.etaText}>{etaText}</Text>}
+                      </View>
+                    )}
+                    <ProgressBar
+                      value={exec.value}
+                      max={exec.max}
+                      indeterminate={exec.max === 0}
+                      signatureHeight={8}
+                    />
+                  </View>
+                  {canInterrupt && (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityState={{ disabled: interrupting, busy: interrupting }}
+                      disabled={interrupting}
+                      onPress={() => setConfirming(true)}
+                      style={({ pressed }) => [
+                        styles.stopBtn,
+                        pressed && { opacity: 0.8 },
+                        interrupting && { opacity: 0.5 },
+                      ]}
+                    >
+                      <View style={styles.stopSquare} />
+                      <Text style={styles.stopText}>
+                        {interrupting ? t('job.interrupting') : t('job.interrupt')}
+                      </Text>
+                    </Pressable>
+                  )}
+                </>
+              ) : (
+                <View style={styles.finishedRow}>
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={22}
+                    color={colors.success}
+                  />
+                  <View style={styles.finishedCol}>
+                    <Text style={styles.finishedTitle}>
+                      {t('job.livePreviewFinished')}
+                    </Text>
+                    <Text style={styles.finishedHint}>
+                      {t('job.livePreviewFinishedHint')}
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </View>
           </View>
-        </View>
-      </GestureHandlerRootView>
+          <InterruptSheet
+            theme="dark"
+            visible={confirming}
+            title={title ?? ''}
+            manifestId={manifestId}
+            progress={
+              [stepText, progress.percent != null ? `${progress.percent} %` : null, etaText]
+                .filter(Boolean)
+                .join(' · ') || undefined
+            }
+            pendingCount={pendingCount}
+            onClose={() => setConfirming(false)}
+            onConfirm={() => {
+              setConfirming(false);
+              onInterrupt();
+            }}
+          />
+        </GestureHandlerRootView>
+      </ThemeOverride>
     </Modal>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     backgroundColor: '#000',
@@ -352,9 +438,70 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  title: {
+  titleCol: {
     flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+  },
+  title: {
     color: colors.text,
+    fontFamily: typography.uiSemiBold,
+    fontSize: typography.sizes.md,
+  },
+  subtitle: {
+    color: colors.textMuted,
+    fontFamily: typography.mono,
+    fontSize: 12,
+  },
+  liveSlot: {
+    width: 44,
+    alignItems: 'center',
+  },
+  liveTag: {
+    overflow: 'hidden',
+    paddingHorizontal: 6,
+    borderRadius: 4,
+    backgroundColor: signature.accent,
+    color: signature.bg,
+    fontFamily: typography.uiBold,
+    fontSize: 10,
+    lineHeight: 18,
+  },
+  progressBlock: {
+    gap: 6,
+  },
+  progressRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  stepText: {
+    color: colors.text,
+    fontFamily: typography.uiMedium,
+    fontSize: 14,
+  },
+  etaText: {
+    color: colors.textMuted,
+    fontFamily: typography.uiMedium,
+    fontSize: 14,
+  },
+  stopBtn: {
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    borderRadius: radii.md + 2,
+    backgroundColor: signature.dangerFill,
+  },
+  stopSquare: {
+    width: 13,
+    height: 13,
+    borderRadius: 3,
+    backgroundColor: signature.dangerText,
+  },
+  stopText: {
+    color: signature.dangerText,
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.md,
   },
@@ -367,11 +514,6 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     backgroundColor: 'rgba(6, 4, 9, 0.75)',
     gap: spacing.sm,
-  },
-  nodeText: {
-    color: colors.textMuted,
-    fontFamily: typography.mono,
-    fontSize: typography.sizes.xs,
   },
   finishedRow: {
     flexDirection: 'row',
@@ -454,4 +596,4 @@ const styles = StyleSheet.create({
     fontFamily: typography.mono,
     fontSize: typography.sizes.xs,
   },
-});
+}));

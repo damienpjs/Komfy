@@ -4,15 +4,17 @@
  * - GET /internal/files/output → output folder available.
  * If /queue answers but the output listing does not, the output folder is
  * unavailable on the server → explicit error banner (ROADMAP §0).
+ * A failed probe keeps its cause (timeout, refused, HTTP) for the offline
+ * diagnostic in Activity.
  */
 
 import { useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { createClient } from '../api/client';
+import { ComfyApiError, createClient, failureKind } from '../api/client';
 import { useConnection } from '../store/connection';
 import { useSettings } from '../store/settings';
 
-const HEALTH_INTERVAL_MS = 10000;
+export const HEALTH_INTERVAL_MS = 10000;
 
 export function useHealthCheck() {
   const serverUrl = useSettings((s) => s.serverUrl);
@@ -38,13 +40,30 @@ export function useHealthCheck() {
     },
   });
 
+  // react-query keeps the last successful `data` when a refetch fails, so
+  // `data` alone would hold the app "online" forever after one good probe:
+  // the latest attempt is the one with the newest timestamp.
+  const failedLast = health.errorUpdatedAt > health.dataUpdatedAt;
+
   useEffect(() => {
-    const { setOnline, setOutputAvailable } = useConnection.getState();
-    if (health.data) {
-      setOnline(true);
-      setOutputAvailable(health.data.outputAvailable);
-    } else if (health.isError) {
-      setOnline(false);
+    const { setProbe } = useConnection.getState();
+    if (failedLast) {
+      const error = health.error;
+      setProbe({
+        online: false,
+        failure: {
+          kind: failureKind(error),
+          status: error instanceof ComfyApiError ? error.status : undefined,
+        },
+        checkedAt: health.errorUpdatedAt,
+      });
+    } else if (health.data) {
+      setProbe({
+        online: true,
+        outputAvailable: health.data.outputAvailable,
+        failure: null,
+        checkedAt: health.dataUpdatedAt,
+      });
     }
-  }, [health.data, health.isError]);
+  }, [failedLast, health.data, health.error, health.dataUpdatedAt, health.errorUpdatedAt]);
 }

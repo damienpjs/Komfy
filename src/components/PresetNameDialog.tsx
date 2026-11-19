@@ -10,18 +10,12 @@ import {
   Modal,
   Platform,
   Pressable,
-  StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
-import {
-  colors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../theme/tokens';
+import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 
 /** Longest name kept: the bar chips truncate well before that anyway. */
 const MAX_NAME = 60;
@@ -46,6 +40,8 @@ export function PresetNameDialog({
   onCancel,
   onSubmit,
 }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   const [name, setName] = useState(initialName);
   // Each opening starts from the suggestion, not from the last draft.
@@ -113,7 +109,7 @@ export function PresetNameDialog({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   backdrop: {
     flex: 1,
     justifyContent: 'center',
@@ -162,7 +158,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   saveBtn: {
-    backgroundColor: colors.accent,
+    backgroundColor: colors.strong,
   },
   cancelText: {
     color: colors.textMuted,
@@ -170,8 +166,8 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.sm,
   },
   saveText: {
-    color: colors.text,
+    color: colors.onStrong,
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.sm,
   },
-});
+}));

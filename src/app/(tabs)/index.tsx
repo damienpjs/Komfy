@@ -1,265 +1,446 @@
 /**
- * Queue screen (home): running job card, pending job list (swipe-to-delete),
- * interrupt / clear queue, empty and error states.
+ * Create (home tab): the workflow catalogue. A search field, the workflows
+ * launched recently, then the catalogue in sections (src/workflows/catalog):
+ * one row per entry, a family (Repaint a zone, Video, Write a prompt) opening
+ * on its last-used mode. Imported workflows follow, with the import row.
+ *
+ * A workflow whose requirements are missing on the server (custom nodes,
+ * model files, cf. useAvailability) still opens: its row says what is
+ * missing, POST /prompt stays the final judge.
  */
 
 import * as Haptics from 'expo-haptics';
+import { useRouter, type Href } from 'expo-router';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
-import { CurrentJobCard } from '../../components/CurrentJobCard';
-import { JobDetailSheet } from '../../components/JobDetailSheet';
-import { LivePreviewViewer } from '../../components/LivePreviewViewer';
-import { PendingJobRow } from '../../components/PendingJobRow';
-import { useState } from 'react';
-import type { QueueEntry } from '../../api/types';
-import { describeGraph, useQueue } from '../../hooks/useQueue';
-import { useConnection } from '../../store/connection';
-import { useExecution } from '../../store/execution';
-import {
-  colors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../../theme/tokens';
+import type { TFunction } from 'i18next';
+import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import Svg, { Circle, Path } from 'react-native-svg';
+import { WorkflowIcon, type WorkflowIconKey } from '../../components/WorkflowIcon';
+import { useAvailability } from '../../hooks/useAvailability';
+import { useCatalogPrefs } from '../../store/catalogPrefs';
+import { useCustomWorkflows } from '../../store/customWorkflows';
+import { showActionSheet } from '../../utils/actionSheet';
+import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../../theme/tokens';
+import { makeStyles, useTheme } from '../../theme/theme';
+import { CATALOG, entryOf, iconOf, type CatalogEntry } from '../../workflows/catalog';
+import { getAnyWorkflow } from '../../workflows/registry';
+import type { WorkflowAvailability } from '../../workflows/requirements';
 
-export default function QueueScreen() {
-  const { t } = useTranslation();
-  const { query, interrupt, clearQueue, deleteItem } = useQueue();
-  const online = useConnection((s) => s.online);
-  const lastError = useExecution((s) => s.lastError);
-  const clearError = useExecution((s) => s.clearError);
+/** First missing requirement, for the one-line warning of a row. */
+function firstMissing(check: WorkflowAvailability): string | undefined {
+  return check.missingNodes[0] ?? check.missingValues[0]?.value;
+}
 
-  const [selectedJob, setSelectedJob] = useState<QueueEntry | null>(null);
-  const [livePreviewOpen, setLivePreviewOpen] = useState(false);
-  const running = query.data?.queue_running ?? [];
-  const pending = [...(query.data?.queue_pending ?? [])].sort(
-    (a, b) => a[0] - b[0],
+function missingCount(check: WorkflowAvailability): number {
+  return (
+    check.missingNodes.length + new Set(check.missingValues.map((v) => v.value)).size
   );
+}
 
-  const confirmClear = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    Alert.alert(t('queue.clearTitle'), t('queue.clearBody', { count: pending.length }), [
-      { text: t('common.cancel'), style: 'cancel' },
+/** Lower-case, accents stripped: "Créer" matches "creer". */
+function fold(text: string): string {
+  return text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}
+
+function entryMatches(entry: CatalogEntry, query: string, t: TFunction): boolean {
+  const haystack = [
+    t(entry.name),
+    t(entry.description),
+    entry.engine,
+    ...entry.members.map((m) => t(m.mode)),
+  ].join(' ');
+  return fold(haystack).includes(query);
+}
+
+export default function CreateScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const router = useRouter();
+  const { t } = useTranslation();
+  const availability = useAvailability();
+  // Select stable references: deriving inside a zustand selector returns a
+  // fresh object every render (infinite loop).
+  const customs = useCustomWorkflows((s) => s.manifests);
+  const recent = useCatalogPrefs((s) => s.recent);
+  const lastMember = useCatalogPrefs((s) => s.lastMember);
+  const [query, setQuery] = useState('');
+  const folded = fold(query.trim());
+
+  const open = (manifestId: string) =>
+    router.push(`/workflow/${manifestId}` as Href);
+
+  /** The manifest an entry opens on: last mode used, else the first. */
+  const targetOf = (entry: CatalogEntry): string => {
+    const remembered = lastMember[entry.key];
+    return entry.members.some((m) => m.manifestId === remembered)
+      ? remembered
+      : entry.members[0].manifestId;
+  };
+
+  const sections = useMemo(
+    () =>
+      CATALOG.map((section) => ({
+        ...section,
+        entries: folded
+          ? section.entries.filter((e) => entryMatches(e, folded, t))
+          : section.entries,
+      })).filter((s) => s.entries.length > 0),
+    [folded, t],
+  );
+  const visibleCustoms = folded
+    ? customs.filter((m) => fold(`${t(m.name)} ${t(m.description)}`).includes(folded))
+    : customs;
+  const recentIds = folded
+    ? []
+    : recent.filter((id) => getAnyWorkflow(id) != null).slice(0, 4);
+
+  const customMenu = (id: string, name: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    showActionSheet(name, [
       {
-        text: t('queue.clear'),
-        style: 'destructive',
-        onPress: () => clearQueue.mutate(),
+        label: t('importWf.edit'),
+        onPress: () => router.push(`/workflow/edit?id=${id}` as Href),
+      },
+      {
+        label: t('common.delete'),
+        destructive: true,
+        onPress: () =>
+          Alert.alert(t('importWf.deleteTitle'), t('importWf.deleteBody', { name }), [
+            { text: t('common.cancel'), style: 'cancel' },
+            {
+              text: t('common.delete'),
+              style: 'destructive',
+              onPress: () => useCustomWorkflows.getState().remove(id),
+            },
+          ]),
       },
     ]);
   };
 
-  // Server unreachable: full-page error state.
-  if (online === false || (query.isError && !query.data)) {
+  const renderRow = (opts: {
+    key: string;
+    manifestId: string;
+    icon: WorkflowIconKey;
+    name: string;
+    description: string;
+    engine?: string;
+    onLongPress?: () => void;
+  }) => {
+    const check = availability?.[opts.manifestId];
+    const unavailable = check != null && !check.ok;
+    const missing = unavailable ? firstMissing(check) : undefined;
     return (
-      <View style={styles.centerBox}>
-        <Text style={styles.errorTitle}>{t('queue.offlineTitle')}</Text>
-        <Text style={styles.errorDetail}>{t('queue.offlineBody')}</Text>
-        <Pressable
-          style={({ pressed }) => [styles.retryBtn, pressed && { opacity: 0.7 }]}
-          onPress={() => query.refetch()}
-        >
-          <Text style={styles.retryText}>{t('common.retry')}</Text>
-        </Pressable>
-      </View>
+      <Pressable
+        key={opts.key}
+        accessibilityRole="button"
+        accessibilityHint={missing ? t('catalog.missing', { item: missing }) : undefined}
+        onPress={() => open(opts.manifestId)}
+        onLongPress={opts.onLongPress}
+        style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+      >
+        <View style={[styles.tile, unavailable && styles.tileOff]}>
+          <WorkflowIcon
+            name={opts.icon}
+            color={unavailable ? colors.textDisabled : colors.accent}
+            knockout={unavailable ? colors.field : colors.accentSoft}
+          />
+        </View>
+        <View style={styles.rowText}>
+          <Text style={styles.rowName} numberOfLines={1}>
+            {opts.name}
+          </Text>
+          <Text
+            style={[styles.rowDesc, missing != null && { color: colors.warning }]}
+            numberOfLines={1}
+          >
+            {missing != null ? t('catalog.missing', { item: missing }) : opts.description}
+          </Text>
+        </View>
+        {unavailable && check ? (
+          <Text style={[styles.tag, styles.tagWarn]}>
+            {t('catalog.missingTag', { count: missingCount(check) })}
+          </Text>
+        ) : opts.engine ? (
+          <Text style={styles.tag}>{opts.engine}</Text>
+        ) : null}
+      </Pressable>
     );
-  }
+  };
 
   return (
-    <View style={styles.container}>
-      {lastError && (
-        <Pressable style={styles.errorBanner} onPress={clearError}>
-          <Text style={styles.errorBannerTitle}>
-            {t('queue.errorTitle', { node: lastError.nodeType })}
-          </Text>
-          <Text style={styles.errorBannerDetail} numberOfLines={2}>
-            {lastError.message}
-          </Text>
-          <Text style={styles.errorBannerHint}>{t('queue.tapToDismiss')}</Text>
-        </Pressable>
-      )}
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+    >
+      <View style={styles.search}>
+        <Svg width={18} height={18} viewBox="0 0 24 24">
+          <Circle cx={11} cy={11} r={6.5} stroke={colors.textDisabled} strokeWidth={1.8} fill="none" />
+          <Path d="M20 20l-4.2-4.2" stroke={colors.textDisabled} strokeWidth={1.8} strokeLinecap="round" />
+        </Svg>
+        <TextInput
+          style={styles.searchInput}
+          value={query}
+          onChangeText={setQuery}
+          placeholder={t('catalog.searchPlaceholder')}
+          placeholderTextColor={colors.textDisabled}
+          autoCorrect={false}
+          autoCapitalize="none"
+          clearButtonMode="while-editing"
+          returnKeyType="search"
+          accessibilityLabel={t('catalog.searchPlaceholder')}
+        />
+      </View>
 
-      <FlatList
-        data={pending}
-        keyExtractor={(e) => e[1]}
-        contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
-        ListHeaderComponent={
-          <View style={styles.headerBlock}>
-            {running.length > 0 ? (
-              <CurrentJobCard
-                entry={running[0]}
-                onInterrupt={() => interrupt.mutate()}
-                interrupting={interrupt.isPending}
-                onPress={setSelectedJob}
-                onPressPreview={() => setLivePreviewOpen(true)}
-              />
-            ) : (
-              <View style={styles.idleCard}>
-                <Text style={styles.idleText}>{t('queue.noRunning')}</Text>
-              </View>
-            )}
-
-            <View style={styles.pendingHeader}>
-              <Text style={styles.sectionTitle}>
-                {t('queue.pendingSection')}
-                {pending.length > 0 ? ` (${pending.length})` : ''}
-              </Text>
-              {pending.length > 0 && (
+      {recentIds.length > 0 && (
+        <>
+          <Text style={[styles.sectionTitle, styles.sectionFirst]}>{t('catalog.recent')}</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.recentRow}
+            style={styles.recentScroll}
+          >
+            {recentIds.map((id) => {
+              const manifest = getAnyWorkflow(id);
+              const entry = entryOf(id);
+              const member = entry?.members.find((m) => m.manifestId === id);
+              if (!manifest) return null;
+              const sub =
+                entry && entry.members.length > 1 && member
+                  ? [t(member.mode), member.engine].filter(Boolean).join(' · ')
+                  : (entry?.engine ?? t('importWf.customBadge'));
+              return (
                 <Pressable
-                  onPress={confirmClear}
-                  disabled={clearQueue.isPending}
-                  style={({ pressed }) => pressed && { opacity: 0.7 }}
+                  key={id}
+                  accessibilityRole="button"
+                  onPress={() => open(id)}
+                  style={({ pressed }) => [styles.recentCard, pressed && styles.rowPressed]}
                 >
-                  <Text style={styles.clearText}>{t('queue.clearQueue')}</Text>
+                  <View style={[styles.tile, styles.tileSmall]}>
+                    <WorkflowIcon name={iconOf(id)} color={colors.accent} knockout={colors.accentSoft} size={24} />
+                  </View>
+                  <View style={styles.recentText}>
+                    <Text style={styles.recentName} numberOfLines={1}>
+                      {entry ? t(entry.name) : t(manifest.name)}
+                    </Text>
+                    <Text style={styles.recentSub} numberOfLines={1}>
+                      {sub}
+                    </Text>
+                  </View>
                 </Pressable>
-              )}
-            </View>
-          </View>
-        }
-        ListEmptyComponent={
-          <Text style={styles.emptyText}>
-            {query.isLoading ? t('common.loading') : t('queue.empty')}
+              );
+            })}
+          </ScrollView>
+        </>
+      )}
+
+      {sections.map((section, index) => (
+        <View key={section.key}>
+          <Text
+            style={[
+              styles.sectionTitle,
+              index === 0 && recentIds.length === 0 && styles.sectionFirst,
+            ]}
+          >
+            {t(section.title)}
           </Text>
-        }
-        renderItem={({ item, index }) => (
-          <PendingJobRow
-            entry={item}
-            position={index + 1}
-            onPress={setSelectedJob}
-            onDelete={(id) => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              deleteItem.mutate(id);
-            }}
-          />
-        )}
-      />
+          <View style={styles.group}>
+            {section.entries.map((entry) =>
+              renderRow({
+                key: entry.key,
+                manifestId: targetOf(entry),
+                icon: entry.icon,
+                name: t(entry.name),
+                description: t(entry.description),
+                engine: entry.engine,
+              }),
+            )}
+          </View>
+        </View>
+      ))}
 
-      {selectedJob && (
-        <JobDetailSheet
-          entry={selectedJob}
-          onClose={() => setSelectedJob(null)}
-        />
+      {(visibleCustoms.length > 0 || !folded) && (
+        <View>
+          <Text style={styles.sectionTitle}>{t('catalog.sections.imported')}</Text>
+          <View style={styles.group}>
+            {visibleCustoms.map((m) =>
+              renderRow({
+                key: m.id,
+                manifestId: m.id,
+                icon: iconOf(m.id),
+                name: t(m.name),
+                description: t(m.description),
+                onLongPress: () => customMenu(m.id, t(m.name)),
+              }),
+            )}
+            {!folded && (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => router.push('/workflow/import' as Href)}
+                style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+              >
+                <View style={styles.tile}>
+                  <WorkflowIcon name="import" color={colors.accent} />
+                </View>
+                <View style={styles.rowText}>
+                  <Text style={styles.rowName}>{t('catalog.importName')}</Text>
+                  <Text style={styles.rowDesc} numberOfLines={1}>
+                    {t('importWf.cardDescription')}
+                  </Text>
+                </View>
+              </Pressable>
+            )}
+          </View>
+        </View>
       )}
 
-      {/* Mounted at screen level (not in the card): survives the job's end,
-          so the viewer can show its "finished" state on the last frame. */}
-      {livePreviewOpen && (
-        <LivePreviewViewer
-          title={running.length > 0 ? describeGraph(running[0][2]) : undefined}
-          onClose={() => setLivePreviewOpen(false)}
-        />
+      {folded !== '' && sections.length === 0 && visibleCustoms.length === 0 && (
+        <Text style={styles.empty}>{t('catalog.noResult')}</Text>
       )}
-    </View>
+    </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
-    backgroundColor: colors.bg,
   },
-  listContent: {
-    padding: spacing.md,
+  content: {
+    paddingHorizontal: spacing.md,
     paddingBottom: spacing.xl,
-  },
-  headerBlock: {
-    gap: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  idleCard: {
-    backgroundColor: colors.bgElevated,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderRadius: radii.lg,
-    padding: spacing.lg,
-    alignItems: 'center',
-  },
-  idleText: {
-    color: colors.textMuted,
-    fontFamily: typography.ui,
-    fontSize: typography.sizes.sm,
-  },
-  pendingHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    minHeight: 24,
-  },
-  sectionTitle: {
-    color: colors.textMuted,
-    fontFamily: typography.uiSemiBold,
-    fontSize: typography.sizes.sm,
-  },
-  clearText: {
-    color: colors.danger,
-    fontFamily: typography.uiSemiBold,
-    fontSize: typography.sizes.sm,
-  },
-  emptyText: {
-    color: colors.textDisabled,
-    fontFamily: typography.ui,
-    fontSize: typography.sizes.sm,
-    textAlign: 'center',
-    paddingVertical: spacing.lg,
-  },
-  centerBox: {
-    flex: 1,
-    backgroundColor: colors.bg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.lg,
     gap: spacing.sm,
   },
-  errorTitle: {
-    color: colors.danger,
-    fontFamily: typography.uiBold,
-    fontSize: typography.sizes.lg,
-  },
-  errorDetail: {
-    color: colors.textMuted,
-    fontFamily: typography.ui,
-    fontSize: typography.sizes.sm,
-    textAlign: 'center',
-  },
-  retryBtn: {
-    marginTop: spacing.md,
-    minHeight: MIN_TOUCH_TARGET,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radii.md,
-    backgroundColor: colors.accent,
+  search: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: spacing.sm,
+    minHeight: 48,
+    paddingHorizontal: spacing.md - 2,
+    borderRadius: radii.md,
+    backgroundColor: colors.field,
   },
-  retryText: {
+  searchInput: {
+    flex: 1,
+    minHeight: MIN_TOUCH_TARGET,
+    color: colors.text,
+    fontFamily: typography.ui,
+    fontSize: 15,
+  },
+  sectionTitle: {
+    marginTop: spacing.lg - 2,
+    marginBottom: spacing.sm,
+    color: colors.textMuted,
+    fontFamily: typography.mono,
+    fontSize: typography.sizes.xs,
+    letterSpacing: 0.7,
+    textTransform: 'uppercase',
+  },
+  sectionFirst: {
+    marginTop: spacing.md,
+  },
+  recentScroll: {
+    marginHorizontal: -spacing.md,
+  },
+  recentRow: {
+    gap: spacing.sm + 2,
+    paddingHorizontal: spacing.md,
+  },
+  recentCard: {
+    width: 172,
+    padding: spacing.md - 2,
+    gap: spacing.md - 4,
+    borderRadius: radii.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  recentText: {
+    gap: 3,
+  },
+  recentName: {
     color: colors.text,
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.sm,
   },
-  errorBanner: {
-    backgroundColor: '#3a1a22', // darkened danger background on the violet base, derived from colors.danger
-    borderColor: colors.danger,
-    borderWidth: 1,
-    borderRadius: radii.md,
-    marginHorizontal: spacing.md,
-    marginTop: spacing.sm,
-    padding: spacing.md,
-    gap: spacing.xs,
-  },
-  errorBannerTitle: {
-    color: colors.danger,
-    fontFamily: typography.uiSemiBold,
-    fontSize: typography.sizes.sm,
-  },
-  errorBannerDetail: {
+  recentSub: {
     color: colors.textMuted,
-    fontFamily: typography.mono,
-    fontSize: typography.sizes.xs,
-  },
-  errorBannerHint: {
-    color: colors.textDisabled,
     fontFamily: typography.ui,
     fontSize: typography.sizes.xs,
   },
-});
+  group: {
+    borderRadius: radii.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md - 4,
+    minHeight: 64,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.md - 2,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    marginTop: -1,
+  },
+  rowPressed: {
+    backgroundColor: colors.surfacePressed,
+  },
+  tile: {
+    width: 46,
+    height: 46,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accentSoft,
+  },
+  tileSmall: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+  },
+  tileOff: {
+    backgroundColor: colors.field,
+  },
+  rowText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  rowName: {
+    color: colors.text,
+    fontFamily: typography.uiSemiBold,
+    fontSize: 15,
+  },
+  rowDesc: {
+    color: colors.textMuted,
+    fontFamily: typography.ui,
+    fontSize: 13,
+  },
+  tag: {
+    overflow: 'hidden',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+    backgroundColor: colors.field,
+    color: colors.textMuted,
+    fontFamily: typography.mono,
+    fontSize: 11,
+  },
+  tagWarn: {
+    backgroundColor: colors.warningSoft,
+    color: colors.warning,
+  },
+  empty: {
+    marginTop: spacing.xl,
+    textAlign: 'center',
+    color: colors.textMuted,
+    fontFamily: typography.ui,
+    fontSize: typography.sizes.sm,
+  },
+}));

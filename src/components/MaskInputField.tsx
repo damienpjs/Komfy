@@ -27,20 +27,14 @@ import {
   ActivityIndicator,
   Image as RNImage,
   Pressable,
-  StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { createClient } from '../api/client';
 import { useMaskStrokes } from '../store/maskStrokes';
 import { useSettings } from '../store/settings';
-import {
-  colors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../theme/tokens';
+import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 import {
   isMaskEmpty,
   maskDimensions,
@@ -70,6 +64,8 @@ interface Props {
 type SourceSize = { width: number; height: number } | 'loading' | 'error';
 
 export function MaskInputField({ value, onChange, sourceFilename }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   const serverUrl = useSettings((s) => s.serverUrl);
   const saveStrokes = useMaskStrokes((s) => s.save);
@@ -350,6 +346,8 @@ function RowButton({
   muted?: boolean;
   onPress: () => void;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   return (
     <Pressable
       onPress={onPress}
@@ -370,7 +368,7 @@ function RowButton({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   emptyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -456,4 +454,4 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderWidth: 1,
   },
-});
+}));

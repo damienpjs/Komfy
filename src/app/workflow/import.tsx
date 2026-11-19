@@ -14,24 +14,21 @@ import { useTranslation } from 'react-i18next';
 import {
   Pressable,
   ScrollView,
-  StyleSheet,
   Switch,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { FieldRow } from '../../components/FieldRow';
 import { GraphSummary } from '../../components/GraphSummary';
+import { IconPicker } from '../../components/IconPicker';
+import type { WorkflowIconKey } from '../../components/WorkflowIcon';
 import { useNodeInfo } from '../../hooks/useAvailability';
 import { makeCustomId, useCustomWorkflows } from '../../store/customWorkflows';
 import { useImportDraft } from '../../store/importDraft';
 import { useToast } from '../../store/toast';
-import {
-  colors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../../theme/tokens';
+import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../../theme/tokens';
+import { makeStyles, useTheme } from '../../theme/theme';
 import {
   inferManifest,
   MAX_GRAPH_JSON_BYTES,
@@ -43,6 +40,8 @@ import { checkAvailability } from '../../workflows/requirements';
 import type { WorkflowManifest } from '../../workflows/types';
 
 export default function ImportWorkflowScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const router = useRouter();
   const { t } = useTranslation();
   const showToast = useToast((s) => s.show);
@@ -52,6 +51,7 @@ export default function ImportWorkflowScreen() {
   const [json, setJson] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState(draft.sourceName ?? '');
+  const [icon, setIcon] = useState<WorkflowIconKey>('graph');
   // Review phase once a graph is parsed (from the gallery or the paste box).
   const [inferred, setInferred] = useState(() =>
     draft.graph ? inferManifest(draft.graph) : null,
@@ -104,7 +104,7 @@ export default function ImportWorkflowScreen() {
       id: makeCustomId(finalName, taken),
       name: finalName,
       description: t('importWf.defaultDescription'),
-      icon: 'cube-outline',
+      icon,
       graph: inferred.graph,
       fields: inferred.fields.filter((f) => enabled[f.key]),
       saveNodeId: inferred.saveNodeId,
@@ -189,27 +189,32 @@ export default function ImportWorkflowScreen() {
             placeholderTextColor={colors.textDisabled}
           />
 
+          <IconPicker value={icon} onChange={setIcon} />
+
           <Text style={styles.label}>{t('importWf.fields')}</Text>
           {inferred.fields.length === 0 && (
             <Text style={styles.help}>{t('importWf.noFields')}</Text>
           )}
-          {inferred.fields.map((field) => (
-            <View key={field.key} style={styles.fieldRow}>
-              <View style={styles.fieldInfo}>
-                <Text style={styles.fieldLabel} numberOfLines={1}>
-                  {t(field.label)}
-                </Text>
-                <Text style={styles.fieldKind}>{field.kind}</Text>
-              </View>
-              <Switch
-                value={enabled[field.key] ?? true}
-                onValueChange={(v) =>
-                  setEnabled((e) => ({ ...e, [field.key]: v }))
-                }
-                trackColor={{ true: colors.accent, false: colors.bgElevated }}
-              />
+          {inferred.fields.length > 0 && (
+            <View style={styles.fieldGroup}>
+              {inferred.fields.map((field, index) => (
+                <FieldRow
+                  key={field.key}
+                  first={index === 0}
+                  title={t(field.label)}
+                  kind={field.kind}
+                >
+                  <Switch
+                    value={enabled[field.key] ?? true}
+                    onValueChange={(v) => setEnabled((e) => ({ ...e, [field.key]: v }))}
+                    trackColor={{ true: colors.accent, false: colors.field }}
+                    thumbColor={colors.switchThumb}
+                    accessibilityLabel={t(field.label)}
+                  />
+                </FieldRow>
+              ))}
             </View>
-          ))}
+          )}
 
           {check != null && !check.ok && (
             <View style={styles.warningBox}>
@@ -244,7 +249,7 @@ export default function ImportWorkflowScreen() {
             ]}
             onPress={save}
           >
-            <Ionicons name="download-outline" size={18} color={colors.text} />
+            <Ionicons name="download-outline" size={18} color={colors.onStrong} />
             <Text style={styles.primaryText}>{t('importWf.import')}</Text>
           </Pressable>
 
@@ -268,10 +273,9 @@ export default function ImportWorkflowScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
-    backgroundColor: colors.bg,
   },
   content: {
     padding: spacing.md,
@@ -311,11 +315,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: radii.md,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.strong,
   },
   primaryText: {
     flexShrink: 1,
-    color: colors.text,
+    color: colors.onStrong,
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.sm,
     textAlign: 'center',
@@ -362,30 +366,12 @@ const styles = StyleSheet.create({
     fontFamily: typography.ui,
     fontSize: typography.sizes.sm,
   },
-  fieldRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
+  fieldGroup: {
+    overflow: 'hidden',
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  fieldInfo: {
-    flex: 1,
-    gap: 2,
-  },
-  fieldLabel: {
-    color: colors.text,
-    fontFamily: typography.uiSemiBold,
-    fontSize: typography.sizes.sm,
-  },
-  fieldKind: {
-    color: colors.textDisabled,
-    fontFamily: typography.mono,
-    fontSize: typography.sizes.xs,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
   },
   warningBox: {
     flexDirection: 'row',
@@ -403,4 +389,4 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.xs,
     lineHeight: 18,
   },
-});
+}));

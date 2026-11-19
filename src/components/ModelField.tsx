@@ -20,13 +20,8 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import {
-  colors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../theme/tokens';
+import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 import { loraDirName, loraDisplayName } from '../utils/pathTree';
 import { isGgufFile } from '../workflows/modelVariant';
 import type { ModelField as ModelFieldSpec } from '../workflows/types';
@@ -42,6 +37,8 @@ interface Props {
 export const isGguf = isGgufFile;
 
 export function GgufChip() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   return (
     <View style={styles.dirChip}>
@@ -54,6 +51,8 @@ export function GgufChip() {
 }
 
 export function ModelField({ field, value, options, onChange }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -173,7 +172,7 @@ export function ModelField({ field, value, options, onChange }: Props) {
                     <Text
                       style={[
                         styles.rowName,
-                        selected && { color: colors.brand },
+                        selected && { color: colors.accent },
                       ]}
                       numberOfLines={1}
                     >
@@ -197,7 +196,7 @@ export function ModelField({ field, value, options, onChange }: Props) {
                     <Ionicons
                       name="checkmark"
                       size={18}
-                      color={colors.brand}
+                      color={colors.accent}
                     />
                   )}
                 </Pressable>
@@ -210,7 +209,7 @@ export function ModelField({ field, value, options, onChange }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   wrap: {
     gap: spacing.xs,
   },
@@ -314,4 +313,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     padding: spacing.lg,
   },
-});
+}));

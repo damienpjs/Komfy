@@ -15,36 +15,33 @@ import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import '../i18n';
 import { queryClient } from '../api/queryClient';
 import { useComfyWs } from '../api/ws';
 import { ensureNotificationSetup } from '../notifications';
+import { ScreenGround } from '../components/DotGrid';
 import { HeaderBackButton } from '../components/HeaderBackButton';
 import { HeaderTitle } from '../components/HeaderTitle';
 import { SetupWizard } from '../components/SetupWizard';
-import { StatusDot } from '../components/StatusDot';
+import { ServerChip } from '../components/ServerChip';
 import { Toast } from '../components/Toast';
-import {
-  VolumeBanner,
-  useVolumeBannerVisible,
-} from '../components/VolumeBanner';
+import { VolumeBanner } from '../components/VolumeBanner';
 import { useHealthCheck } from '../hooks/useHealthCheck';
 import { useSettings } from '../store/settings';
 import { applyPairing, parsePairingCode } from '../utils/pairing';
-import { colors, spacing, typography } from '../theme/tokens';
+import { typography } from '../theme/tokens';
+import { ThemeProvider, useTheme } from '../theme/theme';
 
 SplashScreen.preventAutoHideAsync();
 
 /** Mounted below the providers: global connections (WS + health probe). */
 function AppShell() {
+  const { colors } = useTheme();
   useComfyWs();
   useHealthCheck();
-  const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const hydrated = useSettings((s) => s.hydrated);
   const serverUrl = useSettings((s) => s.serverUrl);
-  const bannerVisible = useVolumeBannerVisible();
 
   useEffect(() => {
     ensureNotificationSetup();
@@ -65,23 +62,35 @@ function AppShell() {
   if (!hydrated) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
   // Mandatory server address (no fallback): gate the whole app on first launch
   // — and again if the URL is ever cleared — behind the setup wizard.
-  if (!serverUrl) return <SetupWizard />;
+  if (!serverUrl) {
+    return (
+      <ScreenGround>
+        <SetupWizard />
+      </ScreenGround>
+    );
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <VolumeBanner />
       <View style={{ flex: 1 }}>
         <Stack
+          // Each screen, the tabs included, gets its own opaque dotted ground
+          // (screens keep a transparent root).
+          screenLayout={({ children }) => <ScreenGround>{children}</ScreenGround>}
           screenOptions={{
-            headerStyle: { backgroundColor: colors.bgElevated },
+            // The header blends into the ground: same colour, no hairline.
+            headerStyle: { backgroundColor: colors.bg },
+            headerShadowVisible: false,
             headerTintColor: colors.text,
             headerTitleStyle: { fontFamily: typography.uiSemiBold },
             contentStyle: { backgroundColor: colors.bg },
             // Explicit back button ("Back" + 44 pt target) everywhere outside
             // the tabs: the native one showed "(tabs)" and missed taps.
             headerLeft: () => <HeaderBackButton />,
-            // Width-capped title: the status dot overlay sits on the right.
             headerTitle: (props) => <HeaderTitle {...props} />,
+            // Server state in its own header slot (tap → Activity).
+            headerRight: () => <ServerChip compact />,
           }}
         >
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -108,21 +117,6 @@ function AppShell() {
             options={{ title: t('nav.console') }}
           />
         </Stack>
-        {/* Single status dot, outside the native headers (identical rendering
-          on every view, without the iOS "glass" capsule). Anchored to the
-          navigator area, so it follows the header down when the volume
-          banner takes over the status bar. */}
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            top: (bannerVisible ? 0 : insets.top) + 12,
-            right: spacing.md,
-            zIndex: 20,
-          }}
-        >
-          <StatusDot />
-        </View>
       </View>
       <Toast />
     </View>
@@ -147,9 +141,17 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
-        <StatusBar style="light" />
-        <AppShell />
+        <ThemeProvider>
+          <ThemedStatusBar />
+          <AppShell />
+        </ThemeProvider>
       </QueryClientProvider>
     </GestureHandlerRootView>
   );
+}
+
+/** Light status bar text on the dark theme, dark text on the light one. */
+function ThemedStatusBar() {
+  const { name } = useTheme();
+  return <StatusBar style={name === 'dark' ? 'light' : 'dark'} />;
 }

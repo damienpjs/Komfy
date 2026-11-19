@@ -7,7 +7,13 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
-import { createSupervisor, deriveSupervisorUrl } from '../api/supervisor';
+import { failureKind } from '../api/client';
+import {
+  createSupervisor,
+  deriveSupervisorUrl,
+  SupervisorError,
+  type AttentionMode,
+} from '../api/supervisor';
 import { useSettings } from '../store/settings';
 
 export type PowerState =
@@ -23,6 +29,9 @@ export function useSupervisor() {
   const supervisorUrl = useSettings((s) => s.supervisorUrl);
   const token = useSettings((s) => s.supervisorToken);
   const hydrated = useSettings((s) => s.hydrated);
+  const startMode = useSettings((s) => s.startMode);
+  const preferredMode: AttentionMode | undefined =
+    startMode === 'default' ? undefined : startMode;
 
   const effectiveUrl = supervisorUrl || deriveSupervisorUrl(serverUrl);
   const client = useMemo(
@@ -62,9 +71,24 @@ export function useSupervisor() {
     hasToken: !!token,
     effectiveUrl,
     pid: query.data?.pid ?? null,
-    /** Throws SupervisorError (e.g. 409 already running) — caller handles. */
-    start: async () => {
-      await client!.start();
+    /** How the latest probe failed (state 'unreachable'), else null. */
+    failure:
+      lastAttemptFailed && query.error
+        ? query.error instanceof SupervisorError
+          ? query.error.kind
+          : failureKind(query.error)
+        : null,
+    /**
+     * Throws SupervisorError (e.g. 409 already running): the caller handles it.
+     * No mode = the attention mode chosen in Settings.
+     */
+    start: async (mode?: AttentionMode) => {
+      await client!.start(mode ?? preferredMode);
+      query.refetch();
+    },
+    /** Stop, wait, start (server side). Drops ComfyUI's queue. */
+    restart: async (mode?: AttentionMode) => {
+      await client!.restart(mode ?? preferredMode);
       query.refetch();
     },
     stop: async () => {

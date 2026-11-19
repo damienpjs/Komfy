@@ -21,6 +21,7 @@ import {
   ActivityIndicator,
   Alert,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -48,6 +49,7 @@ import { useToast } from '../store/toast';
 import { PICK_FOR_UPLOAD } from '../utils/imageUpload';
 import { isHeif } from '../utils/media';
 import { remixHref } from '../utils/remixHref';
+import { getAnyWorkflow } from '../workflows/registry';
 import { saveImageToPhotos } from '../utils/saveToPhotos';
 import { useConnection } from '../store/connection';
 import {
@@ -56,13 +58,8 @@ import {
   useGalleryPrefs,
 } from '../store/galleryPrefs';
 import { showActionSheet } from '../utils/actionSheet';
-import {
-  colors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../theme/tokens';
+import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 import { ImageViewer, type Rect, type Size } from './ImageViewer';
 import { OutputDirPicker } from './OutputDirPicker';
 import { RemixSheet, type RemixSheetState } from './RemixSheet';
@@ -92,6 +89,8 @@ function inputSubfolder(dir: string): string {
 }
 
 export function GalleryBrowser() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   const gallery = useGallery();
   const remix = useRemix();
@@ -165,6 +164,7 @@ export function GalleryBrowser() {
   const navigation = useNavigation() as unknown as {
     addListener(type: 'tabPress', cb: () => void): () => void;
     isFocused(): boolean;
+    setOptions(options: { headerRight?: () => React.ReactNode }): void;
   };
   useEffect(() => {
     const unsub = navigation.addListener('tabPress', () => {
@@ -176,6 +176,30 @@ export function GalleryBrowser() {
     });
     return unsub;
   }, [navigation]);
+  // The handler changes every render (it reads the current folder): the
+  // header button calls the latest one through a ref.
+  const uploadRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <Pressable
+          onPress={() => uploadRef.current()}
+          disabled={uploading}
+          accessibilityRole="button"
+          accessibilityLabel={t('gallery.importA11y')}
+          style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.6 }]}
+        >
+          {uploading ? (
+            <ActivityIndicator size="small" color={colors.accent} />
+          ) : (
+            <Ionicons name="cloud-upload-outline" size={22} color={colors.accent} />
+          )}
+        </Pressable>
+      ),
+    });
+  }, [navigation, uploading, colors.accent, styles.iconBtn, t]);
+  useEffect(() => () => navigation.setOptions({ headerRight: undefined }), [navigation]);
+
   const toggleSelect = (path: string) =>
     setSelected((s) => {
       const next = new Set(s);
@@ -283,6 +307,9 @@ export function GalleryBrowser() {
 
   // Pick image(s) from the phone → upload into the input root (or the input
   // subfolder currently open), then reveal them in the gallery.
+  uploadRef.current = () => {
+    void uploadImages();
+  };
   const uploadImages = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
@@ -435,6 +462,34 @@ export function GalleryBrowser() {
     }
   };
 
+  // Details sheet "Reuse" on the seed: the same variant, with the source
+  // seed applied to the seed fields instead of only offered. Anything that
+  // is not an embedded workflow falls back to the plain variant flow.
+  const handleReuseSeed = async (image: GalleryImage) => {
+    try {
+      const result = await remix.extract(image);
+      if (result.status !== 'match') {
+        await handleRemix(image);
+        return;
+      }
+      const manifest = getAnyWorkflow(result.manifestId);
+      const values = { ...result.values };
+      for (const [key, seed] of Object.entries(result.sourceSeeds)) {
+        // Seed fields only: the zones field carries its seed inside an object.
+        if (manifest?.fields.some((f) => f.key === key && f.kind === 'seed')) {
+          values[key] = seed;
+        }
+      }
+      closeViewer(true);
+      router.push(remixHref(result.manifestId, values, result.sourceSeeds));
+    } catch (e) {
+      Alert.alert(
+        t('gallery.extractFailed'),
+        e instanceof Error ? e.message : String(e),
+      );
+    }
+  };
+
   // Folders first (alpha), files by recency when the mtime is known
   // (full listing from the server extension).
   const entries = useMemo(() => {
@@ -449,6 +504,11 @@ export function GalleryBrowser() {
       );
     return [...dirs, ...files];
   }, [gallery.paths, gallery.emptyDirs, gallery.mtimes, gallery.fullListing, dir]);
+
+  // Folders go to the chip row, files to the grid (its row maths, scroll
+  // anchoring and reveal all count files only).
+  const folders = useMemo(() => entries.filter((e) => e.kind === 'dir'), [entries]);
+  const files = useMemo(() => entries.filter((e) => e.kind === 'file'), [entries]);
 
   const imagesByPath = useMemo(
     () => new Map(gallery.images.map((i) => [i.path, i])),
@@ -470,7 +530,7 @@ export function GalleryBrowser() {
   const cellSize =
     (listBox.width - 2 * spacing.md - (columns - 1) * spacing.xs) / columns;
   const rowStride = cellSize + spacing.xs;
-  const rowCount = Math.ceil(entries.length / columns);
+  const rowCount = Math.ceil(files.length / columns);
 
   // First visible entry, so a column change (pinch, picker, rotation) reopens
   // the grid on the same images instead of jumping back to the top. Read
@@ -484,7 +544,7 @@ export function GalleryBrowser() {
   // Scroll the grid (hidden behind the viewer) so `path`'s row is on screen.
   // Returns false when the item is not in the current folder.
   const revealPath = (path: string): boolean => {
-    const idx = entries.findIndex((e) => e.kind === 'file' && e.path === path);
+    const idx = files.findIndex((e) => e.kind === 'file' && e.path === path);
     if (idx === -1 || rowStride <= 0) return false;
     const top = Math.floor(idx / columns) * rowStride;
     const bottom = top + cellSize;
@@ -661,6 +721,7 @@ export function GalleryBrowser() {
   };
 
   const crumbs = dir === '' ? [] : dir.split('/');
+  const crumbScrollRef = useRef<ScrollView>(null);
 
   if (outputAvailable === false) {
     return (
@@ -686,45 +747,38 @@ export function GalleryBrowser() {
     );
   }
 
+  const renderFolderChip = (folder: LoraEntry) => {
+    if (folder.kind !== 'dir') return null;
+    const path = dir === '' ? folder.name : `${dir}/${folder.name}`;
+    const isSelected = selected.has(path);
+    return (
+      <Pressable
+        key={path}
+        accessibilityRole="button"
+        accessibilityState={selectMode ? { selected: isSelected } : undefined}
+        style={({ pressed }) => [
+          styles.folderChip,
+          isSelected && styles.folderChipSelected,
+          pressed && { backgroundColor: colors.surfacePressed },
+        ]}
+        onPress={() => (selectMode ? toggleSelect(path) : setDir(path))}
+        onLongPress={() => (selectMode ? toggleSelect(path) : startSelect(path))}
+      >
+        <Ionicons
+          name={selectMode ? (isSelected ? 'checkmark-circle' : 'ellipse-outline') : 'folder-outline'}
+          size={16}
+          color={isSelected ? colors.accent : colors.textMuted}
+        />
+        <Text style={styles.folderName} numberOfLines={1}>
+          {folder.name}
+        </Text>
+        <Text style={styles.folderCount}>{folder.count}</Text>
+      </Pressable>
+    );
+  };
+
   const renderEntry = ({ item }: { item: LoraEntry; index: number }) => {
-    if (item.kind === 'dir') {
-      const path = dir === '' ? item.name : `${dir}/${item.name}`;
-      const isSelected = selected.has(path);
-      return (
-        <Pressable
-          style={({ pressed }) => [
-            styles.cell,
-            { flex: 1 / columns },
-            styles.dirCell,
-            isSelected && styles.cellSelected,
-            pressed && { backgroundColor: colors.surfacePressed },
-          ]}
-          onPress={() =>
-            selectMode
-              ? toggleSelect(path)
-              : setDir(dir === '' ? item.name : `${dir}/${item.name}`)
-          }
-          onLongPress={() =>
-            selectMode ? toggleSelect(path) : startSelect(path)
-          }
-        >
-          <Ionicons name="folder" size={30} color={colors.warning} />
-          <Text style={styles.dirName} numberOfLines={2}>
-            {item.name}
-          </Text>
-          <Text style={styles.dirCount}>{item.count}</Text>
-          {selectMode && (
-            <View style={styles.checkOverlay}>
-              <Ionicons
-                name={isSelected ? 'checkmark-circle' : 'ellipse-outline'}
-                size={22}
-                color={isSelected ? colors.accent : colors.textDisabled}
-              />
-            </View>
-          )}
-        </Pressable>
-      );
-    }
+    if (item.kind === 'dir') return null;
     const image = imagesByPath.get(item.path);
     if (!image) return null;
     const imageIndex = dirImages.indexOf(image);
@@ -806,89 +860,61 @@ export function GalleryBrowser() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.breadcrumb}>
-        {dir !== '' && (
+      <View style={styles.navRow}>
+        <ScrollView
+          ref={crumbScrollRef}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          // A deep path keeps its current folder (the end) in view.
+          onContentSizeChange={() => crumbScrollRef.current?.scrollToEnd({ animated: false })}
+          style={styles.crumbScroll}
+          contentContainerStyle={styles.crumbs}
+        >
           <Pressable
-            onPress={() => setDir(crumbs.slice(0, -1).join('/'))}
-            hitSlop={8}
-            style={({ pressed }) => [
-              styles.upBtn,
-              pressed && { backgroundColor: colors.surfacePressed },
-            ]}
+            onPress={() => setDir('')}
+            disabled={dir === ''}
+            style={styles.crumbHit}
+            accessibilityRole="button"
           >
-            <Ionicons name="chevron-back" size={18} color={colors.accent} />
+            <Text style={[styles.crumb, dir === '' && styles.crumbCurrent]}>
+              {t('gallery.root')}
+            </Text>
           </Pressable>
-        )}
-        <Pressable onPress={() => setDir('')} hitSlop={8}>
-          <Text style={[styles.crumb, dir === '' && styles.crumbCurrent]}>
-            {t('gallery.root')}
-          </Text>
-        </Pressable>
-        {crumbs.map((crumb, i) => (
-          <View key={`${crumb}-${i}`} style={styles.crumbGroup}>
-            <Text style={styles.crumbSep}>/</Text>
-            <Pressable
-              onPress={() => setDir(crumbs.slice(0, i + 1).join('/'))}
-              hitSlop={8}
-            >
-              <Text
-                style={[
-                  styles.crumb,
-                  i === crumbs.length - 1 && styles.crumbCurrent,
-                ]}
+          {crumbs.map((crumb, i) => (
+            <View key={`${crumb}-${i}`} style={styles.crumbGroup}>
+              <Ionicons name="chevron-forward" size={14} color={colors.textDisabled} />
+              <Pressable
+                onPress={() => setDir(crumbs.slice(0, i + 1).join('/'))}
+                disabled={i === crumbs.length - 1}
+                style={styles.crumbHit}
+                accessibilityRole="button"
               >
-                {crumb}
-              </Text>
-            </Pressable>
-          </View>
-        ))}
+                <Text
+                  style={[styles.crumb, i === crumbs.length - 1 && styles.crumbCurrent]}
+                  numberOfLines={1}
+                >
+                  {crumb}
+                </Text>
+              </Pressable>
+            </View>
+          ))}
+        </ScrollView>
         <View style={styles.headerActions}>
           {!selectMode && (
             <Pressable
-              onPress={uploadImages}
-              disabled={uploading}
-              hitSlop={8}
-              style={({ pressed }) => pressed && { opacity: 0.6 }}
-            >
-              {uploading ? (
-                <ActivityIndicator size="small" color={colors.accent} />
-              ) : (
-                <Ionicons
-                  name="cloud-upload-outline"
-                  size={22}
-                  color={colors.accent}
-                />
-              )}
-            </Pressable>
-          )}
-          {!selectMode && (
-            <Pressable
               onPress={openColumnPicker}
+              accessibilityRole="button"
               accessibilityLabel={t('gallery.gridTitle')}
-              hitSlop={8}
-              style={({ pressed }) => pressed && { opacity: 0.6 }}
+              style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.6 }]}
             >
-              <Ionicons name="grid-outline" size={20} color={colors.accent} />
-            </Pressable>
-          )}
-          {!selectMode && (
-            <Pressable
-              onPress={() => setNewFolderOpen(true)}
-              hitSlop={8}
-              style={({ pressed }) => pressed && { opacity: 0.6 }}
-            >
-              <Ionicons
-                name="add-circle-outline"
-                size={22}
-                color={colors.accent}
-              />
+              <Ionicons name="grid-outline" size={20} color={colors.textMuted} />
             </Pressable>
           )}
           {selectMode && allPaths.length > 0 && (
             <Pressable
               onPress={toggleSelectAll}
-              hitSlop={8}
-              style={({ pressed }) => pressed && { opacity: 0.6 }}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.textBtn, pressed && { opacity: 0.6 }]}
             >
               <Text style={styles.selectBtnText}>
                 {allSelected ? t('gallery.deselectAll') : t('gallery.selectAll')}
@@ -897,8 +923,8 @@ export function GalleryBrowser() {
           )}
           <Pressable
             onPress={() => (selectMode ? exitSelect() : setSelectMode(true))}
-            hitSlop={8}
-            style={({ pressed }) => pressed && { opacity: 0.6 }}
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.textBtn, pressed && { opacity: 0.6 }]}
           >
             <Text style={styles.selectBtnText}>
               {selectMode ? t('common.cancel') : t('gallery.select')}
@@ -906,6 +932,31 @@ export function GalleryBrowser() {
           </Pressable>
         </View>
       </View>
+
+      {!gallery.isLoading && (folders.length > 0 || !selectMode) && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.chipScroll}
+          contentContainerStyle={styles.chips}
+        >
+          {folders.map(renderFolderChip)}
+          {!selectMode && (
+            <Pressable
+              onPress={() => setNewFolderOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel={t('gallery.newFolderTitle')}
+              style={({ pressed }) => [
+                styles.folderChip,
+                styles.newFolderChip,
+                pressed && { backgroundColor: colors.surfacePressed },
+              ]}
+            >
+              <Ionicons name="add" size={18} color={colors.accent} />
+            </Pressable>
+          )}
+        </ScrollView>
+      )}
 
       {gallery.isLoading ? (
         <View style={styles.centerBox}>
@@ -917,7 +968,7 @@ export function GalleryBrowser() {
         <FlatList
           ref={listRef}
           simultaneousHandlers={pinchRef}
-          data={entries}
+          data={files}
           key={columns}
           numColumns={columns}
           keyExtractor={(e) => (e.kind === 'dir' ? `d:${e.name}` : e.path)}
@@ -963,11 +1014,14 @@ export function GalleryBrowser() {
             // Keep the (absolute) action bar from hiding the last rows.
             selectMode && { paddingBottom: insets.bottom + 88 },
           ]}
+          // A folder holding only subfolders is not empty: its chips say so.
           ListEmptyComponent={
-            <Text style={styles.emptyText}>
-              {t('gallery.empty')}
-              {!gallery.fullListing && t('gallery.emptyLimited')}
-            </Text>
+            folders.length > 0 ? null : (
+              <Text style={styles.emptyText}>
+                {t('gallery.empty')}
+                {!gallery.fullListing && t('gallery.emptyLimited')}
+              </Text>
+            )
           }
         />
         </View>
@@ -989,6 +1043,7 @@ export function GalleryBrowser() {
           }}
           onClose={closeViewer}
           onRemix={handleRemix}
+          onReuseSeed={handleReuseSeed}
           onMove={handleViewerMove}
           onDelete={deleteFromViewer}
         />
@@ -1115,44 +1170,93 @@ export function GalleryBrowser() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
-    backgroundColor: colors.bg,
   },
-  breadcrumb: {
+  navRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
     gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingLeft: spacing.md - 6,
+    paddingRight: spacing.sm,
+    paddingTop: spacing.xs,
   },
-  upBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: radii.sm,
+  crumbScroll: {
+    flex: 1,
+  },
+  crumbs: {
     alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: spacing.xs,
   },
   crumbGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
+  },
+  crumbHit: {
+    minHeight: MIN_TOUCH_TARGET,
+    justifyContent: 'center',
+    paddingHorizontal: 6,
   },
   crumb: {
     color: colors.accent,
     fontFamily: typography.uiMedium,
-    fontSize: typography.sizes.sm,
+    fontSize: 15,
   },
   crumbCurrent: {
     color: colors.text,
+    fontFamily: typography.uiSemiBold,
   },
-  crumbSep: {
-    color: colors.textDisabled,
-    fontFamily: typography.ui,
-    fontSize: typography.sizes.sm,
+  iconBtn: {
+    width: MIN_TOUCH_TARGET,
+    height: MIN_TOUCH_TARGET,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  textBtn: {
+    minHeight: MIN_TOUCH_TARGET,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+  },
+  chipScroll: {
+    flexGrow: 0,
+  },
+  chips: {
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.sm + 2,
+  },
+  folderChip: {
+    minHeight: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: spacing.md - 4,
+    borderRadius: radii.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  folderChipSelected: {
+    borderColor: colors.accent,
+    backgroundColor: colors.accentSoft,
+  },
+  newFolderChip: {
+    width: 44,
+    paddingHorizontal: 0,
+    justifyContent: 'center',
+    borderStyle: 'dashed',
+    backgroundColor: 'transparent',
+  },
+  folderName: {
+    maxWidth: 160,
+    color: colors.text,
+    fontFamily: typography.uiSemiBold,
+    fontSize: 14,
+  },
+  folderCount: {
+    color: colors.textMuted,
+    fontFamily: typography.mono,
+    fontSize: 12,
   },
   listWrap: {
     flex: 1,
@@ -1167,25 +1271,6 @@ const styles = StyleSheet.create({
     borderRadius: radii.sm,
     overflow: 'hidden',
     backgroundColor: colors.surface,
-  },
-  dirCell: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    borderColor: colors.border,
-    borderWidth: 1,
-    padding: spacing.xs,
-  },
-  dirName: {
-    color: colors.text,
-    fontFamily: typography.uiMedium,
-    fontSize: typography.sizes.xs,
-    textAlign: 'center',
-  },
-  dirCount: {
-    color: colors.textDisabled,
-    fontFamily: typography.mono,
-    fontSize: typography.sizes.xs,
   },
   thumb: {
     width: '100%',
@@ -1241,11 +1326,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   headerActions: {
-    marginLeft: 'auto',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    paddingHorizontal: spacing.xs,
   },
   selectBtnText: {
     color: colors.accent,
@@ -1305,10 +1387,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     borderRadius: radii.md,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.strong,
   },
   retryText: {
-    color: colors.text,
+    color: colors.onStrong,
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.sm,
   },
@@ -1320,4 +1402,4 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xl,
     lineHeight: 20,
   },
-});
+}));

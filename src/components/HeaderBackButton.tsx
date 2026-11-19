@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { Pressable, StyleSheet, Text } from 'react-native';
-import { colors, spacing, typography } from '../theme/tokens';
+import { Pressable, Text } from 'react-native';
+import { spacing, typography } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 
 /**
  * Explicit "Back" button for the screens outside the tabs.
@@ -17,6 +18,8 @@ import { colors, spacing, typography } from '../theme/tokens';
  * guaranteed by hitSlop (grows the tap area without growing the bubble).
  */
 export function HeaderBackButton() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const router = useRouter();
   const { t } = useTranslation();
 
@@ -39,7 +42,7 @@ export function HeaderBackButton() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   btn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -53,4 +56,4 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.md,
     marginLeft: -2,
   },
-});
+}));

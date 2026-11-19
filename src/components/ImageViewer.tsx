@@ -44,8 +44,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { GalleryImage } from '../hooks/useGallery';
-import { colors, radii, spacing, typography } from '../theme/tokens';
-import { showActionSheet, type SheetAction } from '../utils/actionSheet';
+import { radii, spacing, typography } from '../theme/tokens';
+import { makeStyles, ThemeOverride, useTheme } from '../theme/theme';
 import { saveImageToPhotos } from '../utils/saveToPhotos';
 import { ImageInfoSheet } from './ImageInfoSheet';
 
@@ -95,6 +95,8 @@ interface Props {
    * video whose job is still in the session history remixes like an image.
    */
   onRemix?: (image: GalleryImage) => Promise<void>;
+  /** Variant with the source seed applied, from the details sheet. */
+  onReuseSeed?: (image: GalleryImage) => Promise<void>;
   /** Move this item (••• menu) — closes the viewer on the gallery side. */
   onMove?: (image: GalleryImage) => void;
   /**
@@ -193,6 +195,8 @@ function ZoomablePage({
   onImageSize: (size: { width: number; height: number }) => void;
   onImageError: () => void;
 }) {
+  const styles = useStyles('dark');
+  const { colors } = useTheme('dark');
   const { t } = useTranslation();
   const [attempt, setAttempt] = useState(0);
   const [failed, setFailed] = useState(false);
@@ -441,6 +445,8 @@ function VideoPage({
   /** Reports the intrinsic pixel size of the video track, once known. */
   onSize: (size: { width: number; height: number }) => void;
 }) {
+  const styles = useStyles('dark');
+  const { colors } = useTheme('dark');
   const { t } = useTranslation();
   const player = useVideoPlayer(uri, (p) => {
     p.loop = true;
@@ -607,9 +613,12 @@ export function ImageViewer({
   getThumbRect,
   onCurrentChange,
   onRemix,
+  onReuseSeed,
   onMove,
   onDelete,
 }: Props) {
+  const styles = useStyles('dark');
+  const { colors } = useTheme('dark');
   const { t } = useTranslation();
   const [index, setIndex] = useState(initialIndex);
   // Local, mutable copy of the frozen list: deleting drops the item here so
@@ -679,26 +688,6 @@ export function ImageViewer({
     requestAnimationFrame(() =>
       listRef.current?.scrollToIndex({ index: newIndex, animated: false }),
     );
-  };
-
-  // ••• menu: save / move / delete the displayed item.
-  const openMenu = (image: GalleryImage) => {
-    const actions: SheetAction[] = [
-      {
-        label: t('gallery.saveToPhotos'),
-        onPress: () => saveCurrentToPhotos(image),
-      },
-    ];
-    if (onMove)
-      actions.push({ label: t('gallery.move'), onPress: () => onMove(image) });
-    if (onDelete) {
-      actions.push({
-        label: t('common.delete'),
-        destructive: true,
-        onPress: () => deleteCurrent(image),
-      });
-    }
-    showActionSheet(image.filename, actions);
   };
 
   const insets = useSafeAreaInsets();
@@ -924,250 +913,302 @@ export function ImageViewer({
       onRequestClose={requestClose}
     >
       {/* RNGH gestures require their own root INSIDE a RN Modal. */}
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <View
-          ref={containerRef}
-          style={styles.container}
-          onLayout={(e) => {
-            const { width: w, height: h } = e.nativeEvent.layout;
-            setPageSize({ w, h });
-            if (startedRef.current) return;
-            startedRef.current = true;
-            const node = containerRef.current;
-            if (!node) {
-              beginOpen(w, h);
-              return;
-            }
-            node.measureInWindow((x, y) => {
-              windowOffset.current = { x, y };
-              beginOpen(w, h);
-            });
-          }}
-        >
-          <Animated.View
-            pointerEvents="none"
-            style={[styles.backdrop, backdropStyle]}
-          />
-          <Animated.View style={[StyleSheet.absoluteFill, contentStyle]}>
-          {pageSize && (
-            <FlatList
-              ref={listRef}
-              data={items}
-              horizontal
-              pagingEnabled
-              scrollEnabled={!zoomed}
-              // initialScrollIndex (not contentOffset): it ALSO informs the
-              // virtualization, which renders the pages around the requested
-              // index — contentOffset alone left the window on an unrendered
-              // area (black screen on first tap). Reliable here because the
-              // width is measured before rendering (onLayout).
-              initialScrollIndex={initialIndex}
-              onScrollToIndexFailed={(info) => {
-                // Safety net: retry after the first batch has rendered.
-                setTimeout(() => {
-                  listRef.current?.scrollToOffset({
-                    offset: pageSize.w * info.index,
-                    animated: false,
-                  });
-                }, 50);
-              }}
-              getItemLayout={(_, i) => ({
-                length: pageSize.w,
-                offset: pageSize.w * i,
-                index: i,
-              })}
-              windowSize={3}
-              initialNumToRender={2}
-              keyExtractor={(img) => img.path}
-              renderItem={({ item }) =>
-                item.isVideo ? (
-                  <VideoPage
-                    uri={viewUrl(item)}
-                    width={pageSize.w}
-                    height={pageSize.h}
-                    active={item.path === current?.path}
-                    chromeVisible={chromeVisible}
-                    bottomInset={captionHeight}
-                    onToggleChrome={() => setChromeVisible((v) => !v)}
-                    onDuration={(seconds) =>
-                      setDurations((prev) =>
-                        prev[item.path] ? prev : { ...prev, [item.path]: seconds },
-                      )
-                    }
-                    onSize={(size) =>
-                      setImageSizes((prev) =>
-                        prev[item.path] ? prev : { ...prev, [item.path]: size },
-                      )
-                    }
-                  />
-                ) : (
-                  <ZoomablePage
-                    path={item.path}
-                    uri={viewUrl(item)}
-                    width={pageSize.w}
-                    height={pageSize.h}
-                    dragProgress={dragProgress}
-                    registerTransform={registerTransform}
-                    onZoomChange={setZoomed}
-                    onDismiss={requestClose}
-                    onShowDetails={() => setDetailsVisible(true)}
-                    onToggleChrome={() => setChromeVisible((v) => !v)}
-                    onImageSize={(size) => {
-                      // The thumbnail's size may be a downscaled decode:
-                      // the full image's own size wins.
-                      setImageSizes((prev) =>
-                        prev[item.path]?.width === size.width &&
-                        prev[item.path]?.height === size.height
-                          ? prev
-                          : { ...prev, [item.path]: size },
-                      );
-                      markLoaded(item.path);
-                    }}
-                    onImageError={() => markLoaded(item.path)}
-                  />
-                )
+      <ThemeOverride name="dark">
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <View
+            ref={containerRef}
+            style={styles.container}
+            onLayout={(e) => {
+              const { width: w, height: h } = e.nativeEvent.layout;
+              setPageSize({ w, h });
+              if (startedRef.current) return;
+              startedRef.current = true;
+              const node = containerRef.current;
+              if (!node) {
+                beginOpen(w, h);
+                return;
               }
-              onMomentumScrollEnd={(e) => {
-                setIndex(
-                  Math.max(
-                    0,
-                    Math.min(
-                      items.length - 1,
-                      Math.round(e.nativeEvent.contentOffset.x / pageSize.w),
-                    ),
-                  ),
-                );
-                setSaveState('idle');
-              }}
-              showsHorizontalScrollIndicator={false}
-            />
-          )}
-          </Animated.View>
-
-          {chromeVisible && (
-            <Animated.View
-              style={[
-                styles.topBar,
-                { paddingTop: insets.top + spacing.sm },
-                chromeStyle,
-              ]}
-            >
-              <Pressable
-                onPress={requestClose}
-                hitSlop={12}
-                style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.6 }]}
-              >
-                <Ionicons name="close" size={24} color={colors.text} />
-              </Pressable>
-              <Text style={styles.counter}>
-                {index + 1} / {items.length}
-              </Text>
-            </Animated.View>
-          )}
-
-          {chromeVisible && current && (
-            <Animated.View
-              style={[
-                styles.caption,
-                { paddingBottom: insets.bottom + spacing.md },
-                chromeStyle,
-              ]}
-              onLayout={(e) => setCaptionHeight(e.nativeEvent.layout.height)}
-            >
-              <Text style={styles.captionName} numberOfLines={1}>
-                {current.filename}
-              </Text>
-              {current.subfolder !== '' && (
-                <Text style={styles.captionFolder} numberOfLines={1}>
-                  {current.subfolder}/
-                </Text>
-              )}
-              <View style={styles.actionsRow}>
-                {onRemix && (
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.remixBtn,
-                      pressed && { backgroundColor: colors.accentPressed },
-                      remixing && { opacity: 0.5 },
-                    ]}
-                    disabled={remixing}
-                    onPress={async () => {
-                      setRemixing(true);
-                      try {
-                        await onRemix(current);
-                      } finally {
-                        setRemixing(false);
-                      }
-                    }}
-                  >
-                    <Ionicons
-                      name="color-wand-outline"
-                      size={18}
-                      color={colors.text}
-                    />
-                    <Text style={styles.remixText}>
-                      {remixing
-                        ? t('viewer.readingRecipe')
-                        : t('gallery.remixAction')}
-                    </Text>
-                  </Pressable>
-                )}
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.saveBtn,
-                    // Fill the row when it's the only button (no remix handler).
-                    onRemix ? null : styles.saveBtnWide,
-                    pressed && { backgroundColor: colors.surfacePressed },
-                    saveState === 'saving' && { opacity: 0.5 },
-                  ]}
-                  disabled={saveState === 'saving'}
-                  onPress={() => openMenu(current)}
-                  hitSlop={6}
-                >
-                  <Ionicons
-                    name={
-                      saveState === 'done'
-                        ? 'checkmark'
-                        : saveState === 'saving'
-                          ? 'hourglass-outline'
-                          : 'ellipsis-horizontal'
-                    }
-                    size={20}
-                    color={saveState === 'done' ? colors.success : colors.text}
-                  />
-                </Pressable>
-              </View>
-            </Animated.View>
-          )}
-
-          {flightUri && (
+              node.measureInWindow((x, y) => {
+                windowOffset.current = { x, y };
+                beginOpen(w, h);
+              });
+            }}
+          >
             <Animated.View
               pointerEvents="none"
-              style={[styles.flight, flightStyle]}
-            >
-              <Image
-                source={{ uri: flightUri }}
-                style={styles.flightImage}
-                contentFit="cover"
-                cachePolicy="disk"
-                onDisplay={launchFlight}
+              style={[styles.backdrop, backdropStyle]}
+            />
+            <Animated.View style={[StyleSheet.absoluteFill, contentStyle]}>
+            {pageSize && (
+              <FlatList
+                ref={listRef}
+                data={items}
+                horizontal
+                pagingEnabled
+                scrollEnabled={!zoomed}
+                // initialScrollIndex (not contentOffset): it ALSO informs the
+                // virtualization, which renders the pages around the requested
+                // index — contentOffset alone left the window on an unrendered
+                // area (black screen on first tap). Reliable here because the
+                // width is measured before rendering (onLayout).
+                initialScrollIndex={initialIndex}
+                onScrollToIndexFailed={(info) => {
+                  // Safety net: retry after the first batch has rendered.
+                  setTimeout(() => {
+                    listRef.current?.scrollToOffset({
+                      offset: pageSize.w * info.index,
+                      animated: false,
+                    });
+                  }, 50);
+                }}
+                getItemLayout={(_, i) => ({
+                  length: pageSize.w,
+                  offset: pageSize.w * i,
+                  index: i,
+                })}
+                windowSize={3}
+                initialNumToRender={2}
+                keyExtractor={(img) => img.path}
+                renderItem={({ item }) =>
+                  item.isVideo ? (
+                    <VideoPage
+                      uri={viewUrl(item)}
+                      width={pageSize.w}
+                      height={pageSize.h}
+                      active={item.path === current?.path}
+                      chromeVisible={chromeVisible}
+                      bottomInset={captionHeight}
+                      onToggleChrome={() => setChromeVisible((v) => !v)}
+                      onDuration={(seconds) =>
+                        setDurations((prev) =>
+                          prev[item.path] ? prev : { ...prev, [item.path]: seconds },
+                        )
+                      }
+                      onSize={(size) =>
+                        setImageSizes((prev) =>
+                          prev[item.path] ? prev : { ...prev, [item.path]: size },
+                        )
+                      }
+                    />
+                  ) : (
+                    <ZoomablePage
+                      path={item.path}
+                      uri={viewUrl(item)}
+                      width={pageSize.w}
+                      height={pageSize.h}
+                      dragProgress={dragProgress}
+                      registerTransform={registerTransform}
+                      onZoomChange={setZoomed}
+                      onDismiss={requestClose}
+                      onShowDetails={() => setDetailsVisible(true)}
+                      onToggleChrome={() => setChromeVisible((v) => !v)}
+                      onImageSize={(size) => {
+                        // The thumbnail's size may be a downscaled decode:
+                        // the full image's own size wins.
+                        setImageSizes((prev) =>
+                          prev[item.path]?.width === size.width &&
+                          prev[item.path]?.height === size.height
+                            ? prev
+                            : { ...prev, [item.path]: size },
+                        );
+                        markLoaded(item.path);
+                      }}
+                      onImageError={() => markLoaded(item.path)}
+                    />
+                  )
+                }
+                onMomentumScrollEnd={(e) => {
+                  setIndex(
+                    Math.max(
+                      0,
+                      Math.min(
+                        items.length - 1,
+                        Math.round(e.nativeEvent.contentOffset.x / pageSize.w),
+                      ),
+                    ),
+                  );
+                  setSaveState('idle');
+                }}
+                showsHorizontalScrollIndicator={false}
               />
+            )}
             </Animated.View>
-          )}
 
-          <ImageInfoSheet
-            image={detailsVisible ? (current ?? null) : null}
-            dimensions={current ? imageSizes[current.path] : undefined}
-            durationSec={current ? durations[current.path] : undefined}
-            onClose={() => setDetailsVisible(false)}
-          />
-        </View>
-      </GestureHandlerRootView>
+            {chromeVisible && (
+              <Animated.View
+                style={[
+                  styles.topBar,
+                  { paddingTop: insets.top + spacing.sm },
+                  chromeStyle,
+                ]}
+              >
+                <Pressable
+                  onPress={requestClose}
+                  hitSlop={12}
+                  style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.6 }]}
+                >
+                  <Ionicons name="close" size={24} color={colors.text} />
+                </Pressable>
+                <Text style={styles.counter}>
+                  {index + 1} / {items.length}
+                </Text>
+              </Animated.View>
+            )}
+
+            {chromeVisible && current && (
+              <Animated.View
+                style={[
+                  styles.caption,
+                  { paddingBottom: insets.bottom + spacing.md },
+                  chromeStyle,
+                ]}
+                onLayout={(e) => setCaptionHeight(e.nativeEvent.layout.height)}
+              >
+                <Text style={styles.captionName} numberOfLines={1}>
+                  {current.filename}
+                </Text>
+                {current.subfolder !== '' && (
+                  <Text style={styles.captionFolder} numberOfLines={1}>
+                    {current.subfolder}/
+                  </Text>
+                )}
+                <View style={styles.actionsRow}>
+                  {onRemix && (
+                    <ActionButton
+                      label={remixing ? t('viewer.readingRecipe') : t('viewer.variant')}
+                      primary
+                      disabled={remixing}
+                      onPress={async () => {
+                        setRemixing(true);
+                        try {
+                          await onRemix(current);
+                        } finally {
+                          setRemixing(false);
+                        }
+                      }}
+                      icon={
+                        <Ionicons name="color-wand-outline" size={20} color={colors.onBrand} />
+                      }
+                    />
+                  )}
+                  <ActionButton
+                    label={t('viewer.photos')}
+                    disabled={saveState === 'saving'}
+                    onPress={() => saveCurrentToPhotos(current)}
+                    icon={
+                      <Ionicons
+                        name={
+                          saveState === 'done'
+                            ? 'checkmark'
+                            : saveState === 'saving'
+                              ? 'hourglass-outline'
+                              : 'download-outline'
+                        }
+                        size={20}
+                        color={saveState === 'done' ? colors.success : colors.text}
+                      />
+                    }
+                  />
+                  {onMove && (
+                    <ActionButton
+                      label={t('gallery.move')}
+                      onPress={() => onMove(current)}
+                      icon={<Ionicons name="folder-open-outline" size={20} color={colors.text} />}
+                    />
+                  )}
+                  {onDelete && (
+                    <ActionButton
+                      label={t('viewer.trash')}
+                      danger
+                      onPress={() => deleteCurrent(current)}
+                      icon={<Ionicons name="trash-outline" size={20} color={colors.danger} />}
+                    />
+                  )}
+                </View>
+              </Animated.View>
+            )}
+
+            {flightUri && (
+              <Animated.View
+                pointerEvents="none"
+                style={[styles.flight, flightStyle]}
+              >
+                <Image
+                  source={{ uri: flightUri }}
+                  style={styles.flightImage}
+                  contentFit="cover"
+                  cachePolicy="disk"
+                  onDisplay={launchFlight}
+                />
+              </Animated.View>
+            )}
+
+            <ImageInfoSheet
+              image={detailsVisible ? (current ?? null) : null}
+              dimensions={current ? imageSizes[current.path] : undefined}
+              durationSec={current ? durations[current.path] : undefined}
+              onReuseSeed={
+                onReuseSeed && current
+                  ? async () => {
+                      setDetailsVisible(false);
+                      await onReuseSeed(current);
+                    }
+                  : undefined
+              }
+              onClose={() => setDetailsVisible(false)}
+            />
+          </View>
+        </GestureHandlerRootView>
+      </ThemeOverride>
     </Modal>
   );
 }
 
-const styles = StyleSheet.create({
+/** One named action of the viewer bar: icon tile over its label. */
+function ActionButton({
+  label,
+  icon,
+  onPress,
+  disabled,
+  primary,
+  danger,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  onPress: () => void;
+  disabled?: boolean;
+  primary?: boolean;
+  danger?: boolean;
+}) {
+  const styles = useStyles('dark');
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled: !!disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [styles.action, (pressed || disabled) && { opacity: 0.6 }]}
+    >
+      <View
+        style={[
+          styles.actionIcon,
+          primary && styles.actionIconPrimary,
+          danger && styles.actionIconDanger,
+        ]}
+      >
+        {icon}
+      </View>
+      <Text
+        style={[styles.actionLabel, danger && styles.actionLabelDanger]}
+        numberOfLines={1}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+const useStyles = makeStyles((colors) => ({
   // Transparent: the backdrop below fades independently so the grid can
   // show through during the hero transition and the dismiss drag.
   container: {
@@ -1293,37 +1334,37 @@ const styles = StyleSheet.create({
   },
   actionsRow: {
     flexDirection: 'row',
-    gap: spacing.sm,
-    marginTop: spacing.sm,
+    gap: spacing.xs,
+    marginTop: spacing.md - 4,
   },
-  remixBtn: {
+  action: {
     flex: 1,
-    flexDirection: 'row',
+    minHeight: 64,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.sm,
-    minHeight: 44,
-    borderRadius: radii.md,
-    backgroundColor: colors.accent,
+    gap: 6,
   },
-  saveBtn: {
+  actionIcon: {
     width: 44,
-    minHeight: 44,
+    height: 36,
     borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.bgElevated,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: colors.surfacePressed,
   },
-  saveBtnWide: {
-    flex: 1,
-    width: undefined,
+  actionIconPrimary: {
+    backgroundColor: colors.brand,
   },
-  remixText: {
+  actionIconDanger: {
+    backgroundColor: colors.dangerSoft,
+  },
+  actionLabel: {
     color: colors.text,
-    fontFamily: typography.uiSemiBold,
-    fontSize: typography.sizes.sm,
+    fontFamily: typography.uiMedium,
+    fontSize: 12,
+  },
+  actionLabelDanger: {
+    color: colors.danger,
   },
   errorBox: {
     ...StyleSheet.absoluteFillObject,
@@ -1348,11 +1389,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     borderRadius: radii.md,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.strong,
   },
   retryText: {
-    color: colors.text,
+    color: colors.onStrong,
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.sm,
   },
-});
+}));

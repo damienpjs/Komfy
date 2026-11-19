@@ -12,8 +12,68 @@ import type { QueueEntry, QueueResponse } from '../api/types';
 import i18n from '../i18n';
 import { useConnection } from '../store/connection';
 import { useSettings } from '../store/settings';
+import { entryOf, isFamily } from '../workflows/catalog';
+import { matchGraph } from '../workflows/match';
+import { allWorkflows } from '../workflows/registry';
 
 const POLL_MS = 5000;
+
+/**
+ * Workflow name of a job when its graph matches a known manifest, else the
+ * generic describeGraph label. Matching walks every manifest, so the result
+ * is cached per prompt id (a job's graph never changes).
+ */
+export interface JobInfo {
+  title: string;
+  /** Matched manifest (its catalogue icon), absent for an unknown graph. */
+  manifestId?: string;
+  /** The job's prompt text, when its workflow has a `prompt` field. */
+  prompt?: string;
+}
+
+const infoCache = new Map<string, JobInfo>();
+
+export function jobTitle(promptId: string, graph: QueueEntry[2]): string {
+  return jobInfo(promptId, graph).title;
+}
+
+/** Title of a job the app has already seen in the queue (no graph needed). */
+export function knownJobTitle(promptId: string): string | undefined {
+  return infoCache.get(promptId)?.title;
+}
+
+export function jobInfo(promptId: string, graph: QueueEntry[2]): JobInfo {
+  const cached = infoCache.get(promptId);
+  if (cached != null) return cached;
+  const outcome = matchGraph(graph, allWorkflows());
+  const manifest =
+    outcome.status === 'match'
+      ? allWorkflows().find((w) => w.id === outcome.manifestId)
+      : undefined;
+  const promptValue = outcome.status === 'match' ? outcome.values.prompt : undefined;
+  // Catalogue name first (with the mode for a family member), so a job
+  // reads the way its workflow does on the Create screen.
+  const entry = manifest ? entryOf(manifest.id) : undefined;
+  const member = entry?.members.find((m) => m.manifestId === manifest?.id);
+  const title = entry
+    ? isFamily(entry) && member
+      ? `${i18n.t(entry.name)} · ${i18n.t(member.mode)}`
+      : i18n.t(entry.name)
+    : manifest
+      ? i18n.t(manifest.name)
+      : describeGraph(graph);
+  const info: JobInfo = {
+    title,
+    manifestId: manifest?.id,
+    prompt:
+      typeof promptValue === 'string' && promptValue.trim()
+        ? promptValue.trim().replace(/\s+/g, ' ')
+        : undefined,
+  };
+  if (infoCache.size > 200) infoCache.clear();
+  infoCache.set(promptId, info);
+  return info;
+}
 const POLL_WS_MS = 15000;
 
 /** Readable label for a job from its graph (checkpoint when present). */

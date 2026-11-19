@@ -41,7 +41,6 @@ import {
   AccessibilityInfo,
   Platform,
   Pressable,
-  StyleSheet,
   Switch,
   Text,
   TextInput,
@@ -62,13 +61,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import type { SharedValue } from 'react-native-reanimated';
-import {
-  colors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../theme/tokens';
+import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 import { accessoryId } from '../utils/formAccessory';
 import { randomSeed } from '../workflows/patch';
 import {
@@ -231,6 +225,8 @@ function ZoneRow({
   cardStyle,
   children,
 }: ZoneRowProps) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const shiftY = useSharedValue(0);
   const lift = useSharedValue(0);
   const glow = useSharedValue(landedKey ? 1 : 0);
@@ -299,6 +295,7 @@ function DropSlot({
   label: string;
   reduceMotion: boolean;
 }) {
+  const styles = useStyles();
   const y = useSharedValue(index * ROW_STEP);
   useEffect(() => {
     const top = index * ROW_STEP;
@@ -325,6 +322,8 @@ export function ZonesField({
   onDragChange,
   scroller,
 }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   const reduceMotion = useReducedMotion();
   // Per-zone denoise text being edited (intermediate states like "0,"
@@ -889,7 +888,7 @@ export function ZonesField({
           // Switching mode unmounts the list, and a card held in it.
           disabled={drag != null}
           trackColor={{ false: colors.bgElevated, true: colors.accent }}
-          thumbColor={colors.text}
+          thumbColor={colors.switchThumb}
         />
       </View>
 
@@ -897,7 +896,7 @@ export function ZonesField({
         <View style={styles.zoneCard}>
           <View style={styles.zoneHeader}>
             <View style={styles.zoneBadge}>
-              <Ionicons name="apps-outline" size={14} color={colors.text} />
+              <Ionicons name="apps-outline" size={14} color={colors.onStrong} />
             </View>
             <Text style={styles.zoneTitle}>{t('zones.allZonesTitle')}</Text>
           </View>
@@ -1139,7 +1138,7 @@ export function ZonesField({
                               false: colors.bgElevated,
                               true: colors.warning,
                             }}
-                            thumbColor={colors.text}
+                            thumbColor={colors.switchThumb}
                           />
                         </View>
 
@@ -1244,7 +1243,7 @@ export function ZonesField({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   wrap: {
     gap: spacing.md,
   },
@@ -1337,12 +1336,12 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.strong,
     alignItems: 'center',
     justifyContent: 'center',
   },
   zoneBadgeText: {
-    color: colors.text,
+    color: colors.onStrong,
     fontFamily: typography.uiBold,
     fontSize: typography.sizes.xs,
   },
@@ -1563,4 +1562,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-});
+}));

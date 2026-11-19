@@ -55,14 +55,8 @@ import {
   type MaskPoint,
   type MaskStroke,
 } from '../utils/maskRaster';
-import {
-  colors,
-  maskBrushColors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../theme/tokens';
+import { maskBrushColors, MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
+import { makeStyles, ThemeOverride, useTheme } from '../theme/theme';
 
 /** Long side of the whole-image overlay raster. */
 const FULL_MAX_SIDE = 384;
@@ -154,6 +148,9 @@ export function MaskEditor({
   onCancel,
   onDone,
 }: Props) {
+  // A media screen: dark in both themes, like the viewer.
+  const styles = useStyles('dark');
+  const { colors } = useTheme('dark');
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
 
@@ -872,6 +869,7 @@ export function MaskEditor({
       onRequestClose={requestCancel}
       statusBarTranslucent
     >
+      <ThemeOverride name="dark">
       <GestureHandlerRootView style={styles.root}>
         <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
           <Pressable
@@ -885,8 +883,8 @@ export function MaskEditor({
           <Text style={styles.title}>{t('maskEditor.title')}</Text>
           <Pressable
             onPress={() => onDone(historyRef.current.present, dirty)}
-            hitSlop={8}
-            style={styles.headerBtn}
+            hitSlop={4}
+            style={({ pressed }) => [styles.headerBtn, styles.donePill, pressed && { opacity: 0.85 }]}
             accessibilityRole="button"
           >
             <Text style={styles.done}>{t('common.done')}</Text>
@@ -1093,9 +1091,9 @@ export function MaskEditor({
                   onValueChange={changeBrush}
                   onSlidingStart={() => setSizingBrush(true)}
                   onSlidingComplete={() => setSizingBrush(false)}
-                  minimumTrackTintColor={colors.brand}
+                  minimumTrackTintColor={colors.accent}
                   maximumTrackTintColor={colors.border}
-                  thumbTintColor={colors.brand}
+                  thumbTintColor={colors.accent}
                 />
                 <Text style={styles.brushValue}>{Math.round(brush)}</Text>
               </>
@@ -1139,6 +1137,7 @@ export function MaskEditor({
           <Text style={styles.hint}>{t('maskEditor.hint')}</Text>
         </View>
       </GestureHandlerRootView>
+      </ThemeOverride>
     </Modal>
   );
 }
@@ -1154,6 +1153,7 @@ function rectStyle(rect: Rect) {
 
 /** Two concentric rings, so the outline reads on light and dark pictures. */
 function BrushRing({ size }: { size: number }) {
+  const styles = useStyles();
   return (
     <View
       style={[
@@ -1177,6 +1177,8 @@ function ModeButton({
   active: boolean;
   onPress: () => void;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   return (
     <Pressable
       onPress={onPress}
@@ -1185,17 +1187,11 @@ function ModeButton({
       style={({ pressed }) => [
         styles.mode,
         active && styles.modeActive,
-        pressed && !active && { backgroundColor: colors.surfacePressed },
+        pressed && !active && { opacity: 0.7 },
       ]}
     >
-      <Ionicons
-        name={icon}
-        size={20}
-        color={active ? colors.onBrand : colors.text}
-      />
-      <Text style={[styles.modeLabel, active && { color: colors.onBrand }]}>
-        {label}
-      </Text>
+      <Ionicons name={icon} size={18} color={active ? colors.text : colors.textMuted} />
+      <Text style={[styles.modeLabel, active && styles.modeLabelActive]}>{label}</Text>
     </Pressable>
   );
 }
@@ -1211,6 +1207,8 @@ function IconButton({
   disabled: boolean;
   onPress: () => void;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   return (
     <Pressable
       onPress={onPress}
@@ -1242,6 +1240,8 @@ function FloatingButton({
   onPressIn?: () => void;
   onPressOut?: () => void;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   return (
     <Pressable
       onPress={onPress}
@@ -1259,10 +1259,10 @@ function FloatingButton({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   root: {
     flex: 1,
-    backgroundColor: colors.bg,
+    backgroundColor: '#000', // the picture on black, like the viewer
   },
   header: {
     flexDirection: 'row',
@@ -1270,8 +1270,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.sm,
-    borderBottomColor: colors.border,
-    borderBottomWidth: 1,
+    backgroundColor: colors.bg,
   },
   headerBtn: {
     minHeight: MIN_TOUCH_TARGET,
@@ -1280,17 +1279,24 @@ const styles = StyleSheet.create({
   title: {
     color: colors.text,
     fontFamily: typography.uiSemiBold,
-    fontSize: typography.sizes.md,
+    fontSize: 17,
   },
   cancel: {
-    color: colors.textMuted,
-    fontFamily: typography.ui,
-    fontSize: typography.sizes.sm,
+    color: colors.text,
+    fontFamily: typography.uiMedium,
+    fontSize: 15,
   },
   done: {
-    color: colors.brand,
-    fontFamily: typography.uiSemiBold,
-    fontSize: typography.sizes.sm,
+    color: colors.onBrand,
+    fontFamily: typography.uiBold,
+    fontSize: 15,
+  },
+  donePill: {
+    minHeight: 40,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.full,
+    backgroundColor: colors.brand,
+    alignItems: 'center',
   },
   notice: {
     flexDirection: 'row',
@@ -1345,11 +1351,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.overlay,
   },
   toolbar: {
-    borderTopColor: colors.border,
-    borderTopWidth: 1,
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
-    gap: spacing.md,
+    paddingTop: spacing.md - 2,
+    gap: spacing.md - 4,
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
     backgroundColor: colors.bgElevated,
   },
   brushRow: {
@@ -1402,43 +1408,45 @@ const styles = StyleSheet.create({
   modes: {
     flex: 1,
     flexDirection: 'row',
-    gap: spacing.sm,
+    gap: 3,
+    padding: 3,
+    borderRadius: radii.md,
+    backgroundColor: colors.field,
   },
   mode: {
     flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
-    minHeight: MIN_TOUCH_TARGET,
-    paddingVertical: spacing.xs,
-    borderRadius: radii.md,
-    borderColor: colors.border,
-    borderWidth: 1,
-    backgroundColor: colors.surface,
+    gap: 6,
+    minHeight: MIN_TOUCH_TARGET - 4,
+    borderRadius: radii.md - 3,
   },
   modeActive: {
-    backgroundColor: colors.brand,
-    borderColor: colors.brand,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   modeLabel: {
+    color: colors.textMuted,
+    fontFamily: typography.uiMedium,
+    fontSize: 14,
+  },
+  modeLabelActive: {
     color: colors.text,
-    fontFamily: typography.ui,
-    fontSize: typography.sizes.xs,
+    fontFamily: typography.uiSemiBold,
   },
   iconBtn: {
     width: MIN_TOUCH_TARGET,
-    height: MIN_TOUCH_TARGET + spacing.sm,
+    height: MIN_TOUCH_TARGET,
     borderRadius: radii.md,
     alignItems: 'center',
     justifyContent: 'center',
-    borderColor: colors.border,
-    borderWidth: 1,
-    backgroundColor: colors.surface,
   },
   hint: {
     color: colors.textMuted,
     fontFamily: typography.ui,
-    fontSize: typography.sizes.xs,
+    fontSize: 13,
     textAlign: 'center',
   },
-});
+}));

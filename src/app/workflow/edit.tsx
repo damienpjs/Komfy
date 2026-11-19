@@ -12,6 +12,9 @@ import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
+import { FieldRow, FieldRowAction } from '../../components/FieldRow';
+import { IconPicker } from '../../components/IconPicker';
+import { isWorkflowIconKey, type WorkflowIconKey } from '../../components/WorkflowIcon';
 import { useTranslation } from 'react-i18next';
 import {
   FlatList,
@@ -25,13 +28,8 @@ import {
 } from 'react-native';
 import { useCustomWorkflows } from '../../store/customWorkflows';
 import { useToast } from '../../store/toast';
-import {
-  colors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../../theme/tokens';
+import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../../theme/tokens';
+import { makeStyles, useTheme } from '../../theme/theme';
 import { fieldForInput, inferLorasCandidates } from '../../workflows/infer';
 import type {
   LorasField,
@@ -80,6 +78,8 @@ interface Candidate {
 }
 
 export default function EditWorkflowScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { t } = useTranslation();
@@ -90,6 +90,9 @@ export default function EditWorkflowScreen() {
 
   const [name, setName] = useState(stored?.name ?? '');
   const [fields, setFields] = useState<WorkflowField[]>(stored?.fields ?? []);
+  const [icon, setIcon] = useState<WorkflowIconKey>(
+    stored && isWorkflowIconKey(stored.icon) ? stored.icon : 'graph',
+  );
   const [inspectorOpen, setInspectorOpen] = useState(false);
 
   if (!stored) {
@@ -162,6 +165,7 @@ export default function EditWorkflowScreen() {
     const manifest: WorkflowManifest = {
       ...stored,
       name: name.trim() || stored.name,
+      icon,
       fields,
     };
     useCustomWorkflows.getState().update(manifest);
@@ -172,7 +176,7 @@ export default function EditWorkflowScreen() {
 
   const exportJson = async () => {
     await Clipboard.setStringAsync(
-      JSON.stringify({ ...stored, name: name.trim() || stored.name, fields }),
+      JSON.stringify({ ...stored, name: name.trim() || stored.name, icon, fields }),
     );
     showToast(t('editWf.copied'));
   };
@@ -188,59 +192,58 @@ export default function EditWorkflowScreen() {
         placeholderTextColor={colors.textDisabled}
       />
 
+      <IconPicker value={icon} onChange={setIcon} />
+
       <Text style={styles.label}>{t('editWf.fields')}</Text>
       {fields.length === 0 && (
         <Text style={styles.helpText}>{t('importWf.noFields')}</Text>
       )}
-      {fields.map((field, index) => (
-        <View key={field.key} style={styles.fieldRow}>
-          <View style={styles.fieldInfo}>
-            <TextInput
-              style={styles.fieldLabelInput}
-              // Resolved for editing: saving turns it into a literal (WYSIWYG).
-              defaultValue={t(field.label)}
-              onEndEditing={(e) => setLabel(index, e.nativeEvent.text)}
-            />
-            <Text style={styles.fieldKind}>
-              {field.kind}
-              {'target' in field
-                ? ` — #${field.target.nodeId}.${field.target.input}`
-                : ''}
-            </Text>
-          </View>
-          <Pressable
-            hitSlop={8}
-            disabled={index === 0}
-            onPress={() => move(index, -1)}
-            style={({ pressed }) => [
-              index === 0 && { opacity: 0.3 },
-              pressed && { opacity: 0.6 },
-            ]}
-          >
-            <Ionicons name="chevron-up" size={20} color={colors.textMuted} />
-          </Pressable>
-          <Pressable
-            hitSlop={8}
-            disabled={index === fields.length - 1}
-            onPress={() => move(index, 1)}
-            style={({ pressed }) => [
-              index === fields.length - 1 && { opacity: 0.3 },
-              pressed && { opacity: 0.6 },
-            ]}
-          >
-            <Ionicons name="chevron-down" size={20} color={colors.textMuted} />
-          </Pressable>
-          <Pressable
-            hitSlop={8}
-            onPress={() =>
-              setFields((f) => f.filter((_, i) => i !== index))
-            }
-            style={({ pressed }) => pressed && { opacity: 0.6 }}
-          >
-            <Ionicons name="close-circle" size={20} color={colors.danger} />
-          </Pressable>
+      {fields.length > 0 && (
+        <View style={styles.fieldGroup}>
+          {fields.map((field, index) => (
+            <FieldRow
+              key={field.key}
+              first={index === 0}
+              title={
+                <TextInput
+                  style={styles.fieldLabelInput}
+                  // Resolved for editing: saving turns it into a literal (WYSIWYG).
+                  defaultValue={t(field.label)}
+                  onEndEditing={(e) => setLabel(index, e.nativeEvent.text)}
+                  accessibilityLabel={t('editWf.labelA11y')}
+                />
+              }
+              kind={
+                field.kind +
+                ('target' in field
+                  ? ` · #${field.target.nodeId}.${field.target.input}`
+                  : '')
+              }
+            >
+              <FieldRowAction
+                label={t('editWf.moveUp')}
+                disabled={index === 0}
+                onPress={() => move(index, -1)}
+              >
+                <Ionicons name="chevron-up" size={20} color={colors.textMuted} />
+              </FieldRowAction>
+              <FieldRowAction
+                label={t('editWf.moveDown')}
+                disabled={index === fields.length - 1}
+                onPress={() => move(index, 1)}
+              >
+                <Ionicons name="chevron-down" size={20} color={colors.textMuted} />
+              </FieldRowAction>
+              <FieldRowAction
+                label={t('editWf.removeField')}
+                onPress={() => setFields((f) => f.filter((_, i) => i !== index))}
+              >
+                <Ionicons name="close-circle" size={20} color={colors.danger} />
+              </FieldRowAction>
+            </FieldRow>
+          ))}
         </View>
-      ))}
+      )}
 
       <Pressable
         style={({ pressed }) => [
@@ -352,10 +355,9 @@ export default function EditWorkflowScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
-    backgroundColor: colors.bg,
   },
   content: {
     padding: spacing.md,
@@ -366,7 +368,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.bg,
     padding: spacing.lg,
   },
   label: {
@@ -391,16 +392,12 @@ const styles = StyleSheet.create({
     fontFamily: typography.ui,
     fontSize: typography.sizes.sm,
   },
-  fieldRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
+  fieldGroup: {
+    overflow: 'hidden',
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
   },
   fieldInfo: {
     flex: 1,
@@ -441,10 +438,10 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     minHeight: MIN_TOUCH_TARGET,
     borderRadius: radii.md,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.strong,
   },
   primaryText: {
-    color: colors.text,
+    color: colors.onStrong,
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.sm,
   },
@@ -501,4 +498,4 @@ const styles = StyleSheet.create({
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.sm,
   },
-});
+}));

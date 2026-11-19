@@ -41,13 +41,8 @@ import {
   GestureHandlerRootView,
 } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  colors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../theme/tokens';
+import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
+import { makeStyles, ThemeOverride, useTheme } from '../theme/theme';
 import {
   applyTemplate,
   clampSides,
@@ -132,6 +127,7 @@ function CanvasDrawing({
   layout: StageLayout;
   activeSide?: OutpaintSide | null;
 }) {
+  const styles = useStyles();
   const f = finalSize(value);
   const { scale, srcX, srcY } = layout;
   const canvas = {
@@ -195,6 +191,7 @@ export function OutpaintDiagram({
   sourceUrl: string;
   height: number;
 }) {
+  const styles = useStyles();
   const [box, setBox] = useState({ width: 0, height });
   const layout = useMemo(() => {
     const f = finalSize(value);
@@ -226,6 +223,7 @@ export function OutpaintDiagram({
 
 /** Size, ratio, generated share and working size, in a few mono lines. */
 export function OutpaintReadout({ value }: { value: OutpaintValue }) {
+  const styles = useStyles();
   const { t } = useTranslation();
   const f = finalSize(value);
   const plan = planOutpaint(value);
@@ -272,6 +270,8 @@ export function OutpaintTemplates({
   /** One horizontal scrolling line (form row) instead of wrapped rows. */
   scroll?: boolean;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { t, i18n } = useTranslation();
   const chips = [
     ...RATIO_TEMPLATES.map((r) => ({ id: ratioTemplateId(r.id), label: r.id })),
@@ -334,6 +334,9 @@ export function OutpaintEditor({
   onCancel,
   onDone,
 }: Props) {
+  // A media screen: dark in both themes, like the mask editor and the viewer.
+  const styles = useStyles('dark');
+  const { colors } = useTheme('dark');
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
   const [draft, setDraft] = useState(value);
@@ -485,17 +488,19 @@ export function OutpaintEditor({
       onRequestClose={onCancel}
       statusBarTranslucent
     >
+      <ThemeOverride name="dark">
       <GestureHandlerRootView style={styles.root}>
         <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-          <Pressable onPress={onCancel} hitSlop={8} style={styles.headerBtn}>
+          <Pressable onPress={onCancel} hitSlop={8} style={styles.headerBtn} accessibilityRole="button">
             <Text style={styles.cancel}>{t('common.cancel')}</Text>
           </Pressable>
           <Text style={styles.title}>{t('outpaint.editorTitle')}</Text>
           <Pressable
             // A side still being typed counts: Done must not drop it.
             onPress={() => onDone(fold(draft, typingRef.current))}
-            hitSlop={8}
-            style={styles.headerBtn}
+            hitSlop={4}
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.headerBtn, styles.donePill, pressed && { opacity: 0.85 }]}
           >
             <Text style={styles.done}>{t('common.done')}</Text>
           </Pressable>
@@ -690,20 +695,21 @@ export function OutpaintEditor({
           <InputAccessoryView nativeID={EDITOR_ACCESSORY_ID}>
             <View style={styles.accessoryBar}>
               <Pressable onPress={Keyboard.dismiss} hitSlop={8}>
-                <Text style={styles.done}>{t('launch.done')}</Text>
+                <Text style={styles.accessoryDone}>{t('launch.done')}</Text>
               </Pressable>
             </View>
           </InputAccessoryView>
         )}
       </GestureHandlerRootView>
+      </ThemeOverride>
     </Modal>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   root: {
     flex: 1,
-    backgroundColor: colors.bg,
+    backgroundColor: '#000', // the picture on black, like the viewer
   },
   header: {
     flexDirection: 'row',
@@ -711,8 +717,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.sm,
-    borderBottomColor: colors.border,
-    borderBottomWidth: 1,
+    backgroundColor: colors.bg,
   },
   headerBtn: {
     minHeight: MIN_TOUCH_TARGET,
@@ -721,17 +726,29 @@ const styles = StyleSheet.create({
   title: {
     color: colors.text,
     fontFamily: typography.uiSemiBold,
-    fontSize: typography.sizes.md,
+    fontSize: 17,
   },
   cancel: {
-    color: colors.textMuted,
-    fontFamily: typography.ui,
-    fontSize: typography.sizes.sm,
+    color: colors.text,
+    fontFamily: typography.uiMedium,
+    fontSize: 15,
   },
   done: {
-    color: colors.brand,
+    color: colors.onBrand,
+    fontFamily: typography.uiBold,
+    fontSize: 15,
+  },
+  donePill: {
+    minHeight: 40,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.full,
+    backgroundColor: colors.brand,
+    alignItems: 'center',
+  },
+  accessoryDone: {
+    color: colors.accent,
     fontFamily: typography.uiSemiBold,
-    fontSize: typography.sizes.sm,
+    fontSize: 15,
   },
   body: {
     flex: 1,
@@ -793,8 +810,8 @@ const styles = StyleSheet.create({
   panel: {
     flexGrow: 0,
     maxHeight: '55%',
-    borderTopColor: colors.border,
-    borderTopWidth: 1,
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
     backgroundColor: colors.bgElevated,
   },
   panelContent: {
@@ -992,4 +1009,4 @@ const styles = StyleSheet.create({
   chipTextSelected: {
     color: colors.text,
   },
-});
+}));

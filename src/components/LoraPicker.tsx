@@ -25,13 +25,8 @@ import {
   searchLoras,
   type LoraEntry,
 } from '../utils/pathTree';
-import {
-  colors,
-  MIN_TOUCH_TARGET,
-  radii,
-  spacing,
-  typography,
-} from '../theme/tokens';
+import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
+import { makeStyles, useTheme } from '../theme/theme';
 
 interface Props {
   visible: boolean;
@@ -42,6 +37,8 @@ interface Props {
 }
 
 export function LoraPicker({ visible, selected, onToggle, onClose }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   const loras = useLoras();
   const [dir, setDir] = useState('');
@@ -226,7 +223,7 @@ export function LoraPicker({ visible, selected, onToggle, onClose }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
     backgroundColor: colors.bg,
@@ -360,4 +357,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: spacing.lg,
   },
-});
+}));
