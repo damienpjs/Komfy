@@ -27,6 +27,15 @@ Routes:
   for a root). Source and destination roots may differ. Traversal and
   trash rejected, moving a folder into itself rejected, name collisions
   resolved with a " (n)" suffix. `dest` created as needed.
+- `POST /komfy/rename` (`{"path": "output/sub/old.png", "name": "new.png"}`):
+  renames a file or folder in place (a folder's contents follow).
+  Returns `{"renamed": "output/sub/new.png"}`. Refused, with
+  `{"error", "code"}`: an invalid name (`400`, `invalid_name`: empty,
+  leading dot, `/ \ :` or control characters, over 255 bytes), a file
+  extension change (`400`, `extension`), an existing target (`409`,
+  `exists`, no " (n)" suffix here), a missing item (`400`, `not_found`),
+  the bare root, traversal or the trash (`400`, `invalid_path`). A
+  case-only change is allowed.
 - `POST /komfy/mkdir` (`{"path": "input/sub"}`): creates a folder
   (recursive, `exist_ok`). Traversal and trash rejected.
 - `GET /komfy/trash`: per-root `{count, bytes}` of what the trash holds.

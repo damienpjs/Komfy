@@ -156,6 +156,14 @@ export interface ComfyClient {
     paths: string[],
     dest: string,
   ): Promise<{ moved: string[]; errors: Record<string, string> }>;
+  /**
+   * Renames a prefixed file/folder in place: `name` replaces its last
+   * segment (never a path), a folder's contents follow, a file keeps its
+   * extension. Refusals carry `{error, code}` in the ComfyApiError body:
+   * 409 `exists`, 400 `invalid_name` | `extension` | `not_found` |
+   * `invalid_path`. komfy-listing extension (404/405 if absent).
+   */
+  renamePath(path: string, name: string): Promise<{ renamed: string }>;
   /** Creates a folder from a prefixed path (`output/sub`, `input/sub`). */
   createDir(path: string): Promise<{ created: string }>;
   /** Per-root trash contents ({count, bytes}) for the "empty trash" screen. */
@@ -270,6 +278,13 @@ export function createClient(baseUrl: string): ComfyClient {
           body: JSON.stringify({ paths, dest }),
         },
       ),
+
+    renamePath: (path, name) =>
+      request<{ renamed: string }>(base, '/komfy/rename', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path, name }),
+      }),
 
     createDir: (path) =>
       request<{ created: string }>(base, '/komfy/mkdir', {

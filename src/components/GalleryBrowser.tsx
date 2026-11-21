@@ -65,6 +65,7 @@ import { makeStyles, useTheme } from '../theme/theme';
 import { ImageViewer, type Rect, type Size } from './ImageViewer';
 import { OutputDirPicker } from './OutputDirPicker';
 import { RemixSheet, type RemixSheetState } from './RemixSheet';
+import { RenameDialog, type RenameTarget } from './RenameDialog';
 import {
   listDirectory,
   type LoraEntry,
@@ -139,6 +140,8 @@ export function GalleryBrowser() {
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   // Targets of the move in progress (selected batch or single viewer image).
   const [moveTargets, setMoveTargets] = useState<string[]>([]);
+  // Item in the rename dialog (one selected item or the viewer image).
+  const [renameTarget, setRenameTarget] = useState<RenameTarget | null>(null);
   // "Recipe" sheet for an image whose workflow is unknown (Remix v2).
   const [recipe, setRecipe] = useState<RemixSheetState | null>(null);
 
@@ -294,6 +297,46 @@ export function GalleryBrowser() {
     invalidateGallery();
   };
 
+  // Wording of a refused rename, shown under the dialog's field (the
+  // dialog stays open, so the user can fix the name and retry).
+  const renameErrorMessage = (e: unknown, name: string): string => {
+    if (e instanceof ComfyApiError) {
+      if (e.status === 404 || e.status === 405) {
+        return t('gallery.updateExtBody', { action: t('gallery.actionRename') });
+      }
+      const body = e.body as { code?: unknown; error?: unknown } | undefined;
+      switch (body?.code) {
+        case 'exists':
+          return t('gallery.renameExists', { name });
+        case 'invalid_name':
+          return t('gallery.renameInvalid');
+        case 'extension':
+          return t('gallery.renameExtension');
+        case 'not_found':
+          return t('gallery.renameNotFound');
+      }
+      if (typeof body?.error === 'string') return body.error;
+    }
+    return e instanceof Error ? e.message : String(e);
+  };
+
+  // In-place rename (komfy-listing extension) then gallery refresh. Resolves
+  // to the dialog's error message, or null once renamed.
+  const renamePath = async (name: string): Promise<string | null> => {
+    const target = renameTarget;
+    if (!target) return null;
+    try {
+      await createClient(serverUrl).renamePath(target.path, name);
+    } catch (e) {
+      return renameErrorMessage(e, name);
+    }
+    setRenameTarget(null);
+    showToast(t('gallery.renamedToast', { name }));
+    exitSelect();
+    invalidateGallery();
+    return null;
+  };
+
   // Folder creation (komfy-listing extension) then gallery refresh.
   const createFolder = async (path: string) => {
     if (path.trim() === '') return;
@@ -403,6 +446,25 @@ export function GalleryBrowser() {
   const handleViewerMove = (image: GalleryImage) => {
     closeViewer(true);
     setTimeout(() => openMovePicker([image.path]), 300);
+  };
+
+  // Rename dialog on one prefixed path. A path the gallery knows as an
+  // image or video is a file; anything else listed here is a folder.
+  const openRename = (path: string) => {
+    if (realTargets([path]).length === 0) return;
+    const image = imagesByPath.get(path);
+    setRenameTarget({
+      path,
+      name: path.split('/').pop() ?? path,
+      kind: image ? (image.isVideo ? 'video' : 'image') : 'dir',
+    });
+  };
+
+  // Same dance as the move: the file's name is about to change under the
+  // viewer's frozen list, and iOS needs the viewer modal gone first.
+  const handleViewerRename = (image: GalleryImage) => {
+    closeViewer(true);
+    setTimeout(() => openRename(image.path), 300);
   };
 
   // Delete from full screen WITHOUT leaving the viewer: confirm over the open
@@ -746,6 +808,17 @@ export function GalleryBrowser() {
     setSelected(allSelected ? new Set() : new Set(allPaths));
   };
 
+  // Names next to the item being renamed, so the dialog flags a taken name
+  // before the request. Only what the gallery lists: the server still
+  // refuses a clash with any other file (409).
+  const renameSiblings = useMemo(() => {
+    if (!renameTarget) return [];
+    const parent = renameTarget.path.split('/').slice(0, -1).join('/');
+    return listDirectory(gallery.paths, parent, gallery.emptyDirs)
+      .map((e) => e.name)
+      .filter((n) => n !== renameTarget.name);
+  }, [renameTarget, gallery.paths, gallery.emptyDirs]);
+
   const crumbs = dir === '' ? [] : dir.split('/');
   const crumbScrollRef = useRef<ScrollView>(null);
 
@@ -1072,6 +1145,7 @@ export function GalleryBrowser() {
           onReuseSeed={handleReuseSeed}
           onUseIn={handleUseIn}
           onMove={handleViewerMove}
+          onRename={handleViewerRename}
           onDelete={deleteFromViewer}
         />
       )}
@@ -1107,6 +1181,18 @@ export function GalleryBrowser() {
                 color={colors.accent}
               />
             )}
+          </Pressable>
+          <Pressable
+            accessibilityLabel={t('gallery.rename')}
+            style={({ pressed }) => [
+              styles.actionBtn,
+              (selected.size !== 1 || saving) && { opacity: 0.4 },
+              pressed && { backgroundColor: colors.surfacePressed },
+            ]}
+            disabled={selected.size !== 1 || saving}
+            onPress={() => openRename([...selected][0])}
+          >
+            <Ionicons name="pencil-outline" size={20} color={colors.accent} />
           </Pressable>
           <Pressable
             accessibilityLabel={t('gallery.move')}
@@ -1192,6 +1278,13 @@ export function GalleryBrowser() {
         confirmVerb={t('gallery.createFolder')}
         onSelect={createFolder}
         onClose={() => setNewFolderOpen(false)}
+      />
+
+      <RenameDialog
+        target={renameTarget}
+        siblings={renameSiblings}
+        onCancel={() => setRenameTarget(null)}
+        onSubmit={renamePath}
       />
     </View>
   );
