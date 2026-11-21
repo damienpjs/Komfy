@@ -97,6 +97,11 @@ interface Props {
   onRemix?: (image: GalleryImage) => Promise<void>;
   /** Variant with the source seed applied, from the details sheet. */
   onReuseSeed?: (image: GalleryImage) => Promise<void>;
+  /**
+   * "Use in…": the next workflow of the video pipeline, prefilled with this
+   * item (animate / make it talk a still, upscale a clip).
+   */
+  onUseIn?: (image: GalleryImage) => Promise<void>;
   /** Move this item (••• menu) — closes the viewer on the gallery side. */
   onMove?: (image: GalleryImage) => void;
   /**
@@ -613,6 +618,7 @@ export function ImageViewer({
   getThumbRect,
   onCurrentChange,
   onRemix,
+  onUseIn,
   onReuseSeed,
   onMove,
   onDelete,
@@ -627,6 +633,7 @@ export function ImageViewer({
   const [items, setItems] = useState(images);
   const listRef = useRef<FlatList<GalleryImage>>(null);
   const [remixing, setRemixing] = useState(false);
+  const [usingIn, setUsingIn] = useState(false);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'done'>(
     'idle',
   );
@@ -1089,6 +1096,21 @@ export function ImageViewer({
                       icon={
                         <Ionicons name="color-wand-outline" size={20} color={colors.onBrand} />
                       }
+                    />
+                  )}
+                  {onUseIn && (
+                    <ActionButton
+                      label={t('viewer.useIn')}
+                      disabled={usingIn}
+                      onPress={async () => {
+                        setUsingIn(true);
+                        try {
+                          await onUseIn(current);
+                        } finally {
+                          setUsingIn(false);
+                        }
+                      }}
+                      icon={<Ionicons name="arrow-redo-outline" size={20} color={colors.text} />}
                     />
                   )}
                   <ActionButton

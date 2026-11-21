@@ -38,11 +38,9 @@ export function FamilySwitch({ manifest, values }: Props) {
   if (!entry || !isFamily(entry)) return null;
 
   const current = entry.members.find((m) => m.manifestId === manifest.id)!;
-  // One segment per mode, in catalogue order (Video ▸ Image has two engines).
-  const modes = entry.members.filter(
-    (m, i) => entry.members.findIndex((o) => o.mode === m.mode) === i,
-  );
-  const engines = entry.members.filter((m) => m.mode === current.mode && m.engine);
+  // Four modes (Video) leave about 80 pt per segment on a phone: stack the
+  // icon over the label so "First → last" is not cut.
+  const stacked = entry.members.length > 3;
 
   const switchTo = (target: FamilyMember) => {
     if (target.manifestId === manifest.id) return;
@@ -65,23 +63,18 @@ export function FamilySwitch({ manifest, values }: Props) {
     router.replace(`/workflow/${target.manifestId}${prefill}` as Href);
   };
 
-  /** Switching mode keeps the current engine when the target mode has it. */
-  const memberForMode = (mode: string): FamilyMember =>
-    entry.members.find((m) => m.mode === mode && m.engine === current.engine) ??
-    entry.members.find((m) => m.mode === mode)!;
-
   return (
     <View style={styles.wrap}>
       <View style={styles.seg} accessibilityRole="tablist">
-        {modes.map((m) => {
-          const on = m.mode === current.mode;
+        {entry.members.map((m) => {
+          const on = m.manifestId === current.manifestId;
           return (
             <Pressable
-              key={m.mode}
+              key={m.manifestId}
               accessibilityRole="tab"
               accessibilityState={{ selected: on }}
-              onPress={() => switchTo(memberForMode(m.mode))}
-              style={[styles.option, on && styles.optionOn]}
+              onPress={() => switchTo(m)}
+              style={[styles.option, stacked && styles.optionStacked, on && styles.optionOn]}
             >
               <WorkflowIcon
                 name={m.icon}
@@ -89,33 +82,16 @@ export function FamilySwitch({ manifest, values }: Props) {
                 color={on ? colors.text : colors.textMuted}
                 knockout={on ? colors.surface : colors.field}
               />
-              <Text style={[styles.label, on && styles.labelOn]} numberOfLines={1}>
+              <Text
+                style={[styles.label, stacked && styles.labelStacked, on && styles.labelOn]}
+                numberOfLines={1}
+              >
                 {t(m.mode)}
               </Text>
             </Pressable>
           );
         })}
       </View>
-      {engines.length > 1 && (
-        <View style={styles.engines}>
-          {engines.map((m) => {
-            const on = m.manifestId === manifest.id;
-            return (
-              <Pressable
-                key={m.manifestId}
-                accessibilityRole="button"
-                accessibilityState={{ selected: on }}
-                onPress={() => switchTo(m)}
-                style={[styles.engine, on && styles.engineOn]}
-              >
-                <Text style={[styles.engineText, on && styles.engineTextOn]}>
-                  {m.engine}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      )}
     </View>
   );
 }
@@ -141,6 +117,12 @@ const useStyles = makeStyles((colors) => ({
     paddingHorizontal: 6,
     borderRadius: 10,
   },
+  optionStacked: {
+    flexDirection: 'column',
+    gap: 2,
+    paddingVertical: 6,
+    paddingHorizontal: 2,
+  },
   optionOn: {
     backgroundColor: colors.surface,
     borderWidth: 1,
@@ -152,31 +134,10 @@ const useStyles = makeStyles((colors) => ({
     fontFamily: typography.uiSemiBold,
     fontSize: 13,
   },
-  labelOn: {
-    color: colors.text,
-  },
-  engines: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  engine: {
-    minHeight: 36,
-    paddingHorizontal: spacing.md - 4,
-    borderRadius: radii.full,
-    borderWidth: 1,
-    borderColor: colors.border,
-    justifyContent: 'center',
-  },
-  engineOn: {
-    backgroundColor: colors.accentSoft,
-    borderColor: colors.accent,
-  },
-  engineText: {
-    color: colors.textMuted,
-    fontFamily: typography.mono,
+  labelStacked: {
     fontSize: 12,
   },
-  engineTextOn: {
-    color: colors.accent,
+  labelOn: {
+    color: colors.text,
   },
 }));

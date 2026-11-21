@@ -26,7 +26,9 @@ import {
 } from 'react-native';
 import { ComfyApiError, createClient } from '../../api/client';
 import type { PromptErrorResponse } from '../../api/types';
+import { AudioInputField } from '../../components/AudioInputField';
 import { ImageInputField } from '../../components/ImageInputField';
+import { VideoInputField } from '../../components/VideoInputField';
 import { MaskInputField } from '../../components/MaskInputField';
 import { LoraField } from '../../components/LoraField';
 import { ModelField } from '../../components/ModelField';
@@ -175,7 +177,13 @@ function initialValues(
       values[field.key] = restored;
     }
     if (field.kind === 'loras') values[field.key] = field.default ?? [];
-    if (field.kind === 'image' || field.kind === 'mask') values[field.key] = '';
+    if (
+      field.kind === 'image' ||
+      field.kind === 'mask' ||
+      field.kind === 'audio' ||
+      field.kind === 'video'
+    )
+      values[field.key] = '';
     if (field.kind === 'dimensions')
       values[field.key] = { ...field.default, inverted: false, custom: false };
     if (field.kind === 'outpaint')
@@ -684,6 +692,22 @@ export default function WorkflowLaunchScreen() {
               <ImageInputField
                 value={String(values[field.key] ?? '')}
                 onChange={(name) => setValue(field.key, name)}
+              />
+            )}
+
+            {field.kind === 'audio' && (
+              <AudioInputField
+                value={String(values[field.key] ?? '')}
+                onChange={(name) => setValue(field.key, name)}
+                maxSeconds={field.maxSeconds}
+              />
+            )}
+
+            {field.kind === 'video' && (
+              <VideoInputField
+                value={String(values[field.key] ?? '')}
+                onChange={(name) => setValue(field.key, name)}
+                upscaleEstimate={field.upscaleEstimate}
               />
             )}
 

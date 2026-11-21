@@ -224,6 +224,9 @@ const KIND_RANK: Record<WorkflowField['kind'], number> = {
   // Embedded workflows only (it needs the AnyPaint node set): ranked with
   // the picture it expands.
   outpaint: 0,
+  // Embedded workflows only for now: ranked with the other source media.
+  audio: 0,
+  video: 0,
   text: 1,
   model: 2,
   // Never inferred from an imported graph (embedded workflows only), but the

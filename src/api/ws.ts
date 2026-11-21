@@ -179,7 +179,13 @@ export function useComfyWs(onMessage?: (msg: ComfyWsMessage) => void) {
         // Local "job finished" notification (when the app is not active).
         if (msg.type === 'executed' && msg.data.output?.images?.length) {
           const list = outputsByPrompt.get(msg.data.prompt_id) ?? [];
-          list.push(...(msg.data.output.images ?? []).map((i) => i.filename));
+          // Outputs only: a LoadVideo also reports its source as a preview
+          // (the upscale's clip), which is not something the job produced.
+          list.push(
+            ...(msg.data.output.images ?? [])
+              .filter((i) => i.type !== 'input')
+              .map((i) => i.filename),
+          );
           outputsByPrompt.set(msg.data.prompt_id, list);
         } else if (msg.type === 'execution_success') {
           notifyJobDone(outputsByPrompt.get(msg.data.prompt_id) ?? []);

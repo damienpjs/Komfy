@@ -6,8 +6,8 @@ gallery, remix an image from its recipe. UI in English and French
 (selector in Settings).
 
 > Personal project: the embedded workflows are tailored to a specific
-> setup (KREA2 models, LTX 2.3 and 2.5 video, Impact Pack detectors, local Ollama). The code —
-> API client, graph patching, remix, gallery — is generic and reusable
+> setup (KREA2 models, LTX 2.5 video, Impact Pack detectors, local Ollama). The code
+> (API client, graph patching, remix, gallery) is generic and reusable
 > for other workflows.
 
 Stack: Expo SDK 54 (React Native + TypeScript), Expo Router, Zustand,
@@ -30,8 +30,7 @@ Server side:
   (`Krea-2-Turbo-Q8_0.gguf` in `models/unet`, half the memory, needs
   ComfyUI-GGUF) offered next to it in the KREA2 model pickers, as a
   Standard / GGUF switch on text-to-image, Qwen VAE/CLIP, depth-control
-  LoRA, AnyPaint outpainting LoRA, Ultralytics detectors, ESRGAN-family upscalers, LTX 2.3 GGUF models +
-  audio VAE — see each workflow file);
+  LoRA, AnyPaint outpainting LoRA, Ultralytics detectors, ESRGAN-family upscalers: see each workflow file);
 - **Custom nodes** (the Workflows screen flags any that are missing):
   - [ComfyUI-Impact-Pack](https://github.com/ltdrdata/ComfyUI-Impact-Pack)
     and [Impact-Subpack](https://github.com/ltdrdata/ComfyUI-Impact-Subpack)
@@ -53,19 +52,10 @@ Server side:
     `krea2_anypaint_rank32.safetensors` from
     [yijunwang2/krea2-anypaint](https://huggingface.co/yijunwang2/krea2-anypaint),
     placed in `models/loras/krea2/`;
-  - Image → Video (LTX 2.3):
-    [ComfyUI-LTXVideo](https://github.com/Lightricks/ComfyUI-LTXVideo),
-    [ComfyUI-GGUF](https://github.com/city96/ComfyUI-GGUF), ComfyUI-KJNodes,
-    [rgthree-comfy](https://github.com/rgthree/rgthree-comfy),
-    [ComfyUI-VideoHelperSuite](https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite),
-    [ComfyUI-Frame-Interpolation](https://github.com/Fannovel16/ComfyUI-Frame-Interpolation),
-    [ComfyUI-Easy-Use](https://github.com/yolain/ComfyUI-Easy-Use),
-    [ComfyUI-mxToolkit](https://github.com/Smirnov75/ComfyUI-mxToolkit),
-    [ComfyMath](https://github.com/evanspearman/ComfyMath) and 10S_Nodes
-    (reference conditioning);
-  - Text / Image / First-last frame → Video (LTX 2.5, Apple Silicon only):
-    the bundled [`server/komfy-ltx-mlx`](./server/komfy-ltx-mlx) node plus
-    [ltx-2-mlx](https://github.com/dgrauet/ltx-2-mlx) 0.16+ and an LTX 2.5
+  - Video (LTX 2.5, Apple Silicon only: text, image, image + voice,
+    first-last frame, x2 video upscale): the bundled
+    [`server/komfy-ltx-mlx`](./server/komfy-ltx-mlx) nodes plus
+    [ltx-2-mlx](https://github.com/dgrauet/ltx-2-mlx) 0.18+ and an LTX 2.5
     MLX pack (`dgrauet/ltx-2.5-mlx-q8` on 64 GB), see step 5 below;
 - **Ollama** running locally (`127.0.0.1:11434`, never exposed on the
   tailnet) with a vision model tagged `gemma4-vision:latest` — only for the
@@ -177,9 +167,9 @@ nothing below assumes a Mac.
    launch, and streams `<BASE_DIR>/logs/comfyui.log` to the in-app console.
    Details: [server/supervisor/README.md](./server/supervisor/README.md).
 
-5. **LTX 2.5 through MLX** (optional, Apple Silicon): the three LTX 2.5
-   workflows run the MLX port out of process (about 16× faster than LTX 2.5
-   on PyTorch MPS). Install the runtime and a pack, then symlink the node and
+5. **LTX 2.5 through MLX** (optional, Apple Silicon): the LTX 2.5
+   workflows of the Video section run the MLX port out of process (about
+   16× faster than LTX 2.5 on PyTorch MPS). Install the runtime and a pack, then symlink the node and
    restart ComfyUI:
 
    ```bash
@@ -189,8 +179,12 @@ nothing below assumes a Mac.
    ln -s "<repo>/server/komfy-ltx-mlx" <comfy-data-dir>/custom_nodes/komfy-ltx-mlx
    ```
 
-   The node unloads ComfyUI's models before each render, streams the CLI's
-   progress into the queue and writes the `.mp4` to the output folder.
+   The nodes unload ComfyUI's models before each render, stream the CLI's
+   progress into the queue and write the `.mp4`, its recipe embedded, to
+   the output folder. The video pipeline: a Krea still, then **Image +
+   voice** for a cheap lip-synced draft (about 2.5 min at 512×768, character
+   LoRA fused in), then **Upscale a video x2** on the chosen take (about
+   38 min, audio kept). "Use" in the viewer chains each step, prefilled.
    Details (pack discovery, env overrides, memory levers):
    [server/komfy-ltx-mlx/README.md](./server/komfy-ltx-mlx/README.md).
 

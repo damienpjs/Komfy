@@ -41,6 +41,7 @@ import Animated, { FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ComfyApiError, createClient } from '../api/client';
 import { queryClient } from '../api/queryClient';
+import type { PromptGraph } from '../api/types';
 import { useGallery, type GalleryImage } from '../hooks/useGallery';
 import { useRemix } from '../hooks/useRemix';
 import { useImportDraft } from '../store/importDraft';
@@ -50,6 +51,7 @@ import { PICK_FOR_UPLOAD } from '../utils/imageUpload';
 import { isHeif } from '../utils/media';
 import { remixHref } from '../utils/remixHref';
 import { getAnyWorkflow } from '../workflows/registry';
+import { nextStepTargets } from '../workflows/nextStep';
 import { saveImageToPhotos } from '../utils/saveToPhotos';
 import { useConnection } from '../store/connection';
 import {
@@ -460,6 +462,30 @@ export function GalleryBrowser() {
         e instanceof Error ? e.message : String(e),
       );
     }
+  };
+
+  // "Use in…": the next step of the video pipeline, prefilled. A clip's
+  // recipe (read on the server) gives the upscale its prompt, LoRA and seed;
+  // without one the form opens with just the clip.
+  const handleUseIn = async (image: GalleryImage) => {
+    let recipe: PromptGraph | null = null;
+    if (image.isVideo) {
+      try {
+        recipe = await remix.graphOf(image);
+      } catch {
+        // No recipe: the upscale form asks for the prompt.
+      }
+    }
+    showActionSheet(
+      t('viewer.useInTitle'),
+      nextStepTargets(image, recipe).map((target) => ({
+        label: t(target.label),
+        onPress: () => {
+          closeViewer(true);
+          router.push(remixHref(target.manifestId, target.values, target.seeds));
+        },
+      })),
+    );
   };
 
   // Details sheet "Reuse" on the seed: the same variant, with the source
@@ -1044,6 +1070,7 @@ export function GalleryBrowser() {
           onClose={closeViewer}
           onRemix={handleRemix}
           onReuseSeed={handleReuseSeed}
+          onUseIn={handleUseIn}
           onMove={handleViewerMove}
           onDelete={deleteFromViewer}
         />

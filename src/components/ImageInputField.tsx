@@ -20,6 +20,7 @@ import {
 import { createClient } from '../api/client';
 import { useSettings } from '../store/settings';
 import { PICK_FOR_UPLOAD } from '../utils/imageUpload';
+import { parseAnnotated } from '../utils/annotated';
 import { isHeif } from '../utils/media';
 import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
 import { makeStyles, useTheme } from '../theme/theme';
@@ -30,6 +31,15 @@ import { makeStyles, useTheme } from '../theme/theme';
  * the server; this at least prevents accidents from the app.)
  */
 const MAX_UPLOAD_BYTES = 30 * 1024 * 1024; // 30 MB
+
+/**
+ * /view URL of the picked picture: an upload (input folder) or a gallery
+ * output sent here by "Use in" (annotated ` [output]`, cf. utils/annotated).
+ */
+function previewUrl(serverUrl: string, value: string): string {
+  const ref = parseAnnotated(value);
+  return createClient(serverUrl).viewUrl(ref.filename, ref.subfolder, ref.type);
+}
 
 interface Props {
   /** Server-side filename ('' = none). */
@@ -117,13 +127,13 @@ export function ImageInputField({ value, onChange }: Props) {
   return (
     <View style={styles.filledRow}>
       <Image
-        source={{ uri: createClient(serverUrl).viewUrl(value, '', 'input') }}
+        source={{ uri: previewUrl(serverUrl, value) }}
         style={styles.thumb}
         contentFit="cover"
         cachePolicy="disk"
       />
       <Text style={styles.filename} numberOfLines={2}>
-        {value}
+        {parseAnnotated(value).filename}
       </Text>
       <View style={styles.actions}>
         <Pressable

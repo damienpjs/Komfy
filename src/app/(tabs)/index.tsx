@@ -210,7 +210,7 @@ export default function CreateScreen() {
               if (!manifest) return null;
               const sub =
                 entry && entry.members.length > 1 && member
-                  ? [t(member.mode), member.engine].filter(Boolean).join(' · ')
+                  ? t(member.mode)
                   : (entry?.engine ?? t('importWf.customBadge'));
               return (
                 <Pressable

@@ -320,6 +320,35 @@ export interface ImageField extends FieldBase {
 }
 
 /**
+ * Audio input (a voice): an audio file picked in the Files app (a Voice
+ * Memos recording saved to Files, an AirDrop, iCloud Drive) or the sound of
+ * a video from the photo library, uploaded to the input folder like a photo.
+ * The value is the server-side filename, patched into a core LoadAudio,
+ * which also decodes the audio track of a video (PyAV).
+ */
+export interface AudioField extends FieldBase {
+  kind: 'audio';
+  target: PatchTarget;
+  required?: boolean;
+  /** Longest audio the server accepts (seconds): shown in red beyond it. */
+  maxSeconds?: number;
+}
+
+/**
+ * Video input taken from the server's own outputs, never uploaded: the
+ * value is an annotated filename (`sub/clip.mp4 [output]`, cf.
+ * utils/annotated) that core LoadVideo resolves in the output folder, so a
+ * clip goes from one workflow to the next without a round trip to the phone.
+ */
+export interface VideoField extends FieldBase {
+  kind: 'video';
+  target: PatchTarget;
+  required?: boolean;
+  /** Show the x2 output size and the time estimate (video upscale). */
+  upscaleEstimate?: boolean;
+}
+
+/**
  * Hand-drawn mask field: the user paints over the image held by another
  * field (`sourceKey`), the strokes are rasterized and encoded to a PNG in
  * JS (cf. utils/maskRaster + utils/png — Komfy has no native canvas, see
@@ -539,6 +568,8 @@ export type WorkflowField =
   | ModelSourceField
   | DimensionsField
   | ImageField
+  | AudioField
+  | VideoField
   | MaskField
   | LorasField
   | ZonesField

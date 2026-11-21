@@ -24,9 +24,11 @@ export type WorkflowIconKey =
   | 'detect'
   | 'outpaint'
   | 'upscale'
+  | 'videoUpscale'
   | 'video'
   | 't2v'
   | 'i2v'
+  | 'a2v'
   | 'flf'
   | 'prompt'
   | 'idea2prompt'
@@ -37,7 +39,8 @@ export type WorkflowIconKey =
 /** Icons an imported workflow can pick (the import arrow is the action, not a workflow). */
 export const PICKABLE_ICONS: WorkflowIconKey[] = [
   'graph', 't2i', 'i2i', 'edit', 'depth', 'repaint', 'context', 'drawReplace',
-  'inpaint', 'detect', 'outpaint', 'upscale', 'video', 't2v', 'i2v', 'flf',
+  'inpaint', 'detect', 'outpaint', 'upscale', 'videoUpscale', 'video', 't2v', 'i2v',
+  'a2v', 'flf',
   'prompt', 'idea2prompt', 'img2prompt',
 ];
 
@@ -201,6 +204,16 @@ export function WorkflowIcon({ name, color, knockout = 'transparent', size = 30 
         </>
       );
       break;
+    case 'videoUpscale':
+      body = (
+        <>
+          <Rect x={3} y={3} width={26} height={26} rx={3} {...dashed} />
+          <Rect x={3} y={17} width={12} height={12} rx={2.3} {...s} />
+          <Path d="M7.4 20.2l4.4 2.8-4.4 2.8z" {...solid} />
+          <Path d="M17.5 14.5L25 7M18.5 7H25v6.5" {...s} />
+        </>
+      );
+      break;
     case 'video':
       body = (
         <>
@@ -215,6 +228,16 @@ export function WorkflowIcon({ name, color, knockout = 'transparent', size = 30 
       break;
     case 'i2v':
       body = <>{imageLeft}{arrow}{videoRight}</>;
+      break;
+    case 'a2v':
+      // A voice (sound bars) becomes a talking video.
+      body = (
+        <>
+          <Path d="M2 14.5v3M5 11.5v9M8 13v6M11 15v2" {...s} />
+          {arrow}
+          {videoRight}
+        </>
+      );
       break;
     case 'flf':
       body = (
