@@ -16,6 +16,7 @@ import { applySelectOption } from './patch';
 import { GGUF_UNET_LOADER } from './requirements';
 import type {
   FieldValues,
+  ImageField,
   LoraSelection,
   ModelField,
   ModelSourceField,
@@ -101,6 +102,12 @@ interface WalkState {
   zones: RawZone[];
   /** Visited extracted-graph nodes (whole structure = covered). */
   visited: Set<string>;
+  /**
+   * Manifest nodes a launch may have removed (an optional image left empty,
+   * cf. ImageField.omitWhenEmpty): an extracted node with no link where the
+   * manifest reads one of them is that removal, not a mismatch.
+   */
+  omittable: Set<string>;
   /** Zones field config of the tested manifest, if any. */
   zonesField?: ZonesField;
   /** modelSource field config of the tested manifest, if any. */
@@ -416,6 +423,7 @@ function walk(
   for (const [key, mVal] of Object.entries(mNode.inputs)) {
     if (!isConn(mVal)) continue; // literal: patchable, not compared
     const eVal = eNode.inputs[key];
+    if (eVal === undefined && state.omittable.has(mVal[0])) continue;
     if (!isConn(eVal)) return false;
     const eResolved = resolveConnection(extracted, manifest, eVal, state);
     if (!eResolved) return false;
@@ -527,11 +535,17 @@ function matchVariant(
       .map((f) => f.target.nodeId),
   );
   if (modelSourceField?.ggufLoader) ggufSlots.add(modelSourceField.unetNodeId);
+  const omittable = new Set(
+    manifest.fields
+      .filter((f): f is ImageField => f.kind === 'image' && !!f.omitWhenEmpty)
+      .map((f) => f.target.nodeId),
+  );
   const state: WalkState = {
     map: new Map(),
     loras: new Map(),
     zones: [],
     visited: new Set(),
+    omittable,
     zonesField,
     modelSourceField,
     ggufSlots,
@@ -559,6 +573,10 @@ function matchVariant(
   // of the same class_type.
   for (const mId of Object.keys(graph)) {
     if (state.map.has(mId)) continue;
+    // An omittable image feeds a node on the sink path: when the walk did not
+    // reach it, it was dropped at launch. Never pair it with another loader
+    // left over (the i2v source image would pass for a reference).
+    if (state.omittable.has(mId)) continue;
     // Checkpoint mode: the UNET/CLIP/VAE loaders are absorbed into the shared
     // CheckpointLoaderSimple, so they have no extracted twin to pair here.
     if (state.checkpoint != null && isModelLoader(mId, modelSourceField)) {

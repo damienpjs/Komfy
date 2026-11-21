@@ -303,6 +303,16 @@ export default {
       lastFrameOff: 'Off',
       lastFrameOn: 'Enregistrer',
     },
+    ltxRefs: {
+      ref1: "Référence personnage (facultatif)",
+      ref2: "Deuxième référence",
+      ref3: "Troisième référence",
+      hint: "1 à 3 photos du même personnage (gros plan du visage, plein pied, profil), disposées sur une planche noire qui guide tout le clip. Pour un meilleur résultat, commence le prompt par « Reference sheet: <ce que montrent les photos> » puis « Generated video: <l’action> ». Entraîné sur des clips de 5 s à 24 i/s",
+      lora: "Références : force du LoRA",
+      loraHint: "Force de l’IC-LoRA Ingredients. Lightricks conseille 1 sur LTX 2.5",
+      guide: "Références : force du guide",
+      guideHint: "À quel point la planche de références oriente les images (0 à 1)",
+    },
     ltx25: {
       t2vName: "Texte → Vidéo + audio (LTX 2.5)",
       t2vDescription: "Génère un clip avec audio synchronisé à partir d’un prompt. LTX 2.5 via MLX, la voie rapide sur Apple Silicon",

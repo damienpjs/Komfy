@@ -9,11 +9,14 @@ import {
   ltx25CommonFields,
   ltx25Node,
   ltx25PromptFields,
+  ltx25RefFields,
+  ltx25RefNodes,
 } from './ltx25-shared';
 import type { WorkflowManifest } from './types';
 
 const graph: PromptGraph = {
-  [LTX25_NODE]: ltx25Node('komfy/ltx25-t2v'),
+  ...ltx25RefNodes(),
+  [LTX25_NODE]: ltx25Node('komfy/ltx25-t2v', {}, true),
 };
 
 export const ltx25T2v: WorkflowManifest = {
@@ -25,6 +28,7 @@ export const ltx25T2v: WorkflowManifest = {
   saveNodeId: LTX25_NODE,
   fields: [
     ...ltx25PromptFields('wf.ltx25.t2vPlaceholder'),
+    ...ltx25RefFields(),
     ...ltx25CommonFields(false),
   ],
 };

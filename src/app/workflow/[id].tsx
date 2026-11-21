@@ -87,6 +87,7 @@ import {
 import {
   ALL_ZONES_SEED_STRIDE,
   DEFAULT_GUIDE_SIZE,
+  isFieldShown,
 } from '../../workflows/types';
 import type {
   DimensionsValue,
@@ -648,8 +649,7 @@ export default function WorkflowLaunchScreen() {
           // (e.g. the distilled strengths appear only when the toggle is On).
           if (
             (field.advanced && !showAdvanced) ||
-            (field.showWhen &&
-              values[field.showWhen.key] !== field.showWhen.equals)
+            !isFieldShown(field, values)
           ) {
             return advancedHeader;
           }

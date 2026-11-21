@@ -16,7 +16,7 @@ import {
 } from './outpaint';
 import { isHeif } from '../utils/media';
 import { GGUF_UNET_LOADER } from './requirements';
-import { DEFAULT_GUIDE_SIZE } from './types';
+import { DEFAULT_GUIDE_SIZE, isFieldShown } from './types';
 import type {
   DimensionsValue,
   FieldValues,
@@ -111,9 +111,7 @@ export function validate(
   for (const field of manifest.fields) {
     // Hidden fields (showWhen unmet) are neither shown nor validated — their
     // value is moot (the controlling toggle removes the target node).
-    if (field.showWhen && values[field.showWhen.key] !== field.showWhen.equals) {
-      continue;
-    }
+    if (!isFieldShown(field, values)) continue;
     const value = values[field.key];
     if (field.kind === 'text' && field.required) {
       if (typeof value !== 'string' || value.trim() === '') {
@@ -342,15 +340,24 @@ export function applySelectOption(
   // Optional branch toggled off: drop the nodes this option bypasses, then
   // unplug every input still reading one of them (an optional socket left
   // empty, e.g. the second reference image of the KREA2 edit).
-  const bypassed = new Set(option.bypassNodes ?? []);
-  if (bypassed.size === 0) return;
-  for (const nodeId of bypassed) delete graph[nodeId];
+  dropNodes(graph, option.bypassNodes ?? []);
+}
+
+/**
+ * Deletes the nodes, then unplugs every input still reading one of them. Only
+ * safe for sinks nothing reads from, or for nodes feeding optional sockets: a
+ * required input left unplugged is rejected by the server.
+ */
+export function dropNodes(graph: PromptGraph, nodeIds: string[]): void {
+  const dropped = new Set(nodeIds);
+  if (dropped.size === 0) return;
+  for (const nodeId of dropped) delete graph[nodeId];
   for (const node of Object.values(graph)) {
     for (const [input, value] of Object.entries(node.inputs)) {
       if (
         Array.isArray(value) &&
         typeof value[0] === 'string' &&
-        bypassed.has(value[0])
+        dropped.has(value[0])
       ) {
         delete node.inputs[input];
       }
@@ -782,6 +789,10 @@ export function patchGraph(
         // Same guard as `text`/`number`: an optional image whose LoadImage an
         // earlier select dropped (the KREA2 edit in one-image mode).
         if (!graph[field.target.nodeId]) break;
+        if (field.kind === 'image' && field.omitWhenEmpty && !value) {
+          dropNodes(graph, [field.target.nodeId]);
+          break;
+        }
         applyPatch(graph, field.target, String(value ?? ''));
         break;
       case 'model':

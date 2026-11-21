@@ -12,6 +12,13 @@
  * `first_image` / `last_image`, which is also what tells them apart on remix
  * (structural fingerprint, cf. match.ts).
  *
+ * The text-to-video graph also carries three optional character-reference
+ * photos (LoadImage 11-13 → ref_1..ref_3): with at least one, the node
+ * switches to the Ingredients IC-LoRA (ltx-2-mlx ic-lora); an empty one is
+ * dropped at launch (`omitWhenEmpty`), so with none the render is unchanged.
+ * Image to video and first/last frame do not get them: measured, the clip
+ * leaves the start image after frame 0 and films the reference sheet.
+ *
  * Booleans are patched as 1 / 0: ComfyUI casts BOOLEAN inputs with bool(), and
  * SelectOption patches only carry strings and numbers.
  */
@@ -30,10 +37,20 @@ export const LTX25_NODE = '1';
 export const LTX25_NEGATIVE =
   'jump cut, scene change, camera teleport, different location, sudden zoom, blurry, distorted face, deformed hands, limbs passing through objects, extra people, text, watermark, subtitles';
 
-/** Frozen KomfyLTX25MLX node; `images` wires the optional image inputs. */
+/** LoadImage nodes of the optional character references (ref_1..ref_3). */
+export const LTX25_REF_NODES = ['11', '12', '13'] as const;
+
+/** Ingredients IC-LoRA for 2.5, relative to models/loras. */
+const INGREDIENTS_LORA = 'ltx/ic-lora/ltx-2.5-22b-ic-lora-ingredients-0.9.safetensors';
+
+/**
+ * Frozen KomfyLTX25MLX node; `images` wires the optional image inputs,
+ * `refs` the character references (text to video only).
+ */
 export function ltx25Node(
   prefix: string,
   images: { first?: string; last?: string } = {},
+  refs = false,
 ): PromptNode {
   return {
     class_type: 'KomfyLTX25MLX',
@@ -59,6 +76,16 @@ export function ltx25Node(
       filename_prefix: prefix,
       ...(images.first ? { first_image: [images.first, 0] } : {}),
       ...(images.last ? { last_image: [images.last, 0] } : {}),
+      ...(refs
+        ? {
+            ref_1: [LTX25_REF_NODES[0], 0],
+            ref_2: [LTX25_REF_NODES[1], 0],
+            ref_3: [LTX25_REF_NODES[2], 0],
+            ingredients_lora: INGREDIENTS_LORA,
+            ingredients_strength: 1,
+            reference_strength: 1,
+          }
+        : {}),
     },
     _meta: { title: 'LTX 2.5 (MLX) · Komfy' },
   };
@@ -72,7 +99,55 @@ export function loadImageNode(title: string): PromptNode {
   };
 }
 
+/** The three reference LoadImage nodes, to spread into the text-to-video graph. */
+export function ltx25RefNodes(): Record<string, PromptNode> {
+  return Object.fromEntries(
+    LTX25_REF_NODES.map((id, i) => [id, loadImageNode(`Reference ${i + 1}`)]),
+  );
+}
+
 const target = (input: string) => ({ nodeId: LTX25_NODE, input });
+
+/**
+ * Optional character references: up to three photos, each offered once the
+ * previous one is filled, plus the two strengths (advanced).
+ */
+export function ltx25RefFields(): WorkflowField[] {
+  const photos: WorkflowField[] = LTX25_REF_NODES.map((nodeId, i) => ({
+    kind: 'image',
+    key: `ref${i + 1}`,
+    label: `wf.ltxRefs.ref${i + 1}`,
+    hint: i === 0 ? 'wf.ltxRefs.hint' : undefined,
+    target: { nodeId, input: 'image' },
+    omitWhenEmpty: true,
+    showWhen: i === 0 ? undefined : { key: `ref${i}`, filled: true },
+  }));
+  return [
+    ...photos,
+    {
+      kind: 'number',
+      key: 'refsLora',
+      label: 'wf.ltxRefs.lora',
+      hint: 'wf.ltxRefs.loraHint',
+      target: target('ingredients_strength'),
+      default: 1,
+      min: 0,
+      max: 2,
+      advanced: true,
+    },
+    {
+      kind: 'number',
+      key: 'refsGuide',
+      label: 'wf.ltxRefs.guide',
+      hint: 'wf.ltxRefs.guideHint',
+      target: target('reference_strength'),
+      default: 1,
+      min: 0,
+      max: 1,
+      advanced: true,
+    },
+  ];
+}
 
 /** On/Off select patching a BOOLEAN input of the node. */
 function toggle(
