@@ -3,8 +3,8 @@
 Exposes a recursive, multi-root listing of ComfyUI's image folders
 (`output` and `input`) that the core API does not provide
 (`/internal/files/{type}` does not descend into subfolders — verified in
-the ComfyUI 0.27 source), plus soft-delete (trash), move, mkdir and
-trash maintenance used by the Komfy gallery.
+the ComfyUI 0.27 source), plus soft-delete (trash), move, rename, mkdir
+and trash maintenance used by the Komfy gallery.
 
 Every path handled by these routes is **prefixed by its root**, e.g.
 `output/workflows/x.png` or `input/photo.png`; the first segment selects
@@ -24,6 +24,7 @@ import json
 import os
 import shutil
 import time
+import unicodedata
 
 from aiohttp import web
 from PIL import Image, ImageCms
@@ -231,6 +232,90 @@ def move_paths(roots, rel_paths, dest):
     return moved, errors
 
 
+def name_problem(name):
+    """Why `name` cannot be a single file/folder name, or None when it can.
+    A rename never moves: no path separator. A leading dot would hide the
+    item from the listings (and is how the trash is named). ':' is refused
+    like the app's folder sanitizer does (Finder shows it as '/'). 255
+    bytes is the APFS / ext4 limit for one name."""
+    if name == "":
+        return "empty name"
+    if name.startswith("."):
+        return "a name cannot start with a dot"
+    if any(c in "/\\:" or ord(c) < 32 or ord(c) == 127 for c in name):
+        return "a name cannot contain / \\ : or control characters"
+    if len(name.encode("utf-8")) > 255:
+        return "name too long"
+    return None
+
+
+def _fold(name):
+    """Comparison key of a name on a case- and normalization-insensitive
+    volume (APFS default): "Café" typed on the phone (NFC) and "café" stored
+    decomposed (NFD) are the same entry there."""
+    return unicodedata.normalize("NFC", name).casefold()
+
+
+def _same_entry(a, b):
+    """True when both paths are the same file on disk (False if either one
+    is missing or a broken link)."""
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return False
+
+
+def rename_path(roots, path, name):
+    """Renames a prefixed file/folder in place: `name` replaces the last
+    segment of `path`, a folder's contents follow it. Same confinement as
+    move_paths (_safe_target: traversal, trash, the bare root). A file keeps
+    its extension, otherwise it would drop out of the gallery. No " (n)"
+    suffix here, unlike a move: an existing target is an error the user can
+    act on. A case-only change ("Foo" → "foo") is allowed on a
+    case-insensitive volume, where it is the same entry.
+
+    Returns (renamed_path|None, err, code). `code` is one of "invalid_path",
+    "not_found", "invalid_name", "extension", "exists", "os", so the app can
+    word the error itself."""
+    root, sub = _split_root(path)
+    base = roots.get(root)
+    if base is None or not os.path.isdir(base):
+        return None, "unknown root", "invalid_path"
+    base_real = os.path.realpath(base)
+    target, err = _safe_target(base_real, sub)
+    if err:
+        return None, err, "invalid_path"
+    if not os.path.exists(target):
+        return None, "not found", "not_found"
+    name = name.strip()
+    problem = name_problem(name)
+    if problem:
+        return None, problem, "invalid_name"
+    old = os.path.basename(target)
+    if os.path.isfile(target):
+        old_ext = os.path.splitext(old)[1]
+        if os.path.splitext(name)[1].lower() != old_ext.lower():
+            return None, f"the extension must stay {old_ext or '(none)'}", "extension"
+    out = os.path.join(os.path.dirname(target), name)
+
+    def prefixed(abs_path):
+        return f"{root}/{os.path.relpath(abs_path, base_real).replace(os.sep, '/')}"
+
+    if name == old:
+        return prefixed(target), None, None
+    if os.path.lexists(out) and not (
+        _fold(name) == _fold(old) and _same_entry(out, target)
+    ):
+        return None, "an item with this name already exists", "exists"
+    # Small race left: os.rename replaces a file created between the check
+    # above and this call. Acceptable for a single-user archive.
+    try:
+        os.rename(target, out)
+    except OSError as exc:
+        return None, str(exc), "os"
+    return prefixed(out), None, None
+
+
 def make_dir(roots, path):
     """Creates a folder from a prefixed path ('output/sub', 'input/sub').
     Returns (created_path|None, err)."""
@@ -435,6 +520,31 @@ async def komfy_move(request):
         )
     moved, errors = move_paths(_roots(), paths, dest)
     return web.json_response({"moved": moved, "errors": errors})
+
+
+@PromptServer.instance.routes.post("/komfy/rename")
+async def komfy_rename(request):
+    guard = _volume_guard()
+    if guard is not None:
+        return guard
+    try:
+        payload = await request.json()
+        path = payload["path"]
+        name = payload["name"]
+        assert isinstance(path, str) and path
+        assert isinstance(name, str)
+    except Exception:
+        return web.json_response(
+            {"error": 'expected body: {"path": "root/sub/item", "name": "new name"}'},
+            status=400,
+        )
+    renamed, err, code = rename_path(_roots(), path, name)
+    if err:
+        # Never 404 here: the app reads a 404 as "extension missing".
+        return web.json_response(
+            {"error": err, "code": code}, status=409 if code == "exists" else 400
+        )
+    return web.json_response({"renamed": renamed})
 
 
 @PromptServer.instance.routes.post("/komfy/mkdir")
