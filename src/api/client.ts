@@ -119,6 +119,13 @@ export interface ComfyClient {
   getHistoryItem(promptId: string): Promise<HistoryResponse>;
   /** Flat listing of the output folder: ["<name> [<type>]", …]. Also used as the "volume mounted" probe. */
   listOutputFiles(): Promise<string[]>;
+  /**
+   * API graph stored in a video's `prompt` tag (komfy-listing GET
+   * /komfy/recipe, `path` prefixed by its root): read on the server, so a
+   * video remixes without being downloaded, even after a restart wiped
+   * /history. 404 when the extension is older than the route.
+   */
+  getVideoRecipe(path: string): Promise<{ prompt: PromptGraph | null }>;
   /** Installed LoRAs, paths relative to the loras folder (with subfolders). */
   listLoras(): Promise<string[]>;
   /**
@@ -168,11 +175,14 @@ export interface ComfyClient {
    * Uploads a local image (phone URI) to ComfyUI's input folder, optionally
    * into `subfolder` (relative to input/, '' = root). Returns the
    * server-side filename (for LoadImage / the gallery's input root).
+   * The same route takes any file (a voice for LoadAudio, a video): pass its
+   * `mimeType`, otherwise PNG/JPEG is inferred from the name.
    */
   uploadImage(
     uri: string,
     name: string,
     subfolder?: string,
+    mimeType?: string,
   ): Promise<{ name: string }>;
   /**
    * Display URL of an image (GET /view). `version` (usually the mtime) is
@@ -231,6 +241,12 @@ export function createClient(baseUrl: string): ComfyClient {
       request<{ path: string; mtime: number; dir?: boolean }[]>(
         base,
         '/komfy/files',
+      ),
+
+    getVideoRecipe: (path) =>
+      request<{ prompt: PromptGraph | null }>(
+        base,
+        `/komfy/recipe?path=${encodeURIComponent(path)}`,
       ),
 
     deletePaths: (paths) =>
@@ -302,14 +318,16 @@ export function createClient(baseUrl: string): ComfyClient {
         body: JSON.stringify({ clear: true }),
       }),
 
-    uploadImage: async (uri, name, subfolder = '') => {
+    uploadImage: async (uri, name, subfolder = '', mimeType) => {
       const post = (path: string) => {
         const form = new FormData();
         // React Native file object (local phone uri).
         form.append('image', {
           uri,
           name,
-          type: name.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg',
+          type:
+            mimeType ??
+            (name.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg'),
         } as unknown as Blob);
         form.append('type', 'input');
         if (subfolder !== '') form.append('subfolder', subfolder);

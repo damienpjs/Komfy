@@ -13,8 +13,6 @@ export interface FamilyMember {
   manifestId: string;
   /** i18n key of the mode label shown in the switch. */
   mode: string;
-  /** Optional engine variant within a mode (Video ▸ Image: LTX 2.5 / 2.3). */
-  engine?: string;
   icon: WorkflowIconKey;
 }
 
@@ -100,11 +98,12 @@ export const CATALOG: CatalogSection[] = [
         engine: 'LTX 2.5',
         members: [
           { manifestId: 'ltx25-t2v', mode: 'catalog.modes.fromText', icon: 't2v' },
-          { manifestId: 'ltx25-i2v', mode: 'catalog.modes.fromImage', engine: 'LTX 2.5', icon: 'i2v' },
-          { manifestId: 'ltx-i2v', mode: 'catalog.modes.fromImage', engine: 'LTX 2.3', icon: 'i2v' },
+          { manifestId: 'ltx25-i2v', mode: 'catalog.modes.fromImage', icon: 'i2v' },
+          { manifestId: 'ltx25-a2v', mode: 'catalog.modes.fromVoice', icon: 'a2v' },
           { manifestId: 'ltx25-flf', mode: 'catalog.modes.firstLast', icon: 'flf' },
         ],
       },
+      single('videoUpscale', 'ltx25-upscale', 'videoUpscale', 'LTX 2.5'),
     ],
   },
   {

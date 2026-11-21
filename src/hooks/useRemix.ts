@@ -4,7 +4,8 @@
  * 1. downloads the PNG via /view and reads the `prompt` tEXt chunk on the
  *    app side (parser in src/utils/pngMetadata.ts) — the file bytes are
  *    the ground truth;
- * 2. otherwise (non-PNG file, /view failed): GET /history. ⚠️ After a
+ * 2. a video: its `prompt` tag, read server-side (GET /komfy/recipe);
+ * 3. otherwise (no embedded recipe, /view failed): GET /history. ⚠️ After a
  *    deletion, SaveImage reuses its counters: several jobs of the session
  *    can carry the same path — take the most recent one.
  */
@@ -93,7 +94,22 @@ async function graphFromPng(
   }
 }
 
-/** PNG chunk first (ground truth), /history as the fallback. */
+/** Video `prompt` tag, read by the server (null: none or old extension). */
+async function graphFromVideo(
+  baseUrl: string,
+  image: GalleryImage,
+): Promise<PromptGraph | null> {
+  try {
+    return (await createClient(baseUrl).getVideoRecipe(image.path)).prompt;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The file first (ground truth: PNG chunk, video tag), /history as the
+ * fallback (videos made before the recipe was embedded, old extension).
+ */
 async function extractGraph(
   serverUrl: string,
   image: GalleryImage,
@@ -105,6 +121,8 @@ async function extractGraph(
     } catch {
       // /view failed: still try /history.
     }
+  } else if (image.isVideo) {
+    graph = await graphFromVideo(serverUrl, image);
   }
   if (!graph) {
     graph = await graphFromHistory(serverUrl, image);

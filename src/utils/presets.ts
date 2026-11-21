@@ -22,7 +22,12 @@ function truncate(v: string): string {
  * a preset leaves them out, and applying one never clears them.
  */
 function isPerPhoto(field: WorkflowField): boolean {
-  return field.kind === 'image' || field.kind === 'mask';
+  return (
+    field.kind === 'image' ||
+    field.kind === 'mask' ||
+    field.kind === 'audio' ||
+    field.kind === 'video'
+  );
 }
 
 /** The form values a preset keeps: every field of the manifest but the per-photo ones. */

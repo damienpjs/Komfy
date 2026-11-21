@@ -75,7 +75,7 @@ export function UseInSheet({ visible, onPick, onClose }: Props) {
                 </Text>
                 {item.mode != null && (
                   <Text style={styles.mode} numberOfLines={1}>
-                    {[t(item.mode), item.engine].filter(Boolean).join(' · ')}
+                    {t(item.mode)}
                   </Text>
                 )}
               </View>

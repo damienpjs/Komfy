@@ -15,8 +15,6 @@ export interface PromptTarget {
   name: string;
   /** i18n key of the family mode, when the entry has several. */
   mode?: string;
-  /** Engine variant within a mode (shown as is). */
-  engine?: string;
   icon: WorkflowIconKey;
 }
 
@@ -34,7 +32,6 @@ export function promptTargets(): PromptTarget[] {
           manifestId: member.manifestId,
           name: entry.name,
           mode: family ? member.mode : undefined,
-          engine: member.engine,
           icon: member.icon,
         });
       }

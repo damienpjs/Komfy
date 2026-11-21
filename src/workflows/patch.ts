@@ -129,6 +129,13 @@ export function validate(
     if (field.kind === 'image' && typeof value === 'string' && isHeif(value)) {
       errors[field.key] = i18n.t('validation.imageHeic');
     }
+    if ((field.kind === 'audio' || field.kind === 'video') && field.required) {
+      if (typeof value !== 'string' || value === '') {
+        errors[field.key] = i18n.t(
+          field.kind === 'audio' ? 'validation.audioRequired' : 'validation.videoRequired',
+        );
+      }
+    }
     if (field.kind === 'mask' && field.required) {
       if (typeof value !== 'string' || value === '') {
         errors[field.key] = i18n.t('validation.maskRequired');
@@ -785,6 +792,8 @@ export function patchGraph(
         );
         break;
       case 'image':
+      case 'audio':
+      case 'video':
       case 'mask':
         // Same guard as `text`/`number`: an optional image whose LoadImage an
         // earlier select dropped (the KREA2 edit in one-image mode).

@@ -653,8 +653,10 @@ function matchVariant(
         break;
       }
       case 'image':
+      case 'audio':
+      case 'video':
       case 'mask': {
-        // Both carry a server-side filename; remixing re-uses the mask
+        // All carry a server-side filename; remixing re-uses the mask
         // already sitting in the input folder, editable again in the form.
         const eId = state.map.get(field.target.nodeId);
         const v = extracted[eId!]?.inputs[field.target.input];

@@ -46,6 +46,8 @@ function coveredInputs(fields: WorkflowField[]): Set<string> {
       case 'number':
       case 'seed':
       case 'image':
+      case 'audio':
+      case 'video':
       case 'mask':
       case 'model':
         keys.add(`${field.target.nodeId}/${field.target.input}`);

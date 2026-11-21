@@ -29,14 +29,6 @@ import type { WorkflowField } from './types';
 /** The KomfyLTX25MLX node id in every LTX 2.5 graph. */
 export const LTX25_NODE = '1';
 
-/**
- * Negative prompt for the CFG modes (two-stage, HQ, one-stage); the distilled
- * mode has no CFG and ignores it. Built from the Rushes pilot: cuts and
- * teleports were the first failure, then limbs crossing objects.
- */
-export const LTX25_NEGATIVE =
-  'jump cut, scene change, camera teleport, different location, sudden zoom, blurry, distorted face, deformed hands, limbs passing through objects, extra people, text, watermark, subtitles';
-
 /** LoadImage nodes of the optional character references (ref_1..ref_3). */
 export const LTX25_REF_NODES = ['11', '12', '13'] as const;
 
@@ -44,12 +36,13 @@ export const LTX25_REF_NODES = ['11', '12', '13'] as const;
 const INGREDIENTS_LORA = 'ltx/ic-lora/ltx-2.5-22b-ic-lora-ingredients-0.9.safetensors';
 
 /**
- * Frozen KomfyLTX25MLX node; `images` wires the optional image inputs,
- * `refs` the character references (text to video only).
+ * Frozen KomfyLTX25MLX node; `images` wires the optional image inputs and
+ * the voice (a LoadAudio: talking video), `refs` the character references
+ * (text to video only).
  */
 export function ltx25Node(
   prefix: string,
-  images: { first?: string; last?: string } = {},
+  images: { first?: string; last?: string; voice?: string } = {},
   refs = false,
 ): PromptNode {
   return {
@@ -57,8 +50,6 @@ export function ltx25Node(
     inputs: {
       model_pack: 'ltx-2.5-mlx-q8',
       prompt: '',
-      negative_prompt: LTX25_NEGATIVE,
-      mode: 'distilled',
       width: 768,
       height: 576,
       fit_to_image: 1,
@@ -76,6 +67,9 @@ export function ltx25Node(
       filename_prefix: prefix,
       ...(images.first ? { first_image: [images.first, 0] } : {}),
       ...(images.last ? { last_image: [images.last, 0] } : {}),
+      ...(images.voice
+        ? { voice: [images.voice, 0], voice_normalize: 1, lip_sync_hint: 1 }
+        : {}),
       ...(refs
         ? {
             ref_1: [LTX25_REF_NODES[0], 0],
@@ -88,6 +82,14 @@ export function ltx25Node(
         : {}),
     },
     _meta: { title: 'LTX 2.5 (MLX) · Komfy' },
+  };
+}
+
+export function loadAudioNode(title: string): PromptNode {
+  return {
+    class_type: 'LoadAudio',
+    inputs: { audio: '' },
+    _meta: { title },
   };
 }
 
@@ -150,7 +152,7 @@ export function ltx25RefFields(): WorkflowField[] {
 }
 
 /** On/Off select patching a BOOLEAN input of the node. */
-function toggle(
+export function toggle(
   key: string,
   input: string,
   defaultOn: boolean,
@@ -170,7 +172,7 @@ function toggle(
   };
 }
 
-/** Prompt + negative, first in every LTX 2.5 form. */
+/** The prompt, first in every LTX 2.5 form (no negative: the distilled mode has no CFG). */
 export function ltx25PromptFields(placeholder: string): WorkflowField[] {
   return [
     {
@@ -183,16 +185,6 @@ export function ltx25PromptFields(placeholder: string): WorkflowField[] {
       hint: 'wf.ltx25.promptHint',
       multiline: true,
       required: true,
-    },
-    {
-      kind: 'text',
-      key: 'negative',
-      label: 'wf.common.negativePrompt',
-      target: target('negative_prompt'),
-      default: LTX25_NEGATIVE,
-      placeholder: 'wf.common.negativePlaceholder',
-      hint: 'wf.ltx25.negativeHint',
-      multiline: true,
     },
   ];
 }
@@ -226,13 +218,19 @@ export function ltx25StrengthFields(withLast: boolean): WorkflowField[] {
   return fields;
 }
 
+const VOICE_OMITS = new Set(['duration', 'audio', 'tileFrames']);
+
 /**
- * Everything after the prompt and the images: format, duration, quality
- * mode, model pack, LoRA, memory levers, seed. `withImage` adds the
- * fit-to-image toggle (i2v, flf).
+ * Everything after the prompt and the images: format, duration, model pack,
+ * LoRA, memory levers, seed. There is no quality picker: every render uses
+ * the distilled mode, the only one that keeps a character LoRA speaking in
+ * its own voice (the CFG modes gave voice-over and mannered gestures), and
+ * the final quality comes from the x2 video upscale (ltx25-upscale).
+ * `withImage` adds the fit-to-image toggle (i2v, flf, a2v); `voice` drops
+ * what a voice decides (a2v).
  */
-export function ltx25CommonFields(withImage: boolean): WorkflowField[] {
-  return [
+export function ltx25CommonFields(withImage: boolean, voice = false): WorkflowField[] {
+  const fields: WorkflowField[] = [
     {
       kind: 'dimensions',
       key: 'format',
@@ -274,20 +272,6 @@ export function ltx25CommonFields(withImage: boolean): WorkflowField[] {
       max: 50,
       integer: true,
       hint: 'wf.ltx25.fpsHint',
-    },
-    {
-      kind: 'select',
-      key: 'mode',
-      label: 'wf.ltx25.mode',
-      hint: 'wf.ltx25.modeHint',
-      defaultIndex: 0,
-      remember: true,
-      options: [
-        { label: 'wf.ltx25.modeDistilled', patches: [{ target: target('mode'), value: 'distilled' }] },
-        { label: 'wf.ltx25.modeTwoStage', patches: [{ target: target('mode'), value: 'two_stage' }] },
-        { label: 'wf.ltx25.modeHq', patches: [{ target: target('mode'), value: 'two_stages_hq' }] },
-        { label: 'wf.ltx25.modeOneStage', patches: [{ target: target('mode'), value: 'one_stage' }] },
-      ],
     },
     {
       kind: 'model',
@@ -339,4 +323,7 @@ export function ltx25CommonFields(withImage: boolean): WorkflowField[] {
       target: target('seed'),
     },
   ];
+  // With a voice the clip length follows the voice, the soundtrack is the
+  // voice itself, and a2v has no temporal tiles.
+  return voice ? fields.filter((f) => !VOICE_OMITS.has(f.key)) : fields;
 }

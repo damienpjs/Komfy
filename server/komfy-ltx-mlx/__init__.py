@@ -13,18 +13,22 @@ history, gallery, remix) and delegates the generation itself to the
     the Komfy queue shows a real percentage), and an Interrupt from the app
     terminates the child's whole process group.
 
-One node class covers the three Komfy workflows: no image = text to video,
-`first_image` = image to video, `first_image` + `last_image` = first/last
-frame (`--image PATH 0 S --image PATH last S`).
+`KomfyLTX25MLX` covers four Komfy workflows, always on the distilled plan:
+no image = text to video, `first_image` = image to video, `first_image` +
+`last_image` = first/last frame (`--image PATH 0 S --image PATH last S`),
+`first_image` + `voice` = talking video (`a2v --distilled`, the clip length
+following the voice, a LoRA fused through a2v_lora.py).
+`KomfyLTX25UpscaleMLX` upscales a clip x2 (`ic-lora` with the
+Pixel-Spatial-Upscaler IC-LoRA and an optional identity LoRA), the source's
+audio muxed back. Both embed the API graph in the mp4's `prompt` tag.
 
 Character references (optional `ref_1`..`ref_3`): the photos are laid out on
 a reference sheet (reference_sheet.py), looped into a static video at the
 output size, and the render switches to `ltx-2-mlx ic-lora` with the
 Ingredients IC-LoRA and that video as `--video-conditioning`. Text to video
 only: with a start image the clip leaves it after frame 0, so the node
-refuses the combination. `mode`, `negative_prompt`, `audio=False` and
-`tile_frames` do not apply there. ic-lora runs Lightricks' Ingredients recipe:
-one stage at full size on the dev transformer with the pack's distilled LoRA
+refuses the combination. `audio=False` and `tile_frames` do not apply
+there. ic-lora runs Lightricks' Ingredients recipe: one stage at full size on the dev transformer with the pack's distilled LoRA
 fused at 0.5 (measured on 0.18 with a 2.5 pack: the default distilled
 two-stage plan gives a mosaic, the distilled single stage copies the sheet).
 It always renders audio. Needs ltx-2-mlx 0.17+ for IC-LoRA on 2.5 packs.
@@ -39,6 +43,8 @@ restart ComfyUI.
 """
 
 import glob
+import json
+import math
 import os
 import queue
 import re
@@ -48,6 +54,7 @@ import signal
 import subprocess
 import tempfile
 import threading
+import wave
 
 import numpy as np
 from PIL import Image
@@ -69,11 +76,22 @@ NO_LORA = "None"
 # noted in the Rushes pilot: pointing the CLI at a wrong path makes it try a
 # HuggingFace download instead of failing).
 PACK_MARKERS = ("split_model.json", "embedded_config.json")
-MODES = ["distilled", "two_stage", "two_stages_hq", "one_stage"]
 # Homebrew locations: the child needs ffmpeg, and a ComfyUI started by a
 # launchd agent or the Komfy supervisor often has a bare PATH.
 EXTRA_PATH = ["/opt/homebrew/bin", "/usr/local/bin"]
 TQDM_RE = re.compile(r"(\d+)/(\d+)\s*\[")
+# Voice to video: the a2v wrapper that fuses a LoRA (a2v has no --lora flag).
+A2V_LORA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "a2v_lora.py")
+VOICE_MAX_SECONDS = 20.0
+# Appended to the prompt when a voice drives the clip. Measured: without a
+# speaking description (and with "a mocking half smile") the mouth stayed
+# shut in every mode; spelling out the articulation made the lips follow.
+LIP_SYNC_HINT = (
+    " The lips clearly follow the spoken words, the mouth opens on every"
+    " syllable, the head stays steady."
+)
+# x2 video upscale: the Pixel-Spatial-Upscaler IC-LoRA of the 2.5 pack.
+UPSCALE_LORA_HINT = "pixel-spatial-upscaler-x2"
 LOG_TAIL = 60
 
 
@@ -237,11 +255,7 @@ def _count_frames(path, env):
 
 
 def _default_ingredients(loras):
-    for name in loras:
-        low = name.lower()
-        if "ingredients" in low and "2.5" in low:
-            return name
-    return NO_LORA
+    return _default_lora(loras, "ingredients", "2.5")
 
 
 def _dev_recipe(pack):
@@ -278,6 +292,108 @@ def _sheet_video(refs, width, height, frames, fps, folder, env):
     return mp4
 
 
+def _frames_covering(seconds, fps):
+    """Smallest LTX frame count (8k + 1) whose length covers `seconds`."""
+    k = max(1, math.ceil((seconds * fps - 1) / 8.0))
+    return 8 * k + 1
+
+
+def _write_wav(audio, path):
+    """ComfyUI AUDIO ({"waveform": [B, C, T], "sample_rate"}) as 16-bit WAV.
+    Returns the duration in seconds."""
+    rate = int(audio["sample_rate"])
+    samples = audio["waveform"][0].detach().cpu().float().numpy()  # [C, T]
+    pcm = (np.clip(samples, -1.0, 1.0).T * 32767.0).astype("<i2")
+    with wave.open(path, "wb") as out:
+        out.setnchannels(samples.shape[0])
+        out.setsampwidth(2)
+        out.setframerate(rate)
+        out.writeframes(pcm.tobytes())
+    return samples.shape[1] / float(rate)
+
+
+def _prepare_voice(raw, seconds, normalize, folder, env):
+    """The voice track a2v gets: loudness-normalized (a phone recording at
+    -25 dB mean barely moved the lips; about -18 dB did), then padded with
+    silence to `seconds` (a2v rejects a track shorter than the clip)."""
+    ffmpeg = shutil.which("ffmpeg", path=env["PATH"])
+    if not ffmpeg:
+        raise RuntimeError("ffmpeg not found: needed to prepare the voice")
+    filters = (["loudnorm=I=-16:TP=-1.5:LRA=11"] if normalize else []) + [
+        f"apad=whole_dur={seconds:.3f}"]
+    out = os.path.join(folder, "voice.wav")
+    res = subprocess.run(
+        [ffmpeg, "-y", "-v", "error", "-i", raw, "-af", ",".join(filters), "-ar", "48000", out],
+        capture_output=True, text=True, env=env,
+    )
+    if res.returncode != 0 or not os.path.isfile(out):
+        raise RuntimeError("Could not prepare the voice:\n" + res.stderr[-800:])
+    return out
+
+
+def _finalize(src, dst, graph, env, audio_from=None):
+    """Moves the CLI's mp4 to `dst`, re-muxed without re-encoding: the API
+    graph goes into the `prompt` tag (where ComfyUI's SaveVideo puts it), so
+    the recipe outlives the server history, and `audio_from` (the source of
+    an upscale) supplies the audio track. Without ffmpeg, or if the re-mux
+    fails, the file is kept as is, except when the audio was required."""
+    ffmpeg = shutil.which("ffmpeg", path=env["PATH"])
+    cmd = [ffmpeg or "ffmpeg", "-y", "-v", "error", "-i", src]
+    if audio_from:
+        cmd += ["-i", audio_from, "-map", "0:v", "-map", "1:a?"]
+    else:
+        cmd += ["-map", "0"]
+    cmd += ["-c", "copy"]
+    if graph:
+        cmd += ["-movflags", "use_metadata_tags", "-metadata", "prompt=" + json.dumps(graph)]
+    cmd += [dst]
+    res = subprocess.run(cmd, capture_output=True, text=True, env=env) if ffmpeg else None
+    if res is not None and res.returncode == 0 and os.path.isfile(dst):
+        os.remove(src)
+        return
+    if audio_from:
+        raise RuntimeError("Could not mux the source audio back:\n"
+                           + (res.stderr[-800:] if res else "ffmpeg not found"))
+    print("[komfy-ltx-mlx] recipe not embedded: "
+          + (res.stderr[-300:] if res else "ffmpeg not found"))
+    shutil.move(src, dst)
+
+
+def _resolve_pack(model_pack):
+    packs = _discover_packs()
+    if model_pack not in packs:
+        raise RuntimeError(
+            f"LTX MLX pack '{model_pack}' not found. Searched: "
+            + ", ".join(_local_roots() + [_hf_hub_dir()])
+            + ". Set KOMFY_LTX_MLX_PACKS to the folder holding it."
+        )
+    return packs[model_pack]
+
+
+def _binary():
+    binary = os.environ.get("KOMFY_LTX_MLX_BIN", DEFAULT_BIN)
+    if not os.access(binary, os.X_OK):
+        raise RuntimeError(f"ltx-2-mlx executable not found at {binary} (set KOMFY_LTX_MLX_BIN)")
+    return binary
+
+
+def _output_path(prefix, w, h):
+    """(absolute .mp4 path, stem, subfolder, folder) under ComfyUI's output."""
+    full_folder, filename, counter, subfolder, _ = folder_paths.get_save_image_path(
+        prefix, folder_paths.get_output_directory(), w, h)
+    os.makedirs(full_folder, exist_ok=True)
+    stem = f"{filename}_{counter:05}_"
+    return os.path.join(full_folder, stem + ".mp4"), stem, subfolder, full_folder
+
+
+def _default_lora(loras, *needles):
+    for name in loras:
+        low = name.lower()
+        if all(n in low for n in needles):
+            return name
+    return NO_LORA
+
+
 def _extract_frame(video, index, png, env):
     ffmpeg = shutil.which("ffmpeg", path=env["PATH"])
     if not ffmpeg:
@@ -306,11 +422,6 @@ class KomfyLTX25MLX:
             "required": {
                 "model_pack": (packs, {"tooltip": "ltx-2-mlx model pack (LTX 2.5 q8 recommended on 64 GB)"}),
                 "prompt": ("STRING", {"multiline": True, "default": ""}),
-                "negative_prompt": ("STRING", {
-                    "multiline": True, "default": "",
-                    "tooltip": "CFG modes only (ignored by distilled). Empty = upstream default negative",
-                }),
-                "mode": (MODES, {"default": "distilled"}),
                 "width": ("INT", {"default": 768, "min": 128, "max": 3840, "step": 32}),
                 "height": ("INT", {"default": 512, "min": 128, "max": 3840, "step": 32}),
                 "fit_to_image": ("BOOLEAN", {
@@ -357,7 +468,20 @@ class KomfyLTX25MLX:
                     "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.05,
                     "tooltip": "Strength of the reference sheet video (ic-lora --video-conditioning)",
                 }),
+                "voice": ("AUDIO", {
+                    "tooltip": "A voice to speak: switches the render to ltx-2-mlx a2v (distilled). "
+                               "Needs a first image; the clip length follows the voice",
+                }),
+                "voice_normalize": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "Bring the voice to about -16 LUFS before the render (quiet phone recordings barely move the lips)",
+                }),
+                "lip_sync_hint": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "With a voice: append a sentence describing the articulation to the prompt",
+                }),
             },
+            "hidden": {"komfy_graph": "PROMPT"},
         }
 
     RETURN_TYPES = ()
@@ -365,21 +489,14 @@ class KomfyLTX25MLX:
     OUTPUT_NODE = True
     CATEGORY = "Komfy/LTX MLX"
 
-    def generate(self, model_pack, prompt, negative_prompt, mode, width, height, fit_to_image,
+    def generate(self, model_pack, prompt, width, height, fit_to_image,
                  duration, frame_rate, seed, first_strength, last_strength, lora_name,
                  lora_strength, audio, low_ram, tile_frames, save_last_frame, filename_prefix,
                  first_image=None, last_image=None, ref_1=None, ref_2=None, ref_3=None,
-                 ingredients_lora=NO_LORA, ingredients_strength=1.0, reference_strength=1.0):
-        packs = _discover_packs()
-        if model_pack not in packs:
-            raise RuntimeError(
-                f"LTX MLX pack '{model_pack}' not found. Searched: "
-                + ", ".join(_local_roots() + [_hf_hub_dir()])
-                + ". Set KOMFY_LTX_MLX_PACKS to the folder holding it."
-            )
-        binary = os.environ.get("KOMFY_LTX_MLX_BIN", DEFAULT_BIN)
-        if not os.access(binary, os.X_OK):
-            raise RuntimeError(f"ltx-2-mlx executable not found at {binary} (set KOMFY_LTX_MLX_BIN)")
+                 ingredients_lora=NO_LORA, ingredients_strength=1.0, reference_strength=1.0,
+                 voice=None, voice_normalize=True, lip_sync_hint=True, komfy_graph=None):
+        pack = _resolve_pack(model_pack)
+        binary = _binary()
         if not prompt.strip():
             raise ValueError("The prompt is empty")
         if last_image is not None and first_image is None:
@@ -391,10 +508,18 @@ class KomfyLTX25MLX:
             # Measured on 0.18: with a start image the clip leaves it after
             # frame 0 and films the sheet. Fail before a 13-minute render.
             raise ValueError("Character references work in text to video only: remove the first image")
+        voice_seconds = None
+        if voice is not None:
+            if first_image is None or last_image is not None or refs:
+                raise ValueError("A voice needs exactly one start image (no last image, no references)")
+            voice_seconds = voice["waveform"].shape[-1] / float(voice["sample_rate"])
+            if voice_seconds > VOICE_MAX_SECONDS:
+                raise ValueError(
+                    f"The voice lasts {voice_seconds:.1f} s: keep it under {VOICE_MAX_SECONDS:g} s")
 
-        # Every mode except one_stage samples stage 1 at half resolution,
-        # whose sides must stay multiples of 32: full size in multiples of 64.
-        mult = 32 if mode == "one_stage" else 64
+        # The distilled plan samples stage 1 at half resolution, whose sides
+        # must stay multiples of 32: full size in multiples of 64.
+        mult = 64
         if fit_to_image and first_image is not None:
             img_h, img_w = int(first_image.shape[1]), int(first_image.shape[2])
             long_side = max(width, height)
@@ -404,12 +529,7 @@ class KomfyLTX25MLX:
                 width, height = long_side * img_w / img_h, long_side
         w, h = _round_to(width, mult), _round_to(height, mult)
 
-        out_dir = folder_paths.get_output_directory()
-        full_folder, filename, counter, subfolder, _ = folder_paths.get_save_image_path(
-            filename_prefix, out_dir, w, h)
-        os.makedirs(full_folder, exist_ok=True)
-        stem = f"{filename}_{counter:05}_"
-        out_path = os.path.join(full_folder, stem + ".mp4")
+        out_path, stem, subfolder, full_folder = _output_path(filename_prefix, w, h)
 
         tmpdir = tempfile.mkdtemp(prefix="komfy-ltx-", dir=folder_paths.get_temp_directory())
         try:
@@ -417,17 +537,41 @@ class KomfyLTX25MLX:
             frames = _frames_for(duration, frame_rate) if duration > 0 else None
             if refs and frames is None:
                 frames = _frames_for(REFS_DEFAULT_SECONDS, frame_rate)
-            if refs:
-                cmd = [binary, "ic-lora"] + _dev_recipe(packs[model_pack])
+            lora_path = None
+            if lora_name != NO_LORA:
+                lora_path = folder_paths.get_full_path("loras", lora_name)
+                if not lora_path:
+                    raise RuntimeError(f"LoRA '{lora_name}' not found in models/loras")
+            if voice is not None:
+                # The voice sets the length; it is normalized and padded to
+                # cover every frame. Distilled only: measured with a character
+                # LoRA, the CFG plans speak in voice-over instead of the lips.
+                frames = _frames_covering(voice_seconds, frame_rate)
+                raw = os.path.join(tmpdir, "voice-raw.wav")
+                _write_wav(voice, raw)
+                track = _prepare_voice(raw, frames / frame_rate + 0.3, voice_normalize, tmpdir, env)
+                if lora_path:
+                    python = os.path.join(os.path.dirname(binary), "python")
+                    if not os.access(python, os.X_OK):
+                        raise RuntimeError(f"No python next to {binary}: needed to fuse the LoRA into a2v")
+                    cmd = [python, A2V_LORA, lora_path, f"{lora_strength:g}", "--"]
+                else:
+                    cmd = [binary, "a2v"]
+                cmd += ["--distilled", "--audio", track]
+                if lip_sync_hint:
+                    prompt = prompt.rstrip() + LIP_SYNC_HINT
+            elif refs:
+                cmd = [binary, "ic-lora"] + _dev_recipe(pack)
             else:
-                cmd = [binary, "generate", "--" + mode.replace("_", "-")]
+                cmd = [binary, "generate", "--distilled"]
+            raw_out = os.path.join(tmpdir, "render.mp4")
             cmd += [
-                "--model", packs[model_pack],
+                "--model", pack,
                 "--prompt", prompt,
                 "-H", str(h), "-W", str(w),
                 "--frame-rate", str(frame_rate),
                 "--seed", str(seed),
-                "--output", out_path,
+                "--output", raw_out,
             ]
             if frames:
                 cmd += ["--frames", str(frames)]
@@ -442,25 +586,24 @@ class KomfyLTX25MLX:
                 cmd += ["--lora", ingredients, f"{ingredients_strength:g}"]
                 sheet = _sheet_video(refs, w, h, frames, frame_rate, tmpdir, env)
                 cmd += ["--video-conditioning", sheet, f"{reference_strength:g}"]
-            elif negative_prompt.strip() and mode != "distilled":
-                cmd += ["--negative-prompt", negative_prompt]
-            if lora_name != NO_LORA:
-                cmd += ["--lora", folder_paths.get_full_path("loras", lora_name), f"{lora_strength:g}"]
-            if not audio and not refs:
+            if lora_path and voice is None:
+                cmd += ["--lora", lora_path, f"{lora_strength:g}"]
+            if not audio and not refs and voice is None:
                 cmd += ["--no-audio"]
             if low_ram:
                 cmd += ["--low-ram"]
-            if tile_frames > 1 and not refs:
+            if tile_frames > 1 and not refs and voice is None:
                 cmd += ["--tile-frames", str(tile_frames)]
 
             print("[komfy-ltx-mlx] " + shlex.join(cmd))
             mm.unload_all_models()
             mm.soft_empty_cache()
 
-            self._run(cmd, env, tmpdir)
+            _run(cmd, env, tmpdir)
 
-            if not os.path.isfile(out_path):
-                raise RuntimeError(f"ltx-2-mlx exited without writing {out_path}")
+            if not os.path.isfile(raw_out):
+                raise RuntimeError(f"ltx-2-mlx exited without writing {raw_out}")
+            _finalize(raw_out, out_path, komfy_graph, env)
 
             results = [{"filename": stem + ".mp4", "subfolder": subfolder, "type": "output"}]
             if save_last_frame:
@@ -476,51 +619,175 @@ class KomfyLTX25MLX:
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
-    @staticmethod
-    def _run(cmd, env, cwd):
-        proc = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env, cwd=cwd,
-            start_new_session=True,
-        )
-        lines = queue.Queue()
-        reader = threading.Thread(target=_read_stream, args=(proc.stdout, lines), daemon=True)
-        reader.start()
 
-        tail, pbar, bar_total, bar_n, done = [], None, None, -1, False
+class KomfyLTX25UpscaleMLX:
+    """x2 upscale of an LTX clip (pixels, motion and mouth kept frame for
+    frame), with an optional identity LoRA, through ltx-2-mlx ic-lora.
+
+    Recipe validated on 2026-11-21: one stage at twice the source size with
+    the Pixel-Spatial-Upscaler x2 IC-LoRA at 1.0 and the source as
+    `--video-conditioning` at 1.0. A character LoRA on top sharpens the face
+    toward the character (1.0 a clear gain, 1.2 to 1.5 marginal); the mouth
+    shapes stay those of the source, so a lip-synced take stays in sync. The
+    source's audio is muxed back without re-encoding. About 38 min for 4.4 s
+    at 1024x1536 on an M3 Max with free memory.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        packs = list(_discover_packs().keys()) or [NO_PACK]
+        loras = [NO_LORA] + folder_paths.get_filename_list("loras")
+        return {
+            "required": {
+                "model_pack": (packs, {"tooltip": "ltx-2-mlx model pack (LTX 2.5)"}),
+                "video": ("VIDEO", {"tooltip": "The clip to upscale (an LTX output: 8k + 1 frames)"}),
+                "prompt": ("STRING", {
+                    "multiline": True, "default": "",
+                    "tooltip": "Describe the clip, ideally the prompt it was made with",
+                }),
+                "lora_name": (loras, {"tooltip": "Identity LoRA (e.g. the character LoRA of the source take)"}),
+                "lora_strength": ("FLOAT", {"default": 1.0, "min": -2.0, "max": 2.0, "step": 0.05}),
+                "seed": ("INT", {"default": 0, "min": 0, "max": 2**31 - 1, "control_after_generate": True}),
+                "low_ram": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Stream transformer blocks from disk: lower peak memory, slower",
+                }),
+                "filename_prefix": ("STRING", {"default": "komfy/ltx25-upscale"}),
+            },
+            "optional": {
+                # A path under models/loras, not a list (same reason as the
+                # Ingredients LoRA: a combo would reject every render when it
+                # is missing). The default is found by name.
+                "upscaler_lora": ("STRING", {"default": _default_lora(loras, UPSCALE_LORA_HINT, "2.5")}),
+                "upscaler_strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05}),
+            },
+            "hidden": {"komfy_graph": "PROMPT"},
+        }
+
+    RETURN_TYPES = ()
+    FUNCTION = "upscale"
+    OUTPUT_NODE = True
+    CATEGORY = "Komfy/LTX MLX"
+
+    def upscale(self, model_pack, video, prompt, lora_name, lora_strength, seed, low_ram,
+                filename_prefix, upscaler_lora=None, upscaler_strength=1.0, komfy_graph=None):
+        pack = _resolve_pack(model_pack)
+        binary = _binary()
+        if not prompt.strip():
+            raise ValueError("The prompt is empty")
+        if upscaler_lora is None:
+            # Optional input left out of the graph (the Komfy workflow does):
+            # look the IC-LoRA up by name, as the widget default does.
+            upscaler_lora = _default_lora(folder_paths.get_filename_list("loras"), UPSCALE_LORA_HINT, "2.5")
+        upscaler = folder_paths.get_full_path("loras", upscaler_lora.strip()) \
+            if upscaler_lora.strip() not in ("", NO_LORA) else None
+        if not upscaler:
+            raise RuntimeError(
+                "Pixel-Spatial-Upscaler x2 IC-LoRA not found in models/loras "
+                "(ltx-2.5-22b-ic-lora-pixel-spatial-upscaler-x2-1.0.safetensors, see the node README)")
+
+        src_w, src_h = video.get_dimensions()
+        fps = int(round(float(video.get_frame_rate())))
+        count = int(video.get_frame_count())
+        if count < 9:
+            raise ValueError(f"The clip has {count} frames: at least 9 are needed")
+        # LTX clips already hold 8k + 1 frames; anything else is trimmed down.
+        frames = 8 * ((count - 1) // 8) + 1
+        w, h = _round_to(2 * src_w, 32), _round_to(2 * src_h, 32)
+        out_path, stem, subfolder, _ = _output_path(filename_prefix, w, h)
+
+        tmpdir = tempfile.mkdtemp(prefix="komfy-ltx-up-", dir=folder_paths.get_temp_directory())
         try:
-            while not done:
-                if mm.processing_interrupted():
-                    _terminate(proc)
-                    raise mm.InterruptProcessingException()
-                try:
-                    line = lines.get(timeout=0.25)
-                except queue.Empty:
-                    continue
-                if line is None:
-                    done = True
-                    continue
-                m = TQDM_RE.search(line)
-                if m:
-                    n, total = int(m.group(1)), int(m.group(2))
-                    if total != bar_total or n < bar_n:
-                        pbar, bar_total = comfy.utils.ProgressBar(total), total
-                        bar_n = -1
-                    if n != bar_n:
-                        pbar.update_absolute(n, total)
-                        bar_n = n
-                        print(f"[komfy-ltx-mlx] {line.strip()}")
-                    continue
-                print(f"[komfy-ltx-mlx] {line.rstrip()}")
-                tail.append(line.rstrip())
-                del tail[:-LOG_TAIL]
-            proc.wait()
-        except BaseException:
-            if proc.poll() is None:
+            env = _child_env()
+            source = video.get_stream_source()
+            if not isinstance(source, str):
+                path = os.path.join(tmpdir, "source.mp4")
+                with open(path, "wb") as f:
+                    f.write(source.read())
+                source = path
+            raw_out = os.path.join(tmpdir, "upscale.mp4")
+            cmd = [
+                binary, "ic-lora", "--single-stage",
+                "--model", pack,
+                "--prompt", prompt,
+                "-W", str(w), "-H", str(h),
+                "--frames", str(frames),
+                "--frame-rate", str(fps),
+                "--seed", str(seed),
+                "--lora", upscaler, f"{upscaler_strength:g}",
+            ]
+            if lora_name != NO_LORA:
+                lora_path = folder_paths.get_full_path("loras", lora_name)
+                if not lora_path:
+                    raise RuntimeError(f"LoRA '{lora_name}' not found in models/loras")
+                cmd += ["--lora", lora_path, f"{lora_strength:g}"]
+            cmd += ["--video-conditioning", source, "1.0", "--output", raw_out]
+            if low_ram:
+                cmd += ["--low-ram"]
+
+            print("[komfy-ltx-mlx] " + shlex.join(cmd))
+            mm.unload_all_models()
+            mm.soft_empty_cache()
+            _run(cmd, env, tmpdir)
+            if not os.path.isfile(raw_out):
+                raise RuntimeError(f"ltx-2-mlx exited without writing {raw_out}")
+            _finalize(raw_out, out_path, komfy_graph, env, audio_from=source)
+            results = [{"filename": stem + ".mp4", "subfolder": subfolder, "type": "output"}]
+            return {"ui": {"images": results, "animated": (True,)}}
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def _run(cmd, env, cwd):
+    proc = subprocess.Popen(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env, cwd=cwd,
+        start_new_session=True,
+    )
+    lines = queue.Queue()
+    reader = threading.Thread(target=_read_stream, args=(proc.stdout, lines), daemon=True)
+    reader.start()
+
+    tail, pbar, bar_total, bar_n, done = [], None, None, -1, False
+    try:
+        while not done:
+            if mm.processing_interrupted():
                 _terminate(proc)
-            raise
-        if proc.returncode != 0:
-            raise RuntimeError(f"ltx-2-mlx failed (exit {proc.returncode}):\n" + "\n".join(tail[-25:]))
+                raise mm.InterruptProcessingException()
+            try:
+                line = lines.get(timeout=0.25)
+            except queue.Empty:
+                continue
+            if line is None:
+                done = True
+                continue
+            m = TQDM_RE.search(line)
+            if m:
+                n, total = int(m.group(1)), int(m.group(2))
+                if total != bar_total or n < bar_n:
+                    pbar, bar_total = comfy.utils.ProgressBar(total), total
+                    bar_n = -1
+                if n != bar_n:
+                    pbar.update_absolute(n, total)
+                    bar_n = n
+                    print(f"[komfy-ltx-mlx] {line.strip()}")
+                continue
+            print(f"[komfy-ltx-mlx] {line.rstrip()}")
+            tail.append(line.rstrip())
+            del tail[:-LOG_TAIL]
+        proc.wait()
+    except BaseException:
+        if proc.poll() is None:
+            _terminate(proc)
+        raise
+    if proc.returncode != 0:
+        raise RuntimeError(f"ltx-2-mlx failed (exit {proc.returncode}):\n" + "\n".join(tail[-25:]))
 
 
-NODE_CLASS_MAPPINGS = {"KomfyLTX25MLX": KomfyLTX25MLX}
-NODE_DISPLAY_NAME_MAPPINGS = {"KomfyLTX25MLX": "LTX 2.5 (MLX) · Komfy"}
+NODE_CLASS_MAPPINGS = {
+    "KomfyLTX25MLX": KomfyLTX25MLX,
+    "KomfyLTX25UpscaleMLX": KomfyLTX25UpscaleMLX,
+}
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "KomfyLTX25MLX": "LTX 2.5 (MLX) · Komfy",
+    "KomfyLTX25UpscaleMLX": "LTX 2.5 video upscale x2 (MLX) · Komfy",
+}
