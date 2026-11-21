@@ -30,6 +30,7 @@ export type WorkflowIconKey =
   | 'i2v'
   | 'a2v'
   | 'flf'
+  | 'voice'
   | 'prompt'
   | 'idea2prompt'
   | 'img2prompt'
@@ -40,7 +41,7 @@ export type WorkflowIconKey =
 export const PICKABLE_ICONS: WorkflowIconKey[] = [
   'graph', 't2i', 'i2i', 'edit', 'depth', 'repaint', 'context', 'drawReplace',
   'inpaint', 'detect', 'outpaint', 'upscale', 'videoUpscale', 'video', 't2v', 'i2v',
-  'a2v', 'flf',
+  'a2v', 'flf', 'voice',
   'prompt', 'idea2prompt', 'img2prompt',
 ];
 
@@ -236,6 +237,16 @@ export function WorkflowIcon({ name, color, knockout = 'transparent', size = 30 
           <Path d="M2 14.5v3M5 11.5v9M8 13v6M11 15v2" {...s} />
           {arrow}
           {videoRight}
+        </>
+      );
+      break;
+    case 'voice':
+      // Text becomes a voice (sound bars, the a2v input glyph mirrored).
+      body = (
+        <>
+          {textLeft}
+          {arrow}
+          <Path d="M21 14.5v3M24 11.5v9M27 13v6M30 15v2" {...s} />
         </>
       );
       break;

@@ -332,6 +332,22 @@ export interface AudioField extends FieldBase {
   required?: boolean;
   /** Longest audio the server accepts (seconds): shown in red beyond it. */
   maxSeconds?: number;
+  /**
+   * Optional audio left empty: its LoadAudio node is removed at launch and
+   * the input reading it unplugged (same contract as ImageField's), e.g.
+   * the new voice sample of the voice workflow, which overrides a saved one.
+   */
+  omitWhenEmpty?: boolean;
+}
+
+/**
+ * Emotion mixer (IndexTTS voice): eight weights in 0..1, one per emotion
+ * (cf. emotions.ts for the order and the presets), patched as a JSON list
+ * into a STRING input. All zeros = neutral.
+ */
+export interface EmotionsField extends FieldBase {
+  kind: 'emotions';
+  target: PatchTarget;
 }
 
 /**
@@ -569,6 +585,7 @@ export type WorkflowField =
   | DimensionsField
   | ImageField
   | AudioField
+  | EmotionsField
   | VideoField
   | MaskField
   | LorasField
@@ -615,6 +632,8 @@ export type FieldValues = Record<
   | number
   | 'random'
   | LoraSelection[]
+  /** An emotions field's mix (8 weights). */
+  | number[]
   | DimensionsValue
   | ZonesValue
   | ModelSourceValue

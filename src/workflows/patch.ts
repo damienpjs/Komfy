@@ -15,6 +15,7 @@ import {
   restoreGeometry,
 } from './outpaint';
 import { isHeif } from '../utils/media';
+import { formatMix, isEmotionMix, NEUTRAL_MIX } from './emotions';
 import { GGUF_UNET_LOADER } from './requirements';
 import { DEFAULT_GUIDE_SIZE, isFieldShown } from './types';
 import type {
@@ -214,6 +215,9 @@ export function validate(
         errors[field.key] = i18n.t('validation.modelRequired');
       }
     }
+    if (field.kind === 'emotions' && value != null && !isEmotionMix(value)) {
+      errors[field.key] = i18n.t('validation.emotionMix');
+    }
     if (field.kind === 'outpaint') {
       const v = value as OutpaintValue | undefined;
       if (!v || !v.sourceWidth || !v.sourceHeight || v.pendingScale) {
@@ -240,9 +244,10 @@ export function validate(
     }
     if (field.kind === 'loras' && Array.isArray(value)) {
       const cap = getLoraMaxCount();
-      if (cap != null && value.length > cap) {
+      const loras = value as LoraSelection[];
+      if (cap != null && loras.length > cap) {
         errors[field.key] = i18n.t('lora.max', { count: cap });
-      } else if (value.some((l) => !Number.isFinite(l.strength))) {
+      } else if (loras.some((l) => !Number.isFinite(l.strength))) {
         errors[field.key] = i18n.t('validation.invalidStrength');
       }
     }
@@ -798,7 +803,7 @@ export function patchGraph(
         // Same guard as `text`/`number`: an optional image whose LoadImage an
         // earlier select dropped (the KREA2 edit in one-image mode).
         if (!graph[field.target.nodeId]) break;
-        if (field.kind === 'image' && field.omitWhenEmpty && !value) {
+        if ((field.kind === 'image' || field.kind === 'audio') && field.omitWhenEmpty && !value) {
           dropNodes(graph, [field.target.nodeId]);
           break;
         }
@@ -825,8 +830,16 @@ export function patchGraph(
         applyPatch(graph, field.heightTarget, dims.height);
         break;
       }
+      case 'emotions':
+        if (!graph[field.target.nodeId]) break;
+        applyPatch(
+          graph,
+          field.target,
+          formatMix(isEmotionMix(value) ? value : [...NEUTRAL_MIX]),
+        );
+        break;
       case 'loras':
-        insertLoraChain(graph, field, Array.isArray(value) ? value : []);
+        insertLoraChain(graph, field, Array.isArray(value) ? (value as LoraSelection[]) : []);
         break;
       case 'zones':
         insertZonesChain(graph, field, value as ZonesValue);
