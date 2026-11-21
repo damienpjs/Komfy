@@ -105,6 +105,12 @@ interface Props {
   /** Move this item (••• menu) — closes the viewer on the gallery side. */
   onMove?: (image: GalleryImage) => void;
   /**
+   * Rename this item, from the details sheet's Name row (the action bar has
+   * no room for a sixth tile: "Renommer" would truncate). Closes the viewer
+   * on the gallery side, like a move.
+   */
+  onRename?: (image: GalleryImage) => void;
+  /**
    * Delete this item (••• menu). Confirms + trashes on the gallery side and
    * resolves true when the file was removed; the viewer then advances to the
    * neighbour item (or closes if it was the last one).
@@ -621,6 +627,7 @@ export function ImageViewer({
   onUseIn,
   onReuseSeed,
   onMove,
+  onRename,
   onDelete,
 }: Props) {
   const styles = useStyles('dark');
@@ -1169,6 +1176,14 @@ export function ImageViewer({
               image={detailsVisible ? (current ?? null) : null}
               dimensions={current ? imageSizes[current.path] : undefined}
               durationSec={current ? durations[current.path] : undefined}
+              onRename={
+                onRename && current
+                  ? () => {
+                      setDetailsVisible(false);
+                      onRename(current);
+                    }
+                  : undefined
+              }
               onReuseSeed={
                 onReuseSeed && current
                   ? async () => {

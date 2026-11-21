@@ -37,6 +37,8 @@ interface Props {
    * viewer closes on the way).
    */
   onReuseSeed?: () => Promise<void>;
+  /** Rename this file (gallery only; the viewer closes on the way). */
+  onRename?: () => void;
   onClose: () => void;
 }
 
@@ -81,6 +83,7 @@ function InfoSheetBody({
   dimensions,
   durationSec,
   onReuseSeed,
+  onRename,
   onClose,
 }: Props & { image: GalleryImage }) {
   const styles = useStyles();
@@ -142,7 +145,24 @@ function InfoSheetBody({
         </View>
 
         <ScrollView contentContainerStyle={styles.content}>
-          <Row label={t('viewer.detailsName')} value={image.filename} mono />
+          <Row
+            label={t('viewer.detailsName')}
+            value={image.filename}
+            mono
+            action={
+              onRename
+                ? {
+                    label: t('gallery.rename'),
+                    a11y: t(
+                      image.isVideo
+                        ? 'gallery.renameVideoTitle'
+                        : 'gallery.renameImageTitle',
+                    ),
+                    onPress: onRename,
+                  }
+                : undefined
+            }
+          />
           <Row
             label={t('viewer.detailsFolder')}
             value={image.subfolder ? `${image.root}/${image.subfolder}` : image.root}
