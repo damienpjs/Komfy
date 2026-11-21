@@ -20,6 +20,7 @@ restart ComfyUI.
 
 import asyncio
 import io
+import json
 import os
 import shutil
 import time
@@ -512,3 +513,39 @@ async def komfy_upload_image(request):
     return web.json_response(
         {"name": name, "subfolder": subfolder, "type": "input", "converted": converted}
     )
+
+
+def read_video_recipe(path):
+    """The API graph stored in a video's `prompt` container tag (written by
+    ComfyUI's SaveVideo and by the Komfy LTX nodes), or None. PyAV reads the
+    tag from the file header without decoding a frame."""
+    import av  # ComfyUI dependency, imported lazily: only this route needs it
+
+    try:
+        with av.open(path) as container:
+            raw = container.metadata.get("prompt")
+    except Exception:
+        return None
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except ValueError:
+        return None
+
+
+@PromptServer.instance.routes.get("/komfy/recipe")
+async def komfy_recipe(request):
+    """GET /komfy/recipe?path=output/sub/clip.mp4 → {"prompt": graph|null}.
+    Lets the app remix a video without downloading it: the recipe lives in
+    the file, so it survives a server restart (unlike /history)."""
+    rel = request.query.get("path", "")
+    root, sub = _split_root(rel)
+    base = _roots().get(root)
+    if base is None:
+        return web.json_response({"error": "unknown root"}, status=400)
+    target, err = _safe_target(os.path.realpath(base), sub)
+    if err or not os.path.isfile(target):
+        return web.json_response({"error": err or "file not found"}, status=404)
+    graph = await asyncio.to_thread(read_video_recipe, target)
+    return web.json_response({"prompt": graph})
