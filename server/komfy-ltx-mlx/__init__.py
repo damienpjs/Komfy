@@ -45,6 +45,7 @@ restart ComfyUI.
 import glob
 import json
 import math
+import mimetypes
 import os
 import queue
 import re
@@ -93,6 +94,15 @@ LIP_SYNC_HINT = (
 # x2 video upscale: the Pixel-Spatial-Upscaler IC-LoRA of the 2.5 pack.
 UPSCALE_LORA_HINT = "pixel-spatial-upscaler-x2"
 LOG_TAIL = 60
+
+
+# Voice files are served back to the app through ComfyUI's /view, which takes
+# the type from Python's mimetypes table. That table maps .m4a (what Voice
+# Memos records) to audio/mp4a-latm, a type the iPhone's player refuses from
+# a URL ("Cannot Open"), so the voice could not be played in the form.
+# audio/mp4 is the registered type for an MPEG-4 audio file. Process-wide,
+# set once when ComfyUI loads this node.
+mimetypes.add_type("audio/mp4", ".m4a")
 
 
 # --------------------------------------------------------------------------
