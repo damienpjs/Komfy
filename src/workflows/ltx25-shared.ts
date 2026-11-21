@@ -32,6 +32,9 @@ export const LTX25_NODE = '1';
 /** LoadImage nodes of the optional character references (ref_1..ref_3). */
 export const LTX25_REF_NODES = ['11', '12', '13'] as const;
 
+/** lora_name value of "no LoRA" (the node's NO_LORA). */
+const NO_LORA = 'None';
+
 /** Ingredients IC-LoRA for 2.5, relative to models/loras. */
 const INGREDIENTS_LORA = 'ltx/ic-lora/ltx-2.5-22b-ic-lora-ingredients-0.9.safetensors';
 
@@ -58,7 +61,7 @@ export function ltx25Node(
       seed: 0,
       first_strength: 1,
       last_strength: 1,
-      lora_name: 'None',
+      lora_name: NO_LORA,
       lora_strength: 1,
       audio: 1,
       low_ram: 0,
@@ -283,24 +286,28 @@ export function ltx25CommonFields(withImage: boolean, voice = false): WorkflowFi
       filter: 'ltx-2\\.5',
       remember: true,
     },
+    // Same cards and picker as the image workflows. The node fuses them all
+    // (`--lora` repeated, a2v through a2v_lora.py); the first one stays on
+    // lora_name / lora_strength, so a one-LoRA graph is unchanged. Replaces
+    // the `lora` + `loraStrength` pair, whose presets and remembered choice
+    // are read back (legacyKeys).
     {
-      kind: 'model',
-      key: 'lora',
-      label: 'wf.ltx25.lora',
-      hint: 'wf.ltx25.loraHint',
-      target: target('lora_name'),
-      default: 'None',
-      filter: 'ltx|^None$',
+      kind: 'loras',
+      key: 'loras',
+      label: 'LoRAs',
+      hint: 'wf.ltx25.lorasHint',
+      nodeInputs: {
+        nodeId: LTX25_NODE,
+        name: 'lora_name',
+        strength: 'lora_strength',
+        extra: 'extra_loras',
+        none: NO_LORA,
+      },
+      legacyKeys: { name: 'lora', strength: 'loraStrength' },
+      filter: 'ltx',
+      // The node's lora_strength bounds (ComfyUI rejects anything beyond).
+      strengthRange: { min: -2, max: 2 },
       remember: true,
-    },
-    {
-      kind: 'number',
-      key: 'loraStrength',
-      label: 'wf.ltx25.loraStrength',
-      target: target('lora_strength'),
-      default: 1,
-      min: -2,
-      max: 2,
     },
     toggle('audio', 'audio', true, { remember: true }),
     toggle('lowRam', 'low_ram', false, { hint: 'wf.ltx25.lowRamHint', remember: true }),

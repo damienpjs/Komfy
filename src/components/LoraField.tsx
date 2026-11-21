@@ -22,6 +22,7 @@ interface Props {
   onChange: (value: LoraSelection[]) => void;
 }
 
+// Slider bounds when the field sets none (LorasField.strengthRange).
 const STRENGTH_MIN = -10;
 const STRENGTH_MAX = 10;
 const STRENGTH_STEP = 0.05;
@@ -95,6 +96,8 @@ export function LoraField({ field, value, onChange }: Props) {
   // release, but the user sees where they are).
   const [liveStrength, setLiveStrength] = useState<Record<string, number>>({});
   const defaultStrength = field.defaultStrength ?? 1.0;
+  const strengthMin = field.strengthRange?.min ?? STRENGTH_MIN;
+  const strengthMax = field.strengthRange?.max ?? STRENGTH_MAX;
   // Timestamp of the last tick, shared by the cards: only one slider can be
   // dragged at a time.
   const lastHapticAt = useRef(0);
@@ -131,8 +134,8 @@ export function LoraField({ field, value, onChange }: Props) {
     if (!lora) return false;
     const next = Number(
       Math.min(
-        STRENGTH_MAX,
-        Math.max(STRENGTH_MIN, lora.strength + dir * STRENGTH_STEP),
+        strengthMax,
+        Math.max(strengthMin, lora.strength + dir * STRENGTH_STEP),
       ).toFixed(2),
     );
     if (next === lora.strength) return false;
@@ -193,7 +196,7 @@ export function LoraField({ field, value, onChange }: Props) {
         recipe stays readable, but with no slider and no remove button — they
         are part of the workflow, not of the selection.
       */}
-      {(field.fixed ?? []).map((lora, index) => (
+      {(field.nodeInputs ? [] : field.fixed ?? []).map((lora, index) => (
         <View key={`fixed-${lora.name}-${index}`} style={[styles.card, styles.fixedCard]}>
           <View style={styles.cardHeader}>
             <View style={styles.cardTitleWrap}>
@@ -250,8 +253,8 @@ export function LoraField({ field, value, onChange }: Props) {
           <View style={styles.strengthRow}>
             <Slider
               style={styles.slider}
-              minimumValue={STRENGTH_MIN}
-              maximumValue={STRENGTH_MAX}
+              minimumValue={strengthMin}
+              maximumValue={strengthMax}
               step={STRENGTH_STEP}
               value={lora.strength + (thumbSync % 2 ? THUMB_NUDGE : 0)}
               onSlidingStart={(v) => {
@@ -339,6 +342,7 @@ export function LoraField({ field, value, onChange }: Props) {
       <LoraPicker
         visible={pickerOpen}
         selected={value.map((l) => l.name)}
+        filter={field.filter}
         onToggle={toggle}
         onClose={() => setPickerOpen(false)}
       />

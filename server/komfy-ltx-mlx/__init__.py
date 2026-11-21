@@ -17,7 +17,8 @@ history, gallery, remix) and delegates the generation itself to the
 no image = text to video, `first_image` = image to video, `first_image` +
 `last_image` = first/last frame (`--image PATH 0 S --image PATH last S`),
 `first_image` + `voice` = talking video (`a2v --distilled`, the clip length
-following the voice, a LoRA fused through a2v_lora.py).
+following the voice, the LoRAs fused through a2v_lora.py). LoRAs:
+`lora_name` plus the optional `extra_loras` JSON list, all fused together.
 `KomfyLTX25UpscaleMLX` upscales a clip x2 (`ic-lora` with the
 Pixel-Spatial-Upscaler IC-LoRA and an optional identity LoRA), the source's
 audio muxed back. Both embed the API graph in the mp4's `prompt` tag.
@@ -404,6 +405,37 @@ def _default_lora(loras, *needles):
     return NO_LORA
 
 
+def _resolve_loras(lora_name, lora_strength, extra_loras):
+    """(path, strength) of every LoRA to fuse: lora_name first, then the
+    extra_loras JSON list, in order. Raises on a malformed list or a file
+    missing from models/loras."""
+    wanted = []
+    if lora_name and lora_name != NO_LORA:
+        wanted.append((lora_name, float(lora_strength)))
+    text = (extra_loras or "").strip()
+    if text:
+        try:
+            items = json.loads(text)
+        except ValueError as e:
+            raise ValueError(f"extra_loras is not valid JSON: {e}") from None
+        if not isinstance(items, list):
+            raise ValueError("extra_loras must be a JSON list")
+        for item in items:
+            name = item.get("name") if isinstance(item, dict) else None
+            strength = item.get("strength", 1.0) if isinstance(item, dict) else None
+            if not isinstance(name, str) or not name.strip() or isinstance(strength, bool) \
+                    or not isinstance(strength, (int, float)) or not math.isfinite(strength):
+                raise ValueError(f"extra_loras: bad entry {item!r} (expected name + strength)")
+            wanted.append((name.strip(), float(strength)))
+    resolved = []
+    for name, strength in wanted:
+        path = folder_paths.get_full_path("loras", name)
+        if not path:
+            raise RuntimeError(f"LoRA '{name}' not found in models/loras")
+        resolved.append((path, strength))
+    return resolved
+
+
 def _extract_frame(video, index, png, env):
     ffmpeg = shutil.which("ffmpeg", path=env["PATH"])
     if not ffmpeg:
@@ -466,6 +498,14 @@ class KomfyLTX25MLX:
             "optional": {
                 "first_image": ("IMAGE",),
                 "last_image": ("IMAGE",),
+                # LoRAs after lora_name, all fused together (`--lora` repeated):
+                # JSON [{"name": path under models/loras, "strength": float}].
+                # A string, not combos: the count is free, and an empty value
+                # leaves the render exactly as with lora_name alone.
+                "extra_loras": ("STRING", {
+                    "default": "",
+                    "tooltip": 'More LoRAs, applied with lora_name: [{"name": "x.safetensors", "strength": 1.0}]',
+                }),
                 "ref_1": ("IMAGE", {"tooltip": "Character reference photo: switches the render to the Ingredients IC-LoRA"}),
                 "ref_2": ("IMAGE",),
                 "ref_3": ("IMAGE",),
@@ -504,7 +544,8 @@ class KomfyLTX25MLX:
                  lora_strength, audio, low_ram, tile_frames, save_last_frame, filename_prefix,
                  first_image=None, last_image=None, ref_1=None, ref_2=None, ref_3=None,
                  ingredients_lora=NO_LORA, ingredients_strength=1.0, reference_strength=1.0,
-                 voice=None, voice_normalize=True, lip_sync_hint=True, komfy_graph=None):
+                 voice=None, voice_normalize=True, lip_sync_hint=True, extra_loras="",
+                 komfy_graph=None):
         pack = _resolve_pack(model_pack)
         binary = _binary()
         if not prompt.strip():
@@ -518,6 +559,8 @@ class KomfyLTX25MLX:
             # Measured on 0.18: with a start image the clip leaves it after
             # frame 0 and films the sheet. Fail before a 13-minute render.
             raise ValueError("Character references work in text to video only: remove the first image")
+        # Resolved before anything heavy: a missing file fails in a second.
+        loras = _resolve_loras(lora_name, lora_strength, extra_loras)
         voice_seconds = None
         if voice is not None:
             if first_image is None or last_image is not None or refs:
@@ -547,11 +590,6 @@ class KomfyLTX25MLX:
             frames = _frames_for(duration, frame_rate) if duration > 0 else None
             if refs and frames is None:
                 frames = _frames_for(REFS_DEFAULT_SECONDS, frame_rate)
-            lora_path = None
-            if lora_name != NO_LORA:
-                lora_path = folder_paths.get_full_path("loras", lora_name)
-                if not lora_path:
-                    raise RuntimeError(f"LoRA '{lora_name}' not found in models/loras")
             if voice is not None:
                 # The voice sets the length; it is normalized and padded to
                 # cover every frame. Distilled only: measured with a character
@@ -560,11 +598,14 @@ class KomfyLTX25MLX:
                 raw = os.path.join(tmpdir, "voice-raw.wav")
                 _write_wav(voice, raw)
                 track = _prepare_voice(raw, frames / frame_rate + 0.3, voice_normalize, tmpdir, env)
-                if lora_path:
+                if loras:
                     python = os.path.join(os.path.dirname(binary), "python")
                     if not os.access(python, os.X_OK):
                         raise RuntimeError(f"No python next to {binary}: needed to fuse the LoRA into a2v")
-                    cmd = [python, A2V_LORA, lora_path, f"{lora_strength:g}", "--"]
+                    cmd = [python, A2V_LORA]
+                    for path, strength in loras:
+                        cmd += [path, f"{strength:g}"]
+                    cmd += ["--"]
                 else:
                     cmd = [binary, "a2v"]
                 cmd += ["--distilled", "--audio", track]
@@ -596,8 +637,9 @@ class KomfyLTX25MLX:
                 cmd += ["--lora", ingredients, f"{ingredients_strength:g}"]
                 sheet = _sheet_video(refs, w, h, frames, frame_rate, tmpdir, env)
                 cmd += ["--video-conditioning", sheet, f"{reference_strength:g}"]
-            if lora_path and voice is None:
-                cmd += ["--lora", lora_path, f"{lora_strength:g}"]
+            if voice is None:
+                for path, strength in loras:
+                    cmd += ["--lora", path, f"{strength:g}"]
             if not audio and not refs and voice is None:
                 cmd += ["--no-audio"]
             if low_ram:

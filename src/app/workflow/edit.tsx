@@ -32,7 +32,7 @@ import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../../theme/tokens
 import { makeStyles, useTheme } from '../../theme/theme';
 import { fieldForInput, inferLorasCandidates } from '../../workflows/infer';
 import type {
-  LorasField,
+  ChainLorasField,
   WorkflowField,
   WorkflowManifest,
 } from '../../workflows/types';
@@ -135,7 +135,7 @@ export default function EditWorkflowScreen() {
   }
   const usedLoraSources = new Set(
     fields
-      .filter((f): f is LorasField => f.kind === 'loras')
+      .filter((f): f is ChainLorasField => f.kind === 'loras' && !f.nodeInputs)
       .map((f) => `${f.modelSource.nodeId}:${f.modelSource.output}`),
   );
   const loraCandidates = inferLorasCandidates(stored.graph).filter(

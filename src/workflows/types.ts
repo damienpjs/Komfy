@@ -237,18 +237,44 @@ export interface LoraSelection {
   strength: number;
 }
 
+/** What every LoRAs field shares: the form side (cards, picker, validation). */
+interface LorasFieldBase extends FieldBase {
+  kind: 'loras';
+  defaultStrength?: number;
+  /**
+   * Initial selection (imported workflows: the absorbed chain's LoRAs,
+   * editable in the form). Absent = empty form (embedded workflows).
+   */
+  default?: LoraSelection[];
+  /**
+   * Case-insensitive regex narrowing the picker to the compatible family
+   * (e.g. 'ltx'); when nothing matches, the full list is offered.
+   */
+  filter?: string;
+  /**
+   * Strength bounds of the slider and of validation, when the backend has
+   * its own (the KomfyLTX25MLX lora_strength input stops at ±2). Absent =
+   * the slider's ±10, with no bound enforced at launch.
+   */
+  strengthRange?: { min: number; max: number };
+  /**
+   * The last selection is remembered per workflow (fieldPrefs store, as
+   * JSON) and re-applied as the initial value on subsequent launches.
+   */
+  remember?: boolean;
+}
+
 /**
  * LoRAs field: chain of LoraLoaderModelOnly nodes inserted at patch time
  * between `modelSource` and each `modelTargets` input (pattern of the
  * embedded KREA2 workflows — the Qwen3-VL CLIP takes no LoRA patch).
  */
-export interface LorasField extends FieldBase {
-  kind: 'loras';
+export interface ChainLorasField extends LorasFieldBase {
   /** MODEL output upstream of the chain (e.g. UNETLoader). */
   modelSource: { nodeId: string; output: number };
   /** MODEL inputs rewired to the end of the chain (e.g. KSampler.model). */
   modelTargets: PatchTarget[];
-  defaultStrength?: number;
+  nodeInputs?: undefined;
   /**
    * LoRAs the workflow ALWAYS applies, inserted at the head of the chain
    * (before the user's) and not editable — the LoRA a workflow is built
@@ -270,12 +296,37 @@ export interface LorasField extends FieldBase {
    * stacked on top of its own replacement.
    */
   formerFixed?: string[];
-  /**
-   * Initial selection (imported workflows: the absorbed chain's LoRAs,
-   * editable in the form). Absent = empty form (embedded workflows).
-   */
-  default?: LoraSelection[];
 }
+
+/**
+ * LoRAs field of a node that applies the LoRAs itself instead of taking a
+ * MODEL (KomfyLTX25MLX: the ltx-2-mlx CLI fuses them, `--lora` repeated).
+ * The first LoRA goes to the node's single-LoRA inputs, so a one-LoRA render
+ * keeps exactly the graph it had before the list existed (and still runs on
+ * a server that predates the list); the others travel as JSON in `extra`,
+ * an optional input left out of the graph when there are none.
+ */
+export interface NodeLorasField extends LorasFieldBase {
+  nodeInputs: {
+    nodeId: string;
+    /** Combo input of the first LoRA (e.g. lora_name). */
+    name: string;
+    /** Its strength (e.g. lora_strength). */
+    strength: string;
+    /** Optional STRING input: the other LoRAs, `[{"name","strength"}]`. */
+    extra: string;
+    /** `name` value meaning "no LoRA" (e.g. 'None'). */
+    none: string;
+  };
+  /**
+   * Keys of the single-LoRA fields this one replaced (a `model` field and a
+   * `number` field): read back from the presets and remembered choices
+   * saved before, so they still bring their LoRA.
+   */
+  legacyKeys?: { name: string; strength: string };
+}
+
+export type LorasField = ChainLorasField | NodeLorasField;
 
 /** Value of a dimensions field: preset or custom, invertible. */
 export interface DimensionsValue {

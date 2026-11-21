@@ -37,6 +37,7 @@ quality now comes from the x2 video upscale.
 | `duration` | Seconds, snapped to 8k+1 frames; `0` = predicted from the prompt |
 | `first_image` / `last_image` | Optional; first → `--image P 0 S`, last → `--image P last S` |
 | `lora_name` | Any file in `models/loras` (e.g. a character LoRA), or `None` |
+| `extra_loras` | Optional JSON list of more LoRAs fused with `lora_name`, in order: `[{"name": "x.safetensors", "strength": 1.0}]` (one `--lora` each). Empty = `lora_name` alone |
 | `low_ram` / `tile_frames` | Memory levers for long or large clips |
 | `save_last_frame` | Writes the last clean frame (the one before last with an end anchor) |
 | `ref_1`..`ref_3` | Optional character photos: with one or more, the render switches to `ltx-2-mlx ic-lora` (see below) |
@@ -64,9 +65,9 @@ the lips, about -18 dB did), pads it with silence to cover every frame (a2v
 rejects a short track) and runs `a2v --distilled --audio voice.wav --image
 first.png 0 S`. The clip length follows the voice (8k + 1 frames covering it,
 20 s at most); `duration`, `audio`, `tile_frames` do not apply. a2v has no
-`--lora` flag: with a LoRA the node runs `a2v_lora.py` with the ltx-2-mlx
-virtualenv's python, which sets the pipeline's pending LoRA so it is fused
-like in `generate` (the log shows "Fusing LoRA").
+`--lora` flag: with LoRAs the node runs `a2v_lora.py` with the ltx-2-mlx
+virtualenv's python, which sets the pipeline's pending LoRAs so they are fused
+like in `generate` (the log shows one "Fusing LoRA" line per LoRA).
 
 Measured on 2026-11-21 (M3 Max, 2.5 q8, character LoRA at 1.0, 512x768,
 105 frames, about 2.5 min): the distilled plan speaks with the character's

@@ -10,7 +10,7 @@
 import type { PromptGraph, PromptNode } from '../api/types';
 import type {
   LoraSelection,
-  LorasField,
+  ChainLorasField,
   WorkflowField,
   WorkflowManifest,
 } from './types';
@@ -145,7 +145,7 @@ export function fieldForInput(
  * to any imported workflow. Sources that are themselves LoraLoaderModelOnly
  * (frozen chains) are skipped.
  */
-export function inferLorasCandidates(graph: PromptGraph): LorasField[] {
+export function inferLorasCandidates(graph: PromptGraph): ChainLorasField[] {
   const bySource = new Map<
     string,
     { source: Conn; targets: { nodeId: string; input: string }[] }
@@ -323,7 +323,7 @@ function absorbLoraChains(graph: PromptGraph, fields: WorkflowField[]): void {
     for (const id of chain) delete graph[id];
 
     fieldIndex++;
-    const field: LorasField = {
+    const field: ChainLorasField = {
       kind: 'loras',
       key: fieldIndex === 1 ? 'loras' : `loras_${fieldIndex}`,
       label: 'LoRAs',
