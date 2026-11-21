@@ -14,6 +14,7 @@ import type { PromptGraph } from '../api/types';
 import { budgetForCanvas, clampSides, initialOutpaintValue } from './outpaint';
 import { applySelectOption } from './patch';
 import { parseMix } from './emotions';
+import { isNodeLoras, readNodeLoras } from './nodeLoras';
 import { GGUF_UNET_LOADER } from './requirements';
 import type {
   AudioField,
@@ -765,6 +766,16 @@ function matchVariant(
         break;
       }
       case 'loras': {
+        // A node running its LoRAs itself carries them on its own inputs (a
+        // render made before the list existed holds just the first one).
+        if (isNodeLoras(field)) {
+          const eId = state.map.get(field.nodeInputs.nodeId);
+          values[field.key] = readNodeLoras(
+            eId != null ? extracted[eId]?.inputs : undefined,
+            field,
+          );
+          break;
+        }
         // Each field takes only the LoRAs on the chain feeding its own MODEL
         // source — the extracted node the manifest source maps to. In
         // checkpoint mode that source (the manifest UNET loader) is absorbed

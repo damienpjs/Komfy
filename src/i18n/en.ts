@@ -270,8 +270,7 @@ export default {
       fpsHint: "LTX 2.5 is trained at 24, 25 and 50 fps",
       pack: "Model pack (MLX)",
       packHint: "ltx-2-mlx pack found on the server. q8 is the right trade-off on 64 GB",
-      lora: "LoRA",
-      loraHint: "Optional LTX 2.5 LoRA from the server's loras folder, e.g. a character LoRA. Train it on 2.5: an LTX 2.3 identity LoRA gives another face",
+      lorasHint: "Optional LTX 2.5 LoRAs from the server's loras folder, e.g. a character LoRA, applied together. Train them on 2.5: an LTX 2.3 identity LoRA gives another face",
       loraStrength: "LoRA strength",
       audio: "Audio",
       lowRam: "Low RAM",
@@ -599,6 +598,7 @@ export default {
     outpaintEmpty: 'Expand at least one side',
     outpaintMinSide: 'Each expanded side needs at least {{min}} px',
     invalidStrength: 'Invalid strength',
+    strengthRange: 'Strength between {{min}} and {{max}}',
     invalidNumber: 'Invalid number',
     integerExpected: 'Integer expected',
     min: 'Minimum {{min}}',
@@ -863,6 +863,8 @@ export default {
     emptyDir: 'Empty folder',
     strengthDown: 'Decrease strength by 0.05',
     strengthUp: 'Increase strength by 0.05',
+    serverOutdated:
+      "The server's LTX node takes a single LoRA: restart ComfyUI to load the updated node, or keep one LoRA",
   },
   prompt: {
     copied: 'Prompt copied',

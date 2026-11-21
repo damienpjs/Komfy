@@ -4,7 +4,7 @@
  */
 
 import i18n from '../i18n';
-import type { PromptGraph } from '../api/types';
+import type { NodeInfo, PromptGraph } from '../api/types';
 import { getLoraMaxCount } from '../store/settings';
 import {
   hasExpansion,
@@ -16,13 +16,14 @@ import {
 } from './outpaint';
 import { isHeif } from '../utils/media';
 import { formatMix, isEmotionMix, NEUTRAL_MIX } from './emotions';
+import { isNodeLoras, patchNodeLoras } from './nodeLoras';
 import { GGUF_UNET_LOADER } from './requirements';
 import { DEFAULT_GUIDE_SIZE, isFieldShown } from './types';
 import type {
   DimensionsValue,
   FieldValues,
+  ChainLorasField,
   LoraSelection,
-  LorasField,
   ModelField,
   ModelSourceField,
   ModelSourceValue,
@@ -103,10 +104,15 @@ function applyModelValue(
   applyPatch(graph, field.target, value);
 }
 
-/** Validation errors by field.key; empty object = valid form. */
+/**
+ * Validation errors by field.key; empty object = valid form. `nodeInfo` (the
+ * server's schemas, when known) only adds checks that need the server; an
+ * unknown or unfetched schema never blocks.
+ */
 export function validate(
   manifest: WorkflowManifest,
   values: FieldValues,
+  nodeInfo?: Record<string, NodeInfo | null>,
 ): Record<string, string> {
   const errors: Record<string, string> = {};
   for (const field of manifest.fields) {
@@ -245,10 +251,24 @@ export function validate(
     if (field.kind === 'loras' && Array.isArray(value)) {
       const cap = getLoraMaxCount();
       const loras = value as LoraSelection[];
+      const range = field.strengthRange;
       if (cap != null && loras.length > cap) {
         errors[field.key] = i18n.t('lora.max', { count: cap });
       } else if (loras.some((l) => !Number.isFinite(l.strength))) {
         errors[field.key] = i18n.t('validation.invalidStrength');
+      } else if (
+        range &&
+        loras.some((l) => l.strength < range.min || l.strength > range.max)
+      ) {
+        errors[field.key] = i18n.t('validation.strengthRange', range);
+      } else if (
+        isNodeLoras(field) &&
+        loras.length > 1 &&
+        !nodeAcceptsInput(manifest, nodeInfo, field.nodeInputs.nodeId, field.nodeInputs.extra)
+      ) {
+        // A server whose node predates the list ignores the input it does not
+        // declare: every LoRA after the first would be dropped without a word.
+        errors[field.key] = i18n.t('lora.serverOutdated');
       }
     }
     if (field.kind === 'number') {
@@ -263,6 +283,22 @@ export function validate(
     }
   }
   return errors;
+}
+
+/**
+ * False only when the server's schema of the node is known and lacks the
+ * input (a custom node older than the app). Unknown = assume it does.
+ */
+function nodeAcceptsInput(
+  manifest: WorkflowManifest,
+  nodeInfo: Record<string, NodeInfo | null> | undefined,
+  nodeId: string,
+  input: string,
+): boolean {
+  const classType = manifest.graph[nodeId]?.class_type;
+  const info = classType ? nodeInfo?.[classType] : undefined;
+  if (!info?.input) return true;
+  return input in (info.input.required ?? {}) || input in (info.input.optional ?? {});
 }
 
 /** Live connection at an input, else a fallback [nodeId, output]. */
@@ -287,7 +323,7 @@ function connFrom(
  */
 function insertLoraChain(
   graph: PromptGraph,
-  field: LorasField,
+  field: ChainLorasField,
   loras: LoraSelection[],
 ): void {
   // Every consumer gone (an earlier select dropped the branch that used the
@@ -838,9 +874,12 @@ export function patchGraph(
           formatMix(isEmotionMix(value) ? value : [...NEUTRAL_MIX]),
         );
         break;
-      case 'loras':
-        insertLoraChain(graph, field, Array.isArray(value) ? (value as LoraSelection[]) : []);
+      case 'loras': {
+        const loras = Array.isArray(value) ? (value as LoraSelection[]) : [];
+        if (isNodeLoras(field)) patchNodeLoras(graph, field, loras);
+        else insertLoraChain(graph, field, loras);
         break;
+      }
       case 'zones':
         insertZonesChain(graph, field, value as ZonesValue);
         break;

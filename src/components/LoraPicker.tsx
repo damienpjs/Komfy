@@ -32,11 +32,28 @@ interface Props {
   visible: boolean;
   /** Already-selected paths (shown checked, tap = removal). */
   selected: string[];
+  /**
+   * Case-insensitive regex narrowing the list to the compatible family
+   * (LorasField.filter); when nothing matches, everything is offered.
+   */
+  filter?: string;
   onToggle: (path: string) => void;
   onClose: () => void;
 }
 
-export function LoraPicker({ visible, selected, onToggle, onClose }: Props) {
+/** The installed LoRAs narrowed by `filter` (cf. requirements.modelFieldOptions). */
+function narrow(all: string[], filter?: string): string[] {
+  if (!filter) return all;
+  try {
+    const re = new RegExp(filter, 'i');
+    const matching = all.filter((name) => re.test(name));
+    return matching.length > 0 ? matching : all;
+  } catch {
+    return all;
+  }
+}
+
+export function LoraPicker({ visible, selected, filter, onToggle, onClose }: Props) {
   const styles = useStyles();
   const { colors } = useTheme();
   const { t } = useTranslation();
@@ -45,10 +62,11 @@ export function LoraPicker({ visible, selected, onToggle, onClose }: Props) {
   const [search, setSearch] = useState('');
 
   const searching = search.trim().length > 0;
-  const entries: LoraEntry[] = loras.data
+  const available = loras.data ? narrow(loras.data, filter) : undefined;
+  const entries: LoraEntry[] = available
     ? searching
-      ? searchLoras(loras.data, search)
-      : listDirectory(loras.data, dir)
+      ? searchLoras(available, search)
+      : listDirectory(available, dir)
     : [];
 
   const crumbs = dir === '' ? [] : dir.split('/');

@@ -274,8 +274,7 @@ export default {
       fpsHint: "LTX 2.5 est entraîné à 24, 25 et 50 i/s",
       pack: "Pack de modèle (MLX)",
       packHint: "Pack ltx-2-mlx trouvé sur le serveur. Le q8 est le bon compromis sur 64 Go",
-      lora: "LoRA",
-      loraHint: "LoRA LTX 2.5 facultatif du dossier loras du serveur, par ex. un LoRA personnage. Entraîne-le sur 2.5 : un LoRA d’identité LTX 2.3 donne un autre visage",
+      lorasHint: "LoRAs LTX 2.5 facultatifs du dossier loras du serveur, par ex. un LoRA personnage, appliqués ensemble. Entraîne-les sur 2.5 : un LoRA d’identité LTX 2.3 donne un autre visage",
       loraStrength: "Force du LoRA",
       audio: "Audio",
       lowRam: "Mémoire réduite",
@@ -608,6 +607,7 @@ export default {
     outpaintEmpty: 'Agrandir au moins un côté',
     outpaintMinSide: 'Chaque côté agrandi demande au moins {{min}} px',
     invalidStrength: 'Force invalide',
+    strengthRange: 'Force entre {{min}} et {{max}}',
     invalidNumber: 'Nombre invalide',
     integerExpected: 'Entier attendu',
     min: 'Minimum {{min}}',
@@ -872,6 +872,8 @@ export default {
     emptyDir: 'Dossier vide',
     strengthDown: 'Baisser la force de 0,05',
     strengthUp: 'Augmenter la force de 0,05',
+    serverOutdated:
+      "Le nœud LTX du serveur ne prend qu’un seul LoRA : redémarrer ComfyUI pour charger le nœud à jour, ou garder un seul LoRA",
   },
   prompt: {
     copied: 'Prompt copié',

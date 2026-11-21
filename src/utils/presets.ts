@@ -4,6 +4,7 @@
  */
 
 import i18n from '../i18n';
+import { legacyLoras } from '../workflows/nodeLoras';
 import type {
   FieldValues,
   WorkflowField,
@@ -55,7 +56,11 @@ export function applyPresetValues(
 ): FieldValues {
   const next = { ...current };
   for (const f of fields) {
-    const v = preset[f.key];
+    // A LoRA list saved before the list existed sits under the old
+    // single-LoRA keys (NodeLorasField.legacyKeys).
+    const v =
+      preset[f.key] ??
+      (f.kind === 'loras' ? legacyLoras(f, preset) : undefined);
     if (isPerPhoto(f) || v == null) continue;
     if (
       f.kind === 'select' &&

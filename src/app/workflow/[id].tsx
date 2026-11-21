@@ -72,6 +72,7 @@ import type { SourceSeeds } from '../../workflows/match';
 import { pickVariantFile, variantOf } from '../../workflows/modelVariant';
 import { initialOutpaintValue } from '../../workflows/outpaint';
 import { NEUTRAL_MIX } from '../../workflows/emotions';
+import { legacyLoras, parseLoraList } from '../../workflows/nodeLoras';
 import { entryOf } from '../../workflows/catalog';
 import { getAnyWorkflow } from '../../workflows/registry';
 import {
@@ -178,7 +179,16 @@ function initialValues(
       }
       values[field.key] = restored;
     }
-    if (field.kind === 'loras') values[field.key] = field.default ?? [];
+    if (field.kind === 'loras') {
+      // `remember`: last selection kept (JSON, same store as the model
+      // fields), else the single LoRA remembered before the list existed.
+      const kept = field.remember ? rememberedModels?.[field.key] : undefined;
+      values[field.key] =
+        (kept != null ? parseLoraList(kept) : undefined) ??
+        (field.remember ? legacyLoras(field, rememberedModels) : undefined) ??
+        field.default ??
+        [];
+    }
     if (field.kind === 'emotions') values[field.key] = [...NEUTRAL_MIX];
     if (
       field.kind === 'image' ||
@@ -392,6 +402,9 @@ export default function WorkflowLaunchScreen() {
     if (field?.kind === 'modelSource' && field.remember) {
       useFieldPrefs.getState().setValue(manifest.id, key, JSON.stringify(value));
     }
+    if (field?.kind === 'loras' && field.remember && Array.isArray(value)) {
+      useFieldPrefs.getState().setValue(manifest.id, key, JSON.stringify(value));
+    }
   };
 
   // Saved preset → form. The source image and mask stay as they are: a
@@ -428,7 +441,7 @@ export default function WorkflowLaunchScreen() {
   };
 
   const launch = async () => {
-    const validationErrors = validate(manifest, values);
+    const validationErrors = validate(manifest, values, nodeInfo);
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);

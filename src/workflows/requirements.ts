@@ -28,7 +28,9 @@ export function requiredClassTypes(manifest: WorkflowManifest): string[] {
   const types = new Set<string>();
   for (const node of Object.values(manifest.graph)) types.add(node.class_type);
   for (const field of manifest.fields) {
-    if (field.kind === 'loras') LORAS_CHAIN_TYPES.forEach((t) => types.add(t));
+    // A node that applies its LoRAs itself (NodeLorasField) inserts no chain.
+    if (field.kind === 'loras' && !field.nodeInputs)
+      LORAS_CHAIN_TYPES.forEach((t) => types.add(t));
     if (field.kind === 'zones')
       ZONES_CHAIN_TYPES.forEach((t) => types.add(t));
     // Checkpoint mode splices in a CheckpointLoaderSimple (kept out of the
@@ -123,7 +125,12 @@ function patchedInputKeys(manifest: WorkflowManifest): Set<string> {
         }
         break;
       case 'loras':
-        field.modelTargets.forEach(add);
+        if (field.nodeInputs) {
+          add({ nodeId: field.nodeInputs.nodeId, input: field.nodeInputs.name });
+          add({ nodeId: field.nodeInputs.nodeId, input: field.nodeInputs.strength });
+        } else {
+          field.modelTargets.forEach(add);
+        }
         break;
       case 'zones':
         field.imageTargets.forEach(add);
@@ -337,7 +344,7 @@ export function checkAvailability(
   // launch. The anchor node is the chain's MODEL source (only `value` is
   // surfaced to the user).
   for (const field of manifest.fields) {
-    if (field.kind !== 'loras') continue;
+    if (field.kind !== 'loras' || field.nodeInputs) continue;
     for (const lora of field.fixed ?? []) {
       checkValue(
         'LoraLoaderModelOnly',
