@@ -228,6 +228,8 @@ const KIND_RANK: Record<WorkflowField['kind'], number> = {
   audio: 0,
   video: 0,
   text: 1,
+  // Embedded workflows only (the IndexTTS voice): right after the line it colours.
+  emotions: 1,
   model: 2,
   // Never inferred from an imported graph (embedded workflows only), but the
   // map must cover every kind — ranked next to the plain model field.

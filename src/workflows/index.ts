@@ -1,5 +1,6 @@
 /** Registry of the embedded workflows (one file per workflow). */
 
+import { indexttsVoice } from './indextts-voice';
 import { inpaintDraw } from './inpaint-draw';
 import { krea2AnypaintInpaint } from './krea2-anypaint-inpaint';
 import { krea2Depth } from './krea2-depth';
@@ -27,6 +28,7 @@ export const workflows: WorkflowManifest[] = [
   ltx25I2v,
   ltx25A2v,
   ltx25Flf,
+  indexttsVoice,
   ltx25Upscale,
   krea2Upscale,
   krea2Depth,

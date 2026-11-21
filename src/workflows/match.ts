@@ -13,8 +13,10 @@
 import type { PromptGraph } from '../api/types';
 import { budgetForCanvas, clampSides, initialOutpaintValue } from './outpaint';
 import { applySelectOption } from './patch';
+import { parseMix } from './emotions';
 import { GGUF_UNET_LOADER } from './requirements';
 import type {
+  AudioField,
   FieldValues,
   ImageField,
   LoraSelection,
@@ -537,7 +539,10 @@ function matchVariant(
   if (modelSourceField?.ggufLoader) ggufSlots.add(modelSourceField.unetNodeId);
   const omittable = new Set(
     manifest.fields
-      .filter((f): f is ImageField => f.kind === 'image' && !!f.omitWhenEmpty)
+      .filter(
+        (f): f is ImageField | AudioField =>
+          (f.kind === 'image' || f.kind === 'audio') && !!f.omitWhenEmpty,
+      )
       .map((f) => f.target.nodeId),
   );
   const state: WalkState = {
@@ -667,6 +672,13 @@ function matchVariant(
         const eId = state.map.get(field.target.nodeId);
         const v = extracted[eId!]?.inputs[field.target.input];
         values[field.key] = typeof v === 'string' ? v : field.default;
+        break;
+      }
+      case 'emotions': {
+        const eId = state.map.get(field.target.nodeId);
+        values[field.key] = parseMix(
+          eId != null ? extracted[eId]?.inputs[field.target.input] : undefined,
+        );
         break;
       }
       case 'modelSource': {

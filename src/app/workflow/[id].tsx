@@ -27,6 +27,7 @@ import {
 import { ComfyApiError, createClient } from '../../api/client';
 import type { PromptErrorResponse } from '../../api/types';
 import { AudioInputField } from '../../components/AudioInputField';
+import { EmotionMixer } from '../../components/EmotionMixer';
 import { ImageInputField } from '../../components/ImageInputField';
 import { VideoInputField } from '../../components/VideoInputField';
 import { MaskInputField } from '../../components/MaskInputField';
@@ -70,6 +71,7 @@ import { memoryWarnings } from '../../workflows/preflight';
 import type { SourceSeeds } from '../../workflows/match';
 import { pickVariantFile, variantOf } from '../../workflows/modelVariant';
 import { initialOutpaintValue } from '../../workflows/outpaint';
+import { NEUTRAL_MIX } from '../../workflows/emotions';
 import { entryOf } from '../../workflows/catalog';
 import { getAnyWorkflow } from '../../workflows/registry';
 import {
@@ -177,6 +179,7 @@ function initialValues(
       values[field.key] = restored;
     }
     if (field.kind === 'loras') values[field.key] = field.default ?? [];
+    if (field.kind === 'emotions') values[field.key] = [...NEUTRAL_MIX];
     if (
       field.kind === 'image' ||
       field.kind === 'mask' ||
@@ -700,6 +703,17 @@ export default function WorkflowLaunchScreen() {
                 value={String(values[field.key] ?? '')}
                 onChange={(name) => setValue(field.key, name)}
                 maxSeconds={field.maxSeconds}
+              />
+            )}
+
+            {field.kind === 'emotions' && (
+              <EmotionMixer
+                value={
+                  Array.isArray(values[field.key])
+                    ? (values[field.key] as number[])
+                    : [...NEUTRAL_MIX]
+                }
+                onChange={(mix) => setValue(field.key, mix)}
               />
             )}
 

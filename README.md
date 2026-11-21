@@ -57,6 +57,11 @@ Server side:
     [`server/komfy-ltx-mlx`](./server/komfy-ltx-mlx) nodes plus
     [ltx-2-mlx](https://github.com/dgrauet/ltx-2-mlx) 0.18+ and an LTX 2.5
     MLX pack (`dgrauet/ltx-2.5-mlx-q8` on 64 GB), see step 5 below;
+  - Voice (IndexTTS 2.5: a line said in a cloned voice, eight emotions
+    mixed, then fed to the talking video): the bundled
+    [`server/komfy-indextts`](./server/komfy-indextts) node plus
+    [IndexTTS](https://github.com/index-tts/index-tts) 2.5 in its own
+    virtualenv, see step 6 below;
 - **Ollama** running locally (`127.0.0.1:11434`, never exposed on the
   tailnet) with a vision model tagged `gemma4-vision:latest` — only for the
   "→ Prompt" workflows. Any Gemma-class vision model works; alias yours
@@ -187,6 +192,29 @@ nothing below assumes a Mac.
    38 min, audio kept). "Use" in the viewer chains each step, prefilled.
    Details (pack discovery, env overrides, memory levers):
    [server/komfy-ltx-mlx/README.md](./server/komfy-ltx-mlx/README.md).
+
+6. **Voice with IndexTTS 2.5** (optional): **Generate a voice** in the
+   Video section says a line in a cloned voice, with a mix of eight
+   emotions. Install IndexTTS in its own virtualenv (about 5 GB of
+   checkpoints), put one or more voice samples in `models/voices`, symlink
+   the node and restart ComfyUI:
+
+   ```bash
+   git clone https://github.com/index-tts/index-tts ~/Documents/index-tts
+   (cd ~/Documents/index-tts && uv sync --extra webui)
+   (cd ~/Documents/index-tts && hf download IndexTeam/IndexTTS-2.5 --local-dir checkpoints)
+   mkdir -p <comfy-data-dir>/models/voices
+   cp my-voice-25s.wav <comfy-data-dir>/models/voices/me.wav
+   ln -s "<repo>/server/komfy-indextts" <comfy-data-dir>/custom_nodes/komfy-indextts
+   ```
+
+   A sample is 10 to 25 s of one person speaking, no music (IndexTTS keeps
+   the first 15 s). A new sample can also be picked in the form and saved
+   under a name, which writes it to `models/voices`. The clip comes back as
+   an mp4 (its waveform over the speech, recipe embedded); "Use" in the
+   viewer sends it to **Image + voice** as the voice. Another checkout
+   location: set `KOMFY_INDEXTTS_DIR`. Details:
+   [server/komfy-indextts/README.md](./server/komfy-indextts/README.md).
 
 ## App setup (development)
 
@@ -391,6 +419,7 @@ komfy/
 ├── server/komfy-listing/ # ComfyUI extension (recursive output+input listing, trash)
 ├── server/supervisor/    # standalone Node service: remote ComfyUI on/off + live console
 ├── server/komfy-ltx-mlx/ # ComfyUI node: LTX 2.5 video through the ltx-2-mlx CLI (Apple Silicon)
+├── server/komfy-indextts/ # ComfyUI node: voice cloning + emotions with IndexTTS 2.5 (own virtualenv)
 ├── scripts/              # start-comfy.sh/.ps1 + comfy.js (launch), expo-start.js (Metro on Tailscale), pair.js (QR), native-ios.js (npm run native)
 ├── plugins/              # Expo config plugins (withoutPushEntitlement — free Apple team builds)
 └── docs/architecture.png # architecture diagram (C4 container view)

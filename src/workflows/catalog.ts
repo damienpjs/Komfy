@@ -103,6 +103,7 @@ export const CATALOG: CatalogSection[] = [
           { manifestId: 'ltx25-flf', mode: 'catalog.modes.firstLast', icon: 'flf' },
         ],
       },
+      single('voice', 'indextts-voice', 'voice', 'INDEXTTS 2.5'),
       single('videoUpscale', 'ltx25-upscale', 'videoUpscale', 'LTX 2.5'),
     ],
   },
