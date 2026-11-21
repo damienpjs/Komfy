@@ -428,6 +428,11 @@ function filesUnder(dir) {
 // splash), the config plugins, and the dependencies, whose native modules
 // autolinking adds. When none of it changed, ios/ is still what prebuild
 // would write, and keeping it keeps the incremental build.
+//
+// Autolinking scans node_modules, not package.json: a dependency declared but
+// not yet installed is left out of the pods. npm rewrites
+// node_modules/.package-lock.json on every install that changes the tree, so
+// hashing it reruns prebuild once the module is actually there.
 function prebuildHash() {
   const appJson = path.join(ROOT, 'app.json');
   const referenced = [];
@@ -446,6 +451,7 @@ function prebuildHash() {
     appJson,
     path.join(ROOT, 'package.json'),
     path.join(ROOT, 'package-lock.json'),
+    path.join(ROOT, 'node_modules', '.package-lock.json'),
     ...referenced,
     ...filesUnder(path.join(ROOT, 'plugins')),
   ];
