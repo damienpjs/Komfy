@@ -34,6 +34,7 @@ export const ltx25Flf: WorkflowManifest = {
   name: 'wf.ltx25.flfName',
   description: 'wf.ltx25.flfDescription',
   icon: 'swap-horizontal-outline',
+  output: 'video',
   graph,
   saveNodeId: LTX25_NODE,
   fields: [

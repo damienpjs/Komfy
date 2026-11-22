@@ -1125,6 +1125,7 @@ export default function WorkflowLaunchScreen() {
             ? undefined
             : {
                 count: batchCount,
+                output: manifest.output ?? 'image',
                 onCountPress: () => setCountSheetOpen(true),
                 destination: `${outputDir === '' ? 'output' : outputDir}/`,
                 onDestinationPress: () => setDirPickerOpen(true),
@@ -1140,6 +1141,7 @@ export default function WorkflowLaunchScreen() {
         count={batchCount}
         onChange={applyCount}
         onClose={() => setCountSheetOpen(false)}
+        output={manifest.output ?? 'image'}
       />
 
       {/* Dragged zone card: where it stands, pinned to the screen — the list

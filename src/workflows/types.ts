@@ -643,6 +643,9 @@ export type WorkflowField =
   | ZonesField
   | OutpaintField;
 
+/** What one run of a workflow produces: the launch bar counts in it. */
+export type OutputKind = 'image' | 'video' | 'voice';
+
 export interface WorkflowManifest {
   id: string;
   name: string;
@@ -652,6 +655,11 @@ export interface WorkflowManifest {
    * hold an Ionicons name instead, drawn as the graph icon.
    */
   icon: keyof typeof Ionicons.glyphMap | WorkflowIconKey;
+  /**
+   * What one run produces, for the launch bar's wording (×2 images, ×2
+   * videos, ×2 takes). Absent = 'image' (imported workflows included).
+   */
+  output?: OutputKind;
   /** Graph in API format (Save (API Format)), never mutated directly. */
   graph: PromptGraph;
   fields: WorkflowField[];

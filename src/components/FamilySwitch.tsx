@@ -2,15 +2,21 @@
  * Mode switch at the top of a launch form whose workflow belongs to a family
  * (Repaint a zone, Video, Write a prompt). Switching replaces the form with
  * the sibling manifest and carries over what the user brought (photo,
- * painted mask, texts: CARRIED_KINDS) whenever the sibling has the same field
- * with the same kind. The painted strokes follow too: they are stored under
- * the mask's filename. Renders nothing for a workflow outside a family.
+ * painted mask, texts, voice sample: CARRIED_KINDS) whenever the sibling has
+ * the same field with the same kind. The painted strokes follow too: they are
+ * stored under the mask's filename. Renders nothing for a workflow outside a
+ * family.
+ *
+ * A mode the server cannot run (custom node or engine not installed, cf.
+ * useAvailability) is drawn dimmed but stays reachable: its form opens with
+ * the banner that names what is missing, as the catalogue rows do.
  */
 
 import * as Haptics from 'expo-haptics';
 import { useRouter, type Href } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Pressable, Text, View } from 'react-native';
+import { useAvailability } from '../hooks/useAvailability';
 import { useCatalogPrefs } from '../store/catalogPrefs';
 import { makeStyles, useTheme } from '../theme/theme';
 import { radii, spacing, typography } from '../theme/tokens';
@@ -34,6 +40,7 @@ export function FamilySwitch({ manifest, values }: Props) {
   const { colors } = useTheme();
   const { t } = useTranslation();
   const router = useRouter();
+  const availability = useAvailability();
   const entry = entryOf(manifest.id);
   if (!entry || !isFamily(entry)) return null;
 
@@ -68,22 +75,35 @@ export function FamilySwitch({ manifest, values }: Props) {
       <View style={styles.seg} accessibilityRole="tablist">
         {entry.members.map((m) => {
           const on = m.manifestId === current.manifestId;
+          const check = availability?.[m.manifestId];
+          const missing =
+            check && !check.ok
+              ? (check.missingNodes[0] ?? check.missingValues[0]?.value)
+              : undefined;
+          const off = missing != null;
+          const tint = off ? colors.textDisabled : on ? colors.text : colors.textMuted;
           return (
             <Pressable
               key={m.manifestId}
               accessibilityRole="tab"
               accessibilityState={{ selected: on }}
+              accessibilityHint={off ? t('catalog.missing', { item: missing }) : undefined}
               onPress={() => switchTo(m)}
               style={[styles.option, stacked && styles.optionStacked, on && styles.optionOn]}
             >
               <WorkflowIcon
                 name={m.icon}
                 size={20}
-                color={on ? colors.text : colors.textMuted}
+                color={tint}
                 knockout={on ? colors.surface : colors.field}
               />
               <Text
-                style={[styles.label, stacked && styles.labelStacked, on && styles.labelOn]}
+                style={[
+                  styles.label,
+                  stacked && styles.labelStacked,
+                  on && styles.labelOn,
+                  off && styles.labelOff,
+                ]}
                 numberOfLines={1}
               >
                 {t(m.mode)}
@@ -136,6 +156,9 @@ const useStyles = makeStyles((colors) => ({
   },
   labelStacked: {
     fontSize: 12,
+  },
+  labelOff: {
+    color: colors.textDisabled,
   },
   labelOn: {
     color: colors.text,

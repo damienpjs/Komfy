@@ -103,7 +103,19 @@ export const CATALOG: CatalogSection[] = [
           { manifestId: 'ltx25-flf', mode: 'catalog.modes.firstLast', icon: 'flf' },
         ],
       },
-      single('voice', 'indextts-voice', 'voice', 'INDEXTTS 2.5'),
+      {
+        // Two engines, one entry: IndexTTS for the emotion mix (no French),
+        // XTTS for French and 16 other languages. Same voices, same output.
+        key: 'voice',
+        name: 'catalog.entries.voice.name',
+        description: 'catalog.entries.voice.description',
+        icon: 'voice',
+        engine: 'INDEXTTS · XTTS',
+        members: [
+          { manifestId: 'indextts-voice', mode: 'catalog.modes.emotions', icon: 'voice' },
+          { manifestId: 'xtts-voice', mode: 'catalog.modes.multilingual', icon: 'voice' },
+        ],
+      },
       single('videoUpscale', 'ltx25-upscale', 'videoUpscale', 'LTX 2.5'),
     ],
   },
@@ -150,7 +162,7 @@ export function iconOf(manifestId: string): WorkflowIconKey {
 
 /**
  * Field kinds whose value carries over when switching between members of a
- * family: what the user brought (photo, painted zone, text). Model-specific
- * settings (sampler, LoRAs, seed…) stay with each member.
+ * family: what the user brought (photo, painted zone, text, voice sample).
+ * Model-specific settings (sampler, LoRAs, seed…) stay with each member.
  */
-export const CARRIED_KINDS = new Set(['image', 'mask', 'text']);
+export const CARRIED_KINDS = new Set(['image', 'mask', 'text', 'audio']);

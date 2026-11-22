@@ -1,6 +1,7 @@
 /**
  * Launch bar, pinned under the form (a piece of the banner, same in both
- * themes): image count and destination as two chips, the yellow Launch CTA,
+ * themes): run count (in images, videos or takes, cf. manifest.output) and
+ * destination as two chips, the yellow Launch CTA,
  * and above them the checks run before sending (a missing field to reach,
  * a setting known to exhaust memory). Nothing to scroll down to any more.
  */
@@ -11,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { makeStyles } from '../theme/theme';
 import { radii, signature, spacing, typography } from '../theme/tokens';
+import type { OutputKind } from '../workflows/types';
 import { DotGrid } from './DotGrid';
 
 export interface PreflightItem {
@@ -21,9 +23,11 @@ export interface PreflightItem {
 }
 
 interface Props {
-  /** Image count + destination chips (hidden for text-result workflows). */
+  /** Run count + destination chips (hidden for text-result workflows). */
   batch?: {
     count: number;
+    /** What one run produces: the count chip's unit. */
+    output: OutputKind;
     onCountPress: () => void;
     destination: string;
     onDestinationPress: () => void;
@@ -90,13 +94,13 @@ export function LaunchBar({ batch, submitting, onLaunch, preflight }: Props) {
           <>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={t('launch.countA11y', { count: batch.count })}
+              accessibilityLabel={t(`launch.outputs.${batch.output}.countA11y`, { count: batch.count })}
               onPress={batch.onCountPress}
               style={({ pressed }) => [styles.chip, pressed && styles.chipPressed]}
             >
               <Text style={styles.chipValue}>×{batch.count}</Text>
               <Text style={styles.chipLabel}>
-                {t('launch.images', { count: batch.count })}
+                {t(`launch.outputs.${batch.output}.unit`, { count: batch.count })}
               </Text>
             </Pressable>
             <Pressable

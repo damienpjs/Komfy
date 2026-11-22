@@ -121,6 +121,7 @@ export const ltx25Upscale: WorkflowManifest = {
   name: 'wf.ltxUpscale.name',
   description: 'wf.ltxUpscale.description',
   icon: 'expand-outline',
+  output: 'video',
   graph,
   saveNodeId: NODE,
   fields,
