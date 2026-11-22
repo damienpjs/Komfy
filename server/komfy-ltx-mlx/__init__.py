@@ -17,7 +17,8 @@ history, gallery, remix) and delegates the generation itself to the
 no image = text to video, `first_image` = image to video, `first_image` +
 `last_image` = first/last frame (`--image PATH 0 S --image PATH last S`),
 `first_image` + `voice` = talking video (`a2v --distilled`, the clip length
-following the voice, the LoRAs fused through a2v_lora.py). LoRAs:
+following the voice plus `silence_after`, the LoRAs fused through
+a2v_lora.py), with an optional `last_image` end anchor as well. LoRAs:
 `lora_name` plus the optional `extra_loras` JSON list, all fused together.
 `KomfyLTX25UpscaleMLX` upscales a clip x2 (`ic-lora` with the
 Pixel-Spatial-Upscaler IC-LoRA and an optional identity LoRA), the source's
@@ -530,6 +531,11 @@ class KomfyLTX25MLX:
                     "default": True,
                     "tooltip": "With a voice: append a sentence describing the articulation to the prompt",
                 }),
+                "silence_after": ("FLOAT", {
+                    "default": 0.0, "min": 0.0, "max": 10.0, "step": 0.5,
+                    "tooltip": "With a voice: seconds of silence added after it, lengthening the clip "
+                               "(time to close the mouth and reach the last image)",
+                }),
             },
             "hidden": {"komfy_graph": "PROMPT"},
         }
@@ -544,8 +550,8 @@ class KomfyLTX25MLX:
                  lora_strength, audio, low_ram, tile_frames, save_last_frame, filename_prefix,
                  first_image=None, last_image=None, ref_1=None, ref_2=None, ref_3=None,
                  ingredients_lora=NO_LORA, ingredients_strength=1.0, reference_strength=1.0,
-                 voice=None, voice_normalize=True, lip_sync_hint=True, extra_loras="",
-                 komfy_graph=None):
+                 voice=None, voice_normalize=True, lip_sync_hint=True, silence_after=0.0,
+                 extra_loras="", komfy_graph=None):
         pack = _resolve_pack(model_pack)
         binary = _binary()
         if not prompt.strip():
@@ -563,12 +569,17 @@ class KomfyLTX25MLX:
         loras = _resolve_loras(lora_name, lora_strength, extra_loras)
         voice_seconds = None
         if voice is not None:
-            if first_image is None or last_image is not None or refs:
-                raise ValueError("A voice needs exactly one start image (no last image, no references)")
+            # a2v --distilled takes the same --image anchors as generate
+            # (measured 2026-11-22: a last image holds, the lips still follow
+            # the voice as long as the prompt does not ask for a closed mouth).
+            if first_image is None or refs:
+                raise ValueError("A voice needs a start image (and no references)")
             voice_seconds = voice["waveform"].shape[-1] / float(voice["sample_rate"])
-            if voice_seconds > VOICE_MAX_SECONDS:
+            if voice_seconds + silence_after > VOICE_MAX_SECONDS:
                 raise ValueError(
-                    f"The voice lasts {voice_seconds:.1f} s: keep it under {VOICE_MAX_SECONDS:g} s")
+                    f"The voice lasts {voice_seconds:.1f} s"
+                    + (f" plus {silence_after:g} s of silence" if silence_after > 0 else "")
+                    + f": keep the total under {VOICE_MAX_SECONDS:g} s")
 
         # The distilled plan samples stage 1 at half resolution, whose sides
         # must stay multiples of 32: full size in multiples of 64.
@@ -591,10 +602,11 @@ class KomfyLTX25MLX:
             if refs and frames is None:
                 frames = _frames_for(REFS_DEFAULT_SECONDS, frame_rate)
             if voice is not None:
-                # The voice sets the length; it is normalized and padded to
-                # cover every frame. Distilled only: measured with a character
-                # LoRA, the CFG plans speak in voice-over instead of the lips.
-                frames = _frames_covering(voice_seconds, frame_rate)
+                # The voice (plus the silence asked after it) sets the length;
+                # it is normalized and padded to cover every frame. Distilled
+                # only: measured with a character LoRA, the CFG plans speak in
+                # voice-over instead of the lips.
+                frames = _frames_covering(voice_seconds + silence_after, frame_rate)
                 raw = os.path.join(tmpdir, "voice-raw.wav")
                 _write_wav(voice, raw)
                 track = _prepare_voice(raw, frames / frame_rate + 0.3, voice_normalize, tmpdir, env)
