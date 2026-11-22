@@ -46,6 +46,7 @@ quality now comes from the x2 video upscale.
 | `voice` | Optional AUDIO (core LoadAudio): switches the render to `ltx-2-mlx a2v --distilled` (see below) |
 | `voice_normalize` | Bring the voice to about -16 LUFS first (default on) |
 | `lip_sync_hint` | Append a sentence describing the articulation to the prompt (default on) |
+| `silence_after` | Seconds of silence added after the voice, lengthening the clip (default 0) |
 
 `KomfyLTX25UpscaleMLX` ("LTX 2.5 video upscale x2 (MLX) · Komfy").
 
@@ -59,12 +60,13 @@ quality now comes from the x2 video upscale.
 
 ### Voice to video (a2v)
 
-With `voice` plugged (and exactly one `first_image`), the node writes the
-voice to WAV, normalizes it (a phone recording at -25 dB mean barely moved
+With `voice` plugged (and a `first_image`, no references), the node writes
+the voice to WAV, normalizes it (a phone recording at -25 dB mean barely moved
 the lips, about -18 dB did), pads it with silence to cover every frame (a2v
 rejects a short track) and runs `a2v --distilled --audio voice.wav --image
-first.png 0 S`. The clip length follows the voice (8k + 1 frames covering it,
-20 s at most); `duration`, `audio`, `tile_frames` do not apply. a2v has no
+first.png 0 S`, plus `--image last.png last S` when `last_image` is plugged.
+The clip length follows the voice plus `silence_after` (8k + 1 frames covering
+both, 20 s at most); `duration`, `audio`, `tile_frames` do not apply. a2v has no
 `--lora` flag: with LoRAs the node runs `a2v_lora.py` with the ltx-2-mlx
 virtualenv's python, which sets the pipeline's pending LoRAs so they are fused
 like in `generate` (the log shows one "Fusing LoRA" line per LoRA).
@@ -73,6 +75,16 @@ Measured on 2026-11-21 (M3 Max, 2.5 q8, character LoRA at 1.0, 512x768,
 105 frames, about 2.5 min): the distilled plan speaks with the character's
 lips; the CFG plans gave voice-over. The prompt must describe the person
 speaking: with "a mocking half smile" the mouth stayed shut in every mode.
+
+With a last image (measured on 2026-11-22, same setup, about 5 min): the
+clip reaches the last image and the lips follow the voice, provided the
+prompt describes the last image's pose and does not ask for a closed mouth
+("ending with a closed-mouth smile" froze the lips halfway through the
+speech). On a 105-frame clip the motion reached the last image smoothly. With
+`silence_after` (137 and 153 frames, seed 12) the lips stopped with the voice
+but the motion drifted (the other hand raised) and the last image showed up
+only on the final frames, as a cut: keep the silence short when the last
+image matters, and try another seed when it pops in.
 
 ### Video upscale x2
 

@@ -71,7 +71,7 @@ export function ltx25Node(
       ...(images.first ? { first_image: [images.first, 0] } : {}),
       ...(images.last ? { last_image: [images.last, 0] } : {}),
       ...(images.voice
-        ? { voice: [images.voice, 0], voice_normalize: 1, lip_sync_hint: 1 }
+        ? { voice: [images.voice, 0], voice_normalize: 1, lip_sync_hint: 1, silence_after: 0 }
         : {}),
       ...(refs
         ? {
@@ -192,8 +192,11 @@ export function ltx25PromptFields(placeholder: string): WorkflowField[] {
   ];
 }
 
-/** Anchor strengths: first (i2v, flf) and last (flf). */
-export function ltx25StrengthFields(withLast: boolean): WorkflowField[] {
+/**
+ * Anchor strengths: first (i2v, flf, a2v) and last (flf, a2v). `lastWhen`
+ * names an optional last-image field: its strength shows once it is filled.
+ */
+export function ltx25StrengthFields(withLast: boolean, lastWhen?: string): WorkflowField[] {
   const fields: WorkflowField[] = [
     {
       kind: 'number',
@@ -216,6 +219,7 @@ export function ltx25StrengthFields(withLast: boolean): WorkflowField[] {
       min: 0,
       max: 1,
       hint: 'wf.ltx25.lastStrengthHint',
+      showWhen: lastWhen ? { key: lastWhen, filled: true } : undefined,
     });
   }
   return fields;

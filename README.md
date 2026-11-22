@@ -188,7 +188,9 @@ nothing below assumes a Mac.
    progress into the queue and write the `.mp4`, its recipe embedded, to
    the output folder. The video pipeline: a Krea still, then **Image +
    voice** for a cheap lip-synced draft (about 2.5 min at 512×768, character
-   LoRA fused in), then **Upscale a video x2** on the chosen take (about
+   LoRA fused in; an optional last image and a few seconds of silence after
+   the voice make it a first-last frame that talks), then **Upscale a
+   video x2** on the chosen take (about
    38 min, audio kept). "Use" in the viewer chains each step, prefilled.
    Details (pack discovery, env overrides, memory levers):
    [server/komfy-ltx-mlx/README.md](./server/komfy-ltx-mlx/README.md).
