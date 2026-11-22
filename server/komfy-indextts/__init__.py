@@ -15,6 +15,13 @@ installed with `uv sync`), the same way komfy-ltx-mlx runs ltx-2-mlx:
     ComfyUI's progress bar, and an Interrupt kills its process group;
   - on failure, the tail of its log is raised.
 
+Installed or not: the optional `engine` input lists `IndexTTS-2.5` only
+when the virtualenv and the checkpoints are found, otherwise one entry
+naming what is missing. The Komfy app checks its workflow's literal against
+that list (/object_info), so a half-done install shows up in the app before
+a launch, and ComfyUI's validation refuses the prompt with the reason.
+Optional, so graphs saved before it existed still run.
+
 ComfyUI's models are NOT unloaded first: IndexTTS needs about 6 to 8 GB and
 a loaded Krea stays useful for the next job.
 
@@ -49,6 +56,8 @@ import comfy.utils
 import folder_paths
 
 HOME = os.path.expanduser("~")
+POSIX = os.name != "nt"
+ENGINE = "IndexTTS-2.5"
 DEFAULT_DIR = os.path.join(HOME, "Documents", "index-tts")
 RUNNER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "runner.py")
 VOICE_EXTENSIONS = {".wav", ".mp3", ".m4a", ".flac", ".ogg"}
@@ -106,17 +115,36 @@ _register_voices()
 # Helpers (copied from komfy-ltx-mlx: the packages are symlinked separately)
 # --------------------------------------------------------------------------
 
-def _indextts_dir():
+def _indextts_paths():
     root = os.path.expanduser(os.environ.get("KOMFY_INDEXTTS_DIR", DEFAULT_DIR))
-    python = os.path.join(root, ".venv", "bin", "python")
-    checkpoints = os.path.join(root, "checkpoints")
-    if not os.access(python, os.X_OK):
-        raise RuntimeError(
-            f"IndexTTS virtualenv not found ({python}). Install IndexTTS 2.5 there "
-            "(see server/komfy-indextts/README.md) or set KOMFY_INDEXTTS_DIR")
+    if POSIX:
+        python = os.path.join(root, ".venv", "bin", "python")
+    else:
+        python = os.path.join(root, ".venv", "Scripts", "python.exe")
+    return root, python, os.path.join(root, "checkpoints")
+
+
+def _install_problem():
+    """None when IndexTTS can run, else what is missing (shown to the user)."""
+    root, python, checkpoints = _indextts_paths()
+    if not os.path.isfile(python):
+        return f"no virtualenv at {python} (set KOMFY_INDEXTTS_DIR?)"
     if not os.path.isfile(os.path.join(checkpoints, "config.yaml")):
-        raise RuntimeError(f"IndexTTS checkpoints not found in {checkpoints}")
-    return root, python, checkpoints
+        return f"no config.yaml in {checkpoints}"
+    return None
+
+
+def _engine_choices():
+    problem = _install_problem()
+    return [ENGINE] if problem is None else [f"unavailable: {problem}"]
+
+
+def _indextts_dir():
+    problem = _install_problem()
+    if problem is not None:
+        raise RuntimeError(
+            f"IndexTTS is not installed: {problem}. See server/komfy-indextts/README.md")
+    return _indextts_paths()
 
 
 def _child_env(checkpoints):
@@ -125,6 +153,7 @@ def _child_env(checkpoints):
     for key in ("PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV"):
         env.pop(key, None)
     env["PYTHONUNBUFFERED"] = "1"
+    env["PYTHONIOENCODING"] = "utf-8"
     # IndexTTS fetches its helper models (w2v-bert, campplus, bigvgan) into
     # checkpoints/hf_cache on its first run. Once they are there, never let
     # a render start a download.
@@ -155,7 +184,20 @@ def _read_stream(stream, out):
     out.put(None)
 
 
+def _spawn_options():
+    """The child in its own process group, so an Interrupt reaches all of it."""
+    if POSIX:
+        return {"start_new_session": True}
+    return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+
+
 def _terminate(proc):
+    if not POSIX:
+        # taskkill /T takes the child's own children down with it.
+        subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                       capture_output=True)
+        proc.wait()
+        return
     try:
         os.killpg(proc.pid, signal.SIGTERM)
         proc.wait(timeout=15)
@@ -172,7 +214,7 @@ def _run(cmd, env, cwd):
     inner tqdm bars (one per segment) are kept out of the log tail."""
     proc = subprocess.Popen(
         cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env, cwd=cwd,
-        start_new_session=True,
+        **_spawn_options(),
     )
     lines = queue.Queue()
     reader = threading.Thread(target=_read_stream, args=(proc.stdout, lines), daemon=True)
@@ -382,6 +424,10 @@ class KomfyIndexTTS:
                 "filename_prefix": ("STRING", {"default": "komfy/voice"}),
             },
             "optional": {
+                "engine": (_engine_choices(), {
+                    "tooltip": "IndexTTS-2.5 when its virtualenv and checkpoints are found; "
+                               "otherwise what is missing (see README)",
+                }),
                 "voice_audio": ("AUDIO", {"tooltip": "A new voice sample: used instead of the saved voice"}),
                 "save_voice_as": ("STRING", {
                     "default": "",
@@ -397,7 +443,8 @@ class KomfyIndexTTS:
     CATEGORY = "Komfy/Voice"
 
     def generate(self, voice, text, lang, emotion_mix, emotion_strength, speed, seed,
-                 filename_prefix, voice_audio=None, save_voice_as="", komfy_graph=None):
+                 filename_prefix, engine=ENGINE, voice_audio=None, save_voice_as="",
+                 komfy_graph=None):
         root, python, checkpoints = _indextts_dir()
         if not text.strip():
             raise ValueError("The text to say is empty")

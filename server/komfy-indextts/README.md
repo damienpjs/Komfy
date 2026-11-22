@@ -2,20 +2,23 @@
 
 A ComfyUI custom node that says a line in a **cloned voice** with
 [IndexTTS 2.5](https://github.com/index-tts/index-tts), with an optional mix
-of its eight emotions. It backs the **Generate a voice** workflow of the
-Komfy Video section, whose output feeds the talking-video workflow
+of its eight emotions. It backs the **Emotions** mode of the Komfy
+**Generate a voice** entry (the **Multilingual** mode, with French, is
+`komfy-xtts`), whose output feeds the talking-video workflow
 (Image + voice, `ltx25-a2v`).
 
 IndexTTS runs out of process, in its own virtualenv, like komfy-ltx-mlx runs
 ltx-2-mlx:
 
 1. the node writes a small job file and starts
-   `<index-tts>/.venv/bin/python runner.py job.json` in its own session;
+   `<index-tts>/.venv/bin/python runner.py job.json`
+   (`.venv\Scripts\python.exe` on Windows) in its own process group;
 2. `runner.py` seeds Python, NumPy and PyTorch, loads the model, says the
    line and exits, so its memory goes back to the OS;
 3. its progress (IndexTTS's own callback, the one its web UI uses) feeds
    ComfyUI's progress bar: 0 to 30 % for the load, then the synthesis; an
-   Interrupt kills the process group; a failure raises the tail of its log;
+   Interrupt kills the child (process group on macOS and Linux,
+   `taskkill /T` on Windows); a failure raises the tail of its log;
 4. ffmpeg turns the speech into an mp4: the whole waveform drawn dim on the
    app's charcoal, lit in the app's yellow from left to right as it plays
    (so the first frame, the gallery thumbnail, already shows the line), AAC
@@ -30,12 +33,23 @@ and a loaded Krea stays useful for the next job.
 Timing on an M3 Max (MPS, fp32): about 25 s to load, then 25 to 40 s for a
 5 s line; about 70 s per render in all.
 
+## Installed or not
+
+The optional `engine` input lists `IndexTTS-2.5` only when the virtualenv
+and `checkpoints/config.yaml` are found; otherwise its only entry names what
+is missing. The Komfy app compares its workflow's `IndexTTS-2.5` with that
+list, so the Emotions mode is dimmed and its form names what is missing
+before a launch; ComfyUI refuses a prompt sent anyway with that reason. The
+list is rebuilt on every `/object_info`, so finishing the install needs no
+restart. Optional, so graphs saved before it existed still run.
+
 ## Node
 
 `KomfyIndexTTS` ("IndexTTS 2.5 voice · Komfy", category `Komfy/Voice`).
 
 | Input | Notes |
 |---|---|
+| `engine` | Optional: `IndexTTS-2.5`, or what is missing (above) |
 | `voice` | `None` + the files of `models/voices` (`.wav .mp3 .m4a .flac .ogg`) |
 | `text` | The line to say. IndexTTS splits long text in segments; keep it under 20 s for the talking video |
 | `lang` | `EN`, `ZH`, `JA`, `ES`, `AR` (IndexTTS 2.5's languages; no French) |
