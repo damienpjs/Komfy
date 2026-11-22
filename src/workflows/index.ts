@@ -18,6 +18,7 @@ import { ltx25I2v } from './ltx25-i2v';
 import { ltx25T2v } from './ltx25-t2v';
 import { ltx25Upscale } from './ltx25-upscale';
 import { text2Prompt } from './text2prompt';
+import { xttsVoice } from './xtts-voice';
 import type { WorkflowManifest } from './types';
 
 export const workflows: WorkflowManifest[] = [
@@ -29,6 +30,7 @@ export const workflows: WorkflowManifest[] = [
   ltx25A2v,
   ltx25Flf,
   indexttsVoice,
+  xttsVoice,
   ltx25Upscale,
   krea2Upscale,
   krea2Depth,

@@ -3,7 +3,7 @@
  * gallery item, prefilled. A still goes to the LTX image modes (animate,
  * make it talk, first frame), a clip to the x2 video upscale with its
  * prompt, identity LoRA and seed taken from its recipe, and a generated
- * voice (IndexTTS) to the talking video as its voice.
+ * voice (IndexTTS or XTTS) to the talking video as its voice.
  *
  * The item travels as a loader value, not as a file: an output is passed
  * annotated (`sub/x.mp4 [output]`, cf. utils/annotated), which LoadImage and
@@ -37,7 +37,7 @@ export function mediaRef(image: GalleryImage): string {
 const LTX_NODES = new Set(['KomfyLTX25MLX', 'KomfyLTX25UpscaleMLX']);
 
 /** A generated voice (an mp4 of the speech): it becomes a talking video. */
-const VOICE_NODE = 'KomfyIndexTTS';
+const VOICE_NODES = new Set(['KomfyIndexTTS', 'KomfyXTTS']);
 
 export function nextStepTargets(image: GalleryImage, recipe: PromptGraph | null): UseInTarget[] {
   const ref = mediaRef(image);
@@ -49,7 +49,7 @@ export function nextStepTargets(image: GalleryImage, recipe: PromptGraph | null)
     ];
   }
   // A voice clip: LoadAudio reads the mp4's audio track as the voice.
-  if (recipe && Object.values(recipe).some((n) => n.class_type === VOICE_NODE)) {
+  if (recipe && Object.values(recipe).some((n) => VOICE_NODES.has(n.class_type))) {
     return [{ manifestId: 'ltx25-a2v', label: 'viewer.useVoice', values: { voice: ref } }];
   }
   const values: FieldValues = { video: ref };

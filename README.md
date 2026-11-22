@@ -62,6 +62,11 @@ Server side:
     [`server/komfy-indextts`](./server/komfy-indextts) node plus
     [IndexTTS](https://github.com/index-tts/index-tts) 2.5 in its own
     virtualenv, see step 6 below;
+  - Voice in French and 16 other languages (XTTS v2, no emotion mix): the
+    bundled [`server/komfy-xtts`](./server/komfy-xtts) node plus
+    [coqui-tts](https://github.com/idiap/coqui-ai-TTS) in its own
+    virtualenv, see step 7 below. Either voice engine can be installed
+    alone: the app dims the mode whose engine is missing;
 - **Ollama** running locally (`127.0.0.1:11434`, never exposed on the
   tailnet) with a vision model tagged `gemma4-vision:latest` — only for the
   "→ Prompt" workflows. Any Gemma-class vision model works; alias yours
@@ -217,6 +222,17 @@ nothing below assumes a Mac.
    viewer sends it to **Image + voice** as the voice. Another checkout
    location: set `KOMFY_INDEXTTS_DIR`. Details:
    [server/komfy-indextts/README.md](./server/komfy-indextts/README.md).
+
+7. **Voice in French with XTTS v2** (optional): the **Multilingual** mode
+   of **Generate a voice** says the line in 17 languages, French included,
+   from the same `models/voices`. No emotion mix; a liveliness setting
+   instead. Runs on the CPU (about real time on an M3 Max) or on CUDA.
+   Install coqui-tts in its own virtualenv, copy the weights into
+   `~/Documents/xtts/checkpoints`, symlink the node and restart ComfyUI:
+   the exact commands (macOS, Linux, Windows) and the three version traps
+   are in [server/komfy-xtts/README.md](./server/komfy-xtts/README.md).
+   The XTTS v2 weights are licensed for non-commercial use only.
+   Another location: set `KOMFY_XTTS_DIR`.
 
 ## App setup (development)
 
@@ -422,6 +438,7 @@ komfy/
 ├── server/supervisor/    # standalone Node service: remote ComfyUI on/off + live console
 ├── server/komfy-ltx-mlx/ # ComfyUI node: LTX 2.5 video through the ltx-2-mlx CLI (Apple Silicon)
 ├── server/komfy-indextts/ # ComfyUI node: voice cloning + emotions with IndexTTS 2.5 (own virtualenv)
+├── server/komfy-xtts/    # ComfyUI node: voice cloning in 17 languages (French) with XTTS v2 (own virtualenv)
 ├── scripts/              # start-comfy.sh/.ps1 + comfy.js (launch), expo-start.js (Metro on Tailscale), pair.js (QR), native-ios.js (npm run native)
 ├── plugins/              # Expo config plugins (withoutPushEntitlement — free Apple team builds)
 └── docs/architecture.png # architecture diagram (C4 container view)

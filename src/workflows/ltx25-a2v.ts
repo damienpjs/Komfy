@@ -50,6 +50,7 @@ export const ltx25A2v: WorkflowManifest = {
   name: 'wf.ltx25.a2vName',
   description: 'wf.ltx25.a2vDescription',
   icon: 'videocam-outline',
+  output: 'video',
   graph,
   saveNodeId: LTX25_NODE,
   fields: [

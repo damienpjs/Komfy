@@ -9,6 +9,9 @@
  * the node's own combo) or from a new sample (LoadAudio, dropped when left
  * empty), which can be saved under a name for the next time.
  *
+ * The Emotions mode of "Generate a voice"; the Multilingual mode, with
+ * French, is XTTS (xtts-voice.ts).
+ *
  * Measured on the maintainer's voice (2026-11-21, a 25 s sample): the
  * neutral clone sounds like him; an emotion strength of 0.6 or 1.0 drifts
  * away from his timbre, 0.4 or lower keeps it. Hence the 0.4 default.
@@ -20,6 +23,13 @@ import type { WorkflowManifest } from './types';
 const TTS = '1';
 const SAMPLE = '2';
 
+/**
+ * Value the server lists for `engine` once IndexTTS is installed: checked
+ * against /object_info, so a missing engine shows on the form (and dims the
+ * mode in the family switch) before a launch.
+ */
+const ENGINE = 'IndexTTS-2.5';
+
 /** First entry of the node's voice list: nothing picked yet. */
 export const NO_VOICE = 'None';
 
@@ -27,6 +37,7 @@ const graph: PromptGraph = {
   [TTS]: {
     class_type: 'KomfyIndexTTS',
     inputs: {
+      engine: ENGINE,
       voice: NO_VOICE,
       text: '',
       lang: 'EN',
@@ -56,6 +67,7 @@ export const indexttsVoice: WorkflowManifest = {
   name: 'wf.voice.name',
   description: 'wf.voice.description',
   icon: 'voice',
+  output: 'voice',
   graph,
   saveNodeId: TTS,
   fields: [

@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { makeStyles, useTheme } from '../theme/theme';
 import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
+import type { OutputKind } from '../workflows/types';
 
 export const BATCH_PRESETS = [1, 2, 4, 9, 16, 25];
 export const BATCH_MAX = 100;
@@ -22,9 +23,11 @@ interface Props {
   /** Receives the clamped count. */
   onChange: (count: number) => void;
   onClose: () => void;
+  /** What one run produces: the sheet's title and hints follow it. */
+  output: OutputKind;
 }
 
-export function CountSheet({ visible, count, onChange, onClose }: Props) {
+export function CountSheet({ visible, count, onChange, onClose, output }: Props) {
   const styles = useStyles();
   const { colors } = useTheme();
   const { t } = useTranslation();
@@ -65,7 +68,7 @@ export function CountSheet({ visible, count, onChange, onClose }: Props) {
       <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.md }]}>
         <View style={styles.grab} />
         <View style={styles.head}>
-          <Text style={styles.title}>{t('launch.imageCount')}</Text>
+          <Text style={styles.title}>{t(`launch.outputs.${output}.count`)}</Text>
           <Pressable onPress={onClose} style={styles.done} accessibilityRole="button">
             <Text style={styles.doneText}>{t('common.done')}</Text>
           </Pressable>
@@ -74,7 +77,7 @@ export function CountSheet({ visible, count, onChange, onClose }: Props) {
         <View style={styles.stepper}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={t('launch.countLess')}
+            accessibilityLabel={t(`launch.outputs.${output}.less`)}
             disabled={count <= 1}
             onPressIn={() => startHold(-1)}
             onPressOut={stopHold}
@@ -87,7 +90,7 @@ export function CountSheet({ visible, count, onChange, onClose }: Props) {
           </Text>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={t('launch.countMore')}
+            accessibilityLabel={t(`launch.outputs.${output}.more`)}
             disabled={count >= BATCH_MAX}
             onPressIn={() => startHold(1)}
             onPressOut={stopHold}
@@ -118,7 +121,9 @@ export function CountSheet({ visible, count, onChange, onClose }: Props) {
         </View>
         <View style={styles.hintBox}>
           <Text style={styles.hint}>
-            {count > 1 ? t('launch.distinctSeedsHint') : t('launch.singleImageHint')}
+            {count > 1
+              ? t(`launch.outputs.${output}.distinctSeeds`)
+              : t(`launch.outputs.${output}.single`)}
           </Text>
         </View>
       </View>
