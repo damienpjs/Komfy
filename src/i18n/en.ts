@@ -724,6 +724,9 @@ export default {
   saveToPhotos: {
     denied: 'Photo library access denied (system settings → Komfy).',
     httpError: 'HTTP {{status}}: file unavailable on the server?',
+    frameNeedsExt:
+      'Saving a frame needs the updated komfy-listing extension: restart ComfyUI to reload it.',
+    frameFailed: 'Could not extract the frame: {{message}}',
   },
   status: {
     offline: 'offline',
@@ -998,6 +1001,11 @@ export default {
       'Size and dates need the komfy-listing extension: restart ComfyUI to reload it.',
     detailsRecipe: 'Recipe',
     detailsRecipeFailed: 'Could not read the recipe: {{message}}',
+    saveFrame: 'Frame',
+    saveFrameA11y: 'Save this exact frame to Photos, at the video\'s resolution',
+    prevFrame: 'Previous frame',
+    nextFrame: 'Next frame',
+    frameCounter: 'Frame {{current}}/{{total}}',
   },
   jobDetail: {
     title: 'Job #{{number}}',

@@ -1133,6 +1133,7 @@ export function GalleryBrowser() {
           images={viewer.images}
           initialIndex={viewer.index}
           viewUrl={gallery.viewUrl}
+          frameUrl={gallery.frameUrl}
           originRect={viewer.origin}
           knownSizes={viewer.sizes}
           getThumbRect={getThumbRect}

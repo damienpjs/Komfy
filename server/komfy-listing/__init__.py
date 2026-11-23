@@ -4,7 +4,8 @@ Exposes a recursive, multi-root listing of ComfyUI's image folders
 (`output` and `input`) that the core API does not provide
 (`/internal/files/{type}` does not descend into subfolders — verified in
 the ComfyUI 0.27 source), plus soft-delete (trash), move, rename, mkdir
-and trash maintenance used by the Komfy gallery.
+and trash maintenance used by the Komfy gallery, plus the single-frame
+PNG extraction behind the viewer's "save frame" button.
 
 Every path handled by these routes is **prefixed by its root**, e.g.
 `output/workflows/x.png` or `input/photo.png`; the first segment selects
@@ -642,6 +643,95 @@ def read_video_recipe(path):
         return json.loads(raw)
     except ValueError:
         return None
+
+
+def _frame_at(container, stream, target, seek):
+    """Last decoded frame whose presentation time is <= `target` (what a
+    player shows at that instant), or the first frame when `target` comes
+    before it. `seek` jumps to the keyframe at or before the target first."""
+    if seek:
+        container.seek(int(target / stream.time_base), stream=stream, backward=True)
+    picked = None
+    for frame in container.decode(stream):
+        if frame.time is None:
+            continue
+        if frame.time > target:
+            # A seek that overshot the target lands past the wanted frame:
+            # the caller then retries from the start of the stream.
+            return picked if picked is not None or not seek else None
+        picked = frame
+    return picked
+
+
+def extract_frame(path, seconds):
+    """The frame displayed at `seconds` on the player's timeline, decoded from
+    the file itself at its native size, as lossless PNG bytes. Returns
+    (png, index, width, height). Nothing is written to disk."""
+    import av  # ComfyUI dependency, imported lazily like read_video_recipe
+    from av.video.reformatter import Interpolation
+
+    with av.open(path) as container:
+        if not container.streams.video:
+            raise ValueError("no video stream in this file")
+        stream = container.streams.video[0]
+        stream.thread_type = "AUTO"
+        start = float(stream.start_time * stream.time_base) if stream.start_time else 0.0
+        # The app sends the middle of a frame; the margin only absorbs float
+        # noise for a caller that sends a frame's exact start.
+        target = start + seconds + 1e-4
+        frame = _frame_at(container, stream, target, seek=seconds > 0)
+        if frame is None:
+            container.seek(0)
+            frame = _frame_at(container, stream, target, seek=False)
+        if frame is None:
+            raise ValueError("no decodable frame")
+        rate = stream.average_rate or stream.guessed_rate
+        index = round((frame.time - start) * float(rate)) if rate else None
+        # Colorspace and range follow the file's tags (BT.601 when untagged,
+        # as the encoders that wrote it assumed): same colors as the player.
+        rgb = frame.reformat(
+            format="rgb24",
+            interpolation=Interpolation.BICUBIC
+            | Interpolation.ACCURATE_RND
+            | Interpolation.FULL_CHR_H_INT,
+        ).to_ndarray()
+    image = Image.fromarray(rgb)
+    buf = io.BytesIO()
+    image.save(buf, format="PNG")
+    return buf.getvalue(), index, image.width, image.height
+
+
+@PromptServer.instance.routes.get("/komfy/frame")
+async def komfy_frame(request):
+    """GET /komfy/frame?path=output/sub/clip.mp4&t=3.6458 → image/png: the
+    exact frame shown at `t` seconds, native resolution, lossless. Built in
+    memory and streamed back, never stored on the server. Headers carry the
+    frame index and size. Errors are 400 (never 404: the app reads a 404 as
+    "extension older than the route")."""
+    rel = request.query.get("path", "")
+    try:
+        seconds = float(request.query.get("t", ""))
+        assert seconds >= 0 and seconds == seconds  # rejects NaN
+    except (ValueError, AssertionError):
+        return web.json_response({"error": "expected ?t=<seconds >= 0>"}, status=400)
+    root, sub = _split_root(rel)
+    base = _roots().get(root)
+    if base is None:
+        return web.json_response({"error": "unknown root"}, status=400)
+    target, err = _safe_target(os.path.realpath(base), sub)
+    if err or not os.path.isfile(target):
+        return web.json_response({"error": err or "file not found"}, status=400)
+    try:
+        png, index, width, height = await asyncio.to_thread(extract_frame, target, seconds)
+    except Exception as e:
+        return web.json_response({"error": f"could not decode the frame: {e}"}, status=400)
+    headers = {
+        "Cache-Control": "no-store",
+        "X-Komfy-Frame-Size": f"{width}x{height}",
+    }
+    if index is not None:
+        headers["X-Komfy-Frame-Index"] = str(index)
+    return web.Response(body=png, content_type="image/png", headers=headers)
 
 
 @PromptServer.instance.routes.get("/komfy/recipe")

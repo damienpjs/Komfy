@@ -50,6 +50,15 @@ Routes:
   writes none: without it the result comes back desaturated. Colours
   outside sRGB are clipped. Response adds `"converted": true|false`. The
   app falls back to the core route on 404.
+- `GET /komfy/frame?path=output/sub/clip.mp4&t=3.6458`: the frame a
+  player shows at `t` seconds (the last one whose presentation time is
+  `<= t`), decoded with PyAV from the file itself at its native size and
+  returned as lossless PNG (`image/png`). Built in memory, never written
+  to disk. Headers: `X-Komfy-Frame-Index` (0-based) and
+  `X-Komfy-Frame-Size` (`WxH`). Colours follow the file's tags, BT.601
+  when untagged, as the encoders that wrote it assumed. Errors are `400`
+  with `{"error"}`, never `404`, which the app reads as "extension older
+  than the route". Used by the viewer's "save frame" button.
 
 `503` on all routes except the upload when the output folder is
 unavailable.

@@ -15,6 +15,7 @@
  */
 
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -46,7 +47,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { GalleryImage } from '../hooks/useGallery';
 import { radii, spacing, typography } from '../theme/tokens';
 import { makeStyles, ThemeOverride, useTheme } from '../theme/theme';
-import { saveImageToPhotos } from '../utils/saveToPhotos';
+import { saveFrameToPhotos, saveImageToPhotos } from '../utils/saveToPhotos';
 import { ImageInfoSheet } from './ImageInfoSheet';
 
 export interface Rect {
@@ -61,6 +62,12 @@ export interface Size {
   height: number;
 }
 
+/** The frame a paused video holds: player time + 0-based index if known. */
+interface PausedFrame {
+  seconds: number;
+  index: number | null;
+}
+
 /** Live transform of a page (zoom + drag), to start the closing flight. */
 interface PageTransform {
   tx: number;
@@ -73,6 +80,12 @@ interface Props {
   images: GalleryImage[];
   initialIndex: number;
   viewUrl: (image: GalleryImage) => string;
+  /**
+   * URL of the lossless PNG of a video's frame shown at `seconds`
+   * (ComfyClient.frameUrl). When provided, pausing a video shows a "save
+   * frame" button in the top bar.
+   */
+  frameUrl?: (image: GalleryImage, seconds: number) => string;
   /**
    * Leaves the viewer, once its exit animation is over. `flew` tells whether
    * the image flew back into its thumbnail (false: plain fade).
@@ -441,6 +454,7 @@ function VideoPage({
   onToggleChrome,
   onDuration,
   onSize,
+  onPausedFrame,
 }: {
   uri: string;
   width: number;
@@ -455,6 +469,12 @@ function VideoPage({
   onDuration: (seconds: number) => void;
   /** Reports the intrinsic pixel size of the video track, once known. */
   onSize: (size: { width: number; height: number }) => void;
+  /**
+   * The frame on screen while the user holds the clip paused (`seconds` on
+   * the player timeline, `index` 0-based when the frame rate is known), or
+   * null once it plays again. Feeds the viewer's "save frame" button.
+   */
+  onPausedFrame: (frame: PausedFrame | null) => void;
 }) {
   const styles = useStyles('dark');
   const { colors } = useTheme('dark');
@@ -470,10 +490,21 @@ function VideoPage({
   const [duration, setDuration] = useState(0);
   const scrubbing = useRef(false);
   const trackWidth = useRef(1);
+  // Nominal frame rate of the track: frame stepping is offered only with it.
+  const [fps, setFps] = useState<number | null>(null);
+  // Frame held by a user pause (0-based), null while playing. Mirrored in a
+  // ref so the long-press repeat reads the latest value.
+  const [frame, setFrame] = useState<number | null>(null);
+  const frameRef = useRef<number | null>(null);
+  const userPaused = useRef(false);
+  const repeat = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     const reportSize = (size?: { width: number; height: number }) => {
       if (size && size.width > 0 && size.height > 0) onSize(size);
+    };
+    const reportRate = (rate?: number | null) => {
+      if (rate && rate > 0) setFps(rate);
     };
     const subs = [
       player.addListener('statusChange', ({ status: s }) => {
@@ -484,6 +515,7 @@ function VideoPage({
             onDuration(player.duration);
           }
           reportSize(player.videoTrack?.size);
+          reportRate(player.videoTrack?.frameRate);
         } else if (s === 'error') {
           setStatus('error');
         } else if (s === 'loading') {
@@ -495,17 +527,35 @@ function VideoPage({
       player.addListener('sourceLoad', ({ duration: d, availableVideoTracks }) => {
         if (d > 0) onDuration(d);
         reportSize(availableVideoTracks?.[0]?.size);
+        reportRate(availableVideoTracks?.[0]?.frameRate);
       }),
-      player.addListener('videoTrackChange', ({ videoTrack }) =>
-        reportSize(videoTrack?.size),
-      ),
-      player.addListener('playingChange', ({ isPlaying: p }) => setIsPlaying(p)),
+      player.addListener('videoTrackChange', ({ videoTrack }) => {
+        reportSize(videoTrack?.size);
+        reportRate(videoTrack?.frameRate);
+      }),
+      player.addListener('playingChange', ({ isPlaying: p }) => {
+        setIsPlaying(p);
+        // Playback resumed (button, or the page coming back on screen):
+        // the held frame is gone.
+        if (p && userPaused.current) {
+          userPaused.current = false;
+          frameRef.current = null;
+          setFrame(null);
+          onPausedFrame(null);
+        }
+      }),
       player.addListener('timeUpdate', ({ currentTime }) => {
         if (!scrubbing.current) setPosition(currentTime);
       }),
     ];
     return () => subs.forEach((s) => s.remove());
-  }, [player, onDuration, onSize]);
+  }, [player, onDuration, onSize, onPausedFrame]);
+
+  const stopRepeat = () => {
+    if (repeat.current) clearInterval(repeat.current);
+    repeat.current = null;
+  };
+  useEffect(() => stopRepeat, []);
 
   // The on-screen page autoplays; swiping away pauses it.
   useEffect(() => {
@@ -514,6 +564,48 @@ function VideoPage({
   }, [active, player]);
 
   const frac = duration > 0 ? Math.min(1, Math.max(0, position / duration)) : 0;
+  // 121 frames at 24 fps report ~5.04 s: rounding gives the frame count back.
+  const frameCount = fps && duration > 0 ? Math.max(1, Math.round(duration * fps)) : null;
+
+  /**
+   * Holds frame `k` (clamped): seeks to the middle of its display interval,
+   * so the picture on screen and the server's "frame shown at t" agree even
+   * with float noise on either side.
+   */
+  const holdFrame = (k: number) => {
+    if (!fps) return;
+    const last = frameCount ? frameCount - 1 : k;
+    const clamped = Math.min(last, Math.max(0, k));
+    const seconds = (clamped + 0.5) / fps;
+    frameRef.current = clamped;
+    setFrame(clamped);
+    setPosition(seconds);
+    player.currentTime = seconds;
+    onPausedFrame({ seconds, index: clamped });
+  };
+  /** The frame displayed at `t` seconds becomes the held frame. */
+  const holdAt = (seconds: number) => {
+    if (fps) holdFrame(Math.floor(seconds * fps + 1e-3));
+    else {
+      setPosition(seconds);
+      player.currentTime = seconds;
+      onPausedFrame({ seconds, index: null });
+    }
+  };
+  const togglePlay = () => {
+    if (isPlaying) {
+      userPaused.current = true;
+      player.pause();
+      holdAt(player.currentTime);
+    } else {
+      player.play();
+    }
+  };
+  const step = (delta: number) => {
+    if (frameRef.current == null) return;
+    Haptics.selectionAsync();
+    holdFrame(frameRef.current + delta);
+  };
 
   const tap = Gesture.Tap()
     .maxDuration(250)
@@ -525,9 +617,14 @@ function VideoPage({
   const seekAt = (x: number) => {
     const f = Math.min(1, Math.max(0, x / trackWidth.current));
     const target = f * duration;
+    scrubbing.current = false;
+    // Scrubbing a held clip picks a new frame to hold.
+    if (userPaused.current) {
+      holdAt(Math.min(target, Math.max(0, duration - 1e-3)));
+      return;
+    }
     setPosition(target);
     player.currentTime = target;
-    scrubbing.current = false;
   };
   const previewAt = (x: number) => {
     scrubbing.current = true;
@@ -578,11 +675,7 @@ function VideoPage({
 
       {chromeVisible && status !== 'error' && (
         <>
-          <Pressable
-            style={styles.playPauseCenter}
-            onPress={() => (isPlaying ? player.pause() : player.play())}
-            hitSlop={12}
-          >
+          <Pressable style={styles.playPauseCenter} onPress={togglePlay} hitSlop={12}>
             <Ionicons
               name={isPlaying ? 'pause' : 'play'}
               size={34}
@@ -590,8 +683,41 @@ function VideoPage({
             />
           </Pressable>
 
+          {frame != null &&
+            ([-1, 1] as const).map((delta) => (
+              <Pressable
+                key={delta}
+                accessibilityRole="button"
+                accessibilityLabel={t(delta < 0 ? 'viewer.prevFrame' : 'viewer.nextFrame')}
+                style={({ pressed }) => [
+                  styles.frameStep,
+                  delta < 0 ? styles.frameStepPrev : styles.frameStepNext,
+                  pressed && { opacity: 0.6 },
+                ]}
+                onPress={() => step(delta)}
+                // Held: keeps stepping, ~11 frames a second.
+                delayLongPress={350}
+                onLongPress={() => {
+                  stopRepeat();
+                  repeat.current = setInterval(() => step(delta), 90);
+                }}
+                onPressOut={stopRepeat}
+                hitSlop={8}
+              >
+                <Ionicons
+                  name={delta < 0 ? 'chevron-back' : 'chevron-forward'}
+                  size={26}
+                  color={colors.text}
+                />
+              </Pressable>
+            ))}
+
           <View style={[styles.scrubberRow, { bottom: bottomInset + spacing.sm }]}>
-            <Text style={styles.scrubberTime}>{formatClock(position)}</Text>
+            <Text style={styles.scrubberTime}>
+              {frame != null && frameCount
+                ? t('viewer.frameCounter', { current: frame + 1, total: frameCount })
+                : formatClock(position)}
+            </Text>
             <GestureDetector gesture={seekPan}>
               <View
                 style={styles.track}
@@ -618,6 +744,7 @@ export function ImageViewer({
   images,
   initialIndex,
   viewUrl,
+  frameUrl,
   onClose,
   originRect,
   knownSizes,
@@ -642,6 +769,14 @@ export function ImageViewer({
   const [remixing, setRemixing] = useState(false);
   const [usingIn, setUsingIn] = useState(false);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'done'>(
+    'idle',
+  );
+  // Frame held by the paused video, keyed by its path (a neighbour page's
+  // stale report never shows the button on another item).
+  const [pausedFrame, setPausedFrame] = useState<
+    (PausedFrame & { path: string }) | null
+  >(null);
+  const [frameSaveState, setFrameSaveState] = useState<'idle' | 'saving' | 'done'>(
     'idle',
   );
   // An active zoom freezes the pager (otherwise pan/swipe gestures clash).
@@ -670,6 +805,28 @@ export function ImageViewer({
       setTimeout(() => setSaveState('idle'), 2000);
     } catch (e) {
       setSaveState('idle');
+      Alert.alert(
+        t('gallery.saveFailed'),
+        e instanceof Error ? e.message : String(e),
+      );
+    }
+  };
+
+  const saveFrame = async (image: GalleryImage, frame: PausedFrame) => {
+    if (!frameUrl) return;
+    setFrameSaveState('saving');
+    const stem = image.filename.replace(/\.[^.]+$/, '');
+    const suffix =
+      frame.index != null
+        ? `f${String(frame.index + 1).padStart(4, '0')}`
+        : `t${frame.seconds.toFixed(3)}`;
+    try {
+      await saveFrameToPhotos(frameUrl(image, frame.seconds), `${stem}_${suffix}.png`);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setFrameSaveState('done');
+      setTimeout(() => setFrameSaveState('idle'), 2000);
+    } catch (e) {
+      setFrameSaveState('idle');
       Alert.alert(
         t('gallery.saveFailed'),
         e instanceof Error ? e.message : String(e),
@@ -1003,6 +1160,10 @@ export function ImageViewer({
                           prev[item.path] ? prev : { ...prev, [item.path]: size },
                         )
                       }
+                      onPausedFrame={(frame) => {
+                        setPausedFrame(frame ? { ...frame, path: item.path } : null);
+                        setFrameSaveState('idle');
+                      }}
                     />
                   ) : (
                     <ZoomablePage
@@ -1042,6 +1203,7 @@ export function ImageViewer({
                     ),
                   );
                   setSaveState('idle');
+                  setFrameSaveState('idle');
                 }}
                 showsHorizontalScrollIndicator={false}
               />
@@ -1063,9 +1225,37 @@ export function ImageViewer({
                 >
                   <Ionicons name="close" size={24} color={colors.text} />
                 </Pressable>
-                <Text style={styles.counter}>
-                  {index + 1} / {items.length}
-                </Text>
+                <View style={styles.topRight}>
+                  {frameUrl &&
+                    current?.isVideo &&
+                    pausedFrame?.path === current.path && (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={t('viewer.saveFrameA11y')}
+                        disabled={frameSaveState === 'saving'}
+                        onPress={() => saveFrame(current, pausedFrame)}
+                        hitSlop={8}
+                        style={({ pressed }) => [
+                          styles.frameBtn,
+                          pressed && { opacity: 0.6 },
+                        ]}
+                      >
+                        {frameSaveState === 'saving' ? (
+                          <ActivityIndicator size="small" color={colors.text} />
+                        ) : (
+                          <Ionicons
+                            name={frameSaveState === 'done' ? 'checkmark' : 'download-outline'}
+                            size={18}
+                            color={frameSaveState === 'done' ? colors.success : colors.text}
+                          />
+                        )}
+                        <Text style={styles.frameBtnLabel}>{t('viewer.saveFrame')}</Text>
+                      </Pressable>
+                    )}
+                  <Text style={styles.counter}>
+                    {index + 1} / {items.length}
+                  </Text>
+                </View>
               </Animated.View>
             )}
 
@@ -1283,6 +1473,26 @@ const useStyles = makeStyles((colors) => ({
     justifyContent: 'center',
     backgroundColor: 'rgba(6, 4, 9, 0.55)',
   },
+  frameStep: {
+    position: 'absolute',
+    top: '50%',
+    marginTop: -24,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(6, 4, 9, 0.55)',
+  },
+  // Either side of the 64 pt play button, one spacing step away.
+  frameStepPrev: {
+    left: '50%',
+    marginLeft: -(32 + spacing.lg + 48),
+  },
+  frameStepNext: {
+    left: '50%',
+    marginLeft: 32 + spacing.lg,
+  },
   scrubberRow: {
     position: 'absolute',
     left: spacing.md,
@@ -1343,6 +1553,25 @@ const useStyles = makeStyles((colors) => ({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  topRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  frameBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 36,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.md,
+    backgroundColor: colors.surfacePressed,
+  },
+  frameBtnLabel: {
+    color: colors.text,
+    fontFamily: typography.uiMedium,
+    fontSize: 12,
   },
   counter: {
     color: colors.textMuted,
