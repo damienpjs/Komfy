@@ -204,6 +204,13 @@ export interface ComfyClient {
     type?: string,
     version?: number | string,
   ): string;
+  /**
+   * Lossless PNG of the frame a player shows at `seconds` in a video
+   * (komfy-listing GET /komfy/frame, `path` prefixed by its root): decoded
+   * on the server from the file itself, at its native size, never stored
+   * there. 404 when the extension is older than the route.
+   */
+  frameUrl(path: string, seconds: number): string;
   /** Real-time WebSocket URL. */
   wsUrl(clientId: string): string;
 }
@@ -367,6 +374,9 @@ export function createClient(baseUrl: string): ComfyClient {
     viewUrl: (filename, subfolder = '', type = 'output', version) =>
       `${base}/view?filename=${encodeURIComponent(filename)}&subfolder=${encodeURIComponent(subfolder)}&type=${encodeURIComponent(type)}` +
       (version != null ? `&v=${encodeURIComponent(String(version))}` : ''),
+
+    frameUrl: (path, seconds) =>
+      `${base}/komfy/frame?path=${encodeURIComponent(path)}&t=${seconds.toFixed(6)}`,
 
     wsUrl: (clientId) =>
       `${base.replace(/^http/, 'ws')}/ws?clientId=${encodeURIComponent(clientId)}`,

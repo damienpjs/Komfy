@@ -162,5 +162,7 @@ export function useGallery() {
     // reloads instead of serving the stale thumbnail.
     viewUrl: (image: GalleryImage) =>
       client.viewUrl(image.filename, image.subfolder, image.root, image.mtime),
+    frameUrl: (image: GalleryImage, seconds: number) =>
+      client.frameUrl(image.path, seconds),
   };
 }

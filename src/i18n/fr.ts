@@ -733,6 +733,9 @@ export default {
   saveToPhotos: {
     denied: 'Accès à la photothèque refusé (réglages système → Komfy).',
     httpError: 'HTTP {{status}} : fichier indisponible sur le serveur ?',
+    frameNeedsExt:
+      "Enregistrer une frame nécessite l'extension komfy-listing à jour : redémarrer ComfyUI pour la recharger.",
+    frameFailed: 'Extraction de la frame impossible : {{message}}',
   },
   status: {
     offline: 'hors ligne',
@@ -1007,6 +1010,11 @@ export default {
       "Poids et dates nécessitent l'extension komfy-listing : redémarrer ComfyUI pour la recharger.",
     detailsRecipe: 'Recette',
     detailsRecipeFailed: 'Recette illisible : {{message}}',
+    saveFrame: 'Frame',
+    saveFrameA11y: 'Enregistrer cette frame exacte dans Photos, à la résolution de la vidéo',
+    prevFrame: 'Frame précédente',
+    nextFrame: 'Frame suivante',
+    frameCounter: 'Frame {{current}}/{{total}}',
   },
   jobDetail: {
     title: 'Job #{{number}}',
