@@ -724,10 +724,13 @@ function matchVariant(
             option.patches.every((patch) => {
               if (Array.isArray(patch.value)) return false;
               const eId = state.map.get(patch.target.nodeId);
-              return (
-                eId != null &&
-                extracted[eId].inputs[patch.target.input] === patch.value
-              );
+              if (eId == null) return false;
+              // A BOOLEAN input is patched as 1 / 0, but ComfyUI stores the
+              // value it cast with bool(): the recipe reads back true / false
+              // (verified on history and the mp4 tag of an LTX 2.5 clip).
+              const raw = extracted[eId].inputs[patch.target.input];
+              const read = typeof raw === 'boolean' ? (raw ? 1 : 0) : raw;
+              return read === patch.value;
             }),
         );
         values[field.key] =
