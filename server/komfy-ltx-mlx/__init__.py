@@ -276,9 +276,12 @@ def _dev_recipe(pack):
     dev = os.path.join(pack, "transformer-dev.safetensors")
     distilled = sorted(glob.glob(os.path.join(pack, "*distilled-lora*.safetensors")))
     if not os.path.isfile(dev) or not distilled:
+        # A distilled-only pack (e.g. a converted community checkpoint) has
+        # neither: references stay on a pack that ships the dev transformer.
         raise RuntimeError(
             f"Character references need the pack's transformer-dev.safetensors and its "
-            f"distilled LoRA (*distilled-lora*.safetensors) in {pack}"
+            f"distilled LoRA (*distilled-lora*.safetensors) in {pack}. A distilled-only "
+            f"pack cannot render them: pick the official LTX 2.5 pack for references"
         )
     return ["--single-stage", "--dev-transformer", "transformer-dev.safetensors",
             "--distilled-lora", distilled[0], "--distilled-lora-strength", "0.5"]
