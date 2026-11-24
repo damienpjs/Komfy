@@ -19,7 +19,7 @@ import {
 } from 'react-native';
 import { createClient } from '../api/client';
 import { useSettings } from '../store/settings';
-import { PICK_FOR_UPLOAD } from '../utils/imageUpload';
+import { PICK_FOR_UPLOAD, uploadName } from '../utils/imageUpload';
 import { parseAnnotated } from '../utils/annotated';
 import { isHeif } from '../utils/media';
 import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
@@ -81,8 +81,7 @@ export function ImageInputField({ value, onChange }: Props) {
       );
       return;
     }
-    const ext = asset.uri.toLowerCase().endsWith('.png') ? 'png' : 'jpg';
-    const name = asset.fileName ?? `komfy_input_${Date.now()}.${ext}`;
+    const name = uploadName(asset, 'komfy_input', 'jpg');
 
     setUploading(true);
     try {

@@ -23,3 +23,34 @@ export const PICK_FOR_UPLOAD: ImagePicker.ImagePickerOptions = {
   preferredAssetRepresentationMode:
     ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
 };
+
+let lastStamp = 0;
+
+/**
+ * Server name for a file picked on the phone: its own name plus a stamp,
+ * so that no upload ever reuses a name.
+ *
+ * iOS hands out the same name to many pictures (a dozen frames saved from
+ * one clip all came back as IMG_2051.png). The server then numbers them
+ * `IMG_2051 (1).png`, `(2)`… and, once some are deleted, gives those numbers
+ * to new pictures. A form value has no version, and expo-image caches
+ * previews on disk by URL: a reused name showed the old picture, a keyframe
+ * preview mixing with another. With a stamp, a URL only ever meets one file.
+ *
+ * Trade-off: the same photo picked twice is stored twice (the server only
+ * merges identical files under one name).
+ */
+export function uploadName(
+  asset: { fileName?: string | null; uri: string },
+  prefix: string,
+  fallbackExt: string,
+): string {
+  lastStamp = Math.max(Date.now(), lastStamp + 1);
+  const stamp = lastStamp.toString(36);
+  const base = (asset.fileName ?? '').split('/').pop() ?? '';
+  const dot = base.lastIndexOf('.');
+  const stem = (dot > 0 ? base.slice(0, dot) : base).trim();
+  const uriExt = /\.([a-z0-9]{2,5})$/i.exec(asset.uri)?.[1];
+  const ext = (dot > 0 ? base.slice(dot + 1) : uriExt ?? fallbackExt).toLowerCase();
+  return `${stem !== '' && !stem.startsWith('.') ? stem : prefix}_${stamp}.${ext}`;
+}
