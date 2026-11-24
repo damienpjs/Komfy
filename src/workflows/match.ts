@@ -15,6 +15,7 @@ import { budgetForCanvas, clampSides, initialOutpaintValue } from './outpaint';
 import { applySelectOption } from './patch';
 import { parseMix } from './emotions';
 import { isNodeLoras, readNodeLoras } from './nodeLoras';
+import { parseKeyframes } from './keyframes';
 import { GGUF_UNET_LOADER } from './requirements';
 import type {
   AudioField,
@@ -816,6 +817,13 @@ function matchVariant(
       case 'outpaint':
         values[field.key] = readOutpaint(extracted, state, field);
         break;
+      case 'keyframes': {
+        const eId = state.map.get(field.target.nodeId);
+        values[field.key] = parseKeyframes(
+          eId != null ? extracted[eId]?.inputs[field.target.input] : undefined,
+        );
+        break;
+      }
       case 'zones': {
         // Shared seed: patch.ts gives pass i the seed `base + index`, so the
         // base is recovered from any pass (allZones = a single pass, base as is).

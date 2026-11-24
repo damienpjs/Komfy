@@ -1,6 +1,14 @@
 /**
- * LTX 2.5: first frame + last frame → video + audio, through MLX
- * (KomfyLTX25MLX, cf. ltx25-shared.ts): `--image FIRST 0 S --image LAST last S`.
+ * LTX 2.5: keyframes → video + audio, through MLX (KomfyLTX25MLX, cf.
+ * ltx25-shared.ts): `--image FIRST 0 S --image LAST last S`, plus one
+ * `--image KEY FRAME S guide` per keyframe pinned in between and optional
+ * per-stretch prompts (the `keyframes` JSON input, cf. KeyframesField and
+ * server/komfy-ltx-mlx/keyframes.py). Without keyframes the graph is the
+ * first/last frame graph it has always been: same id, presets, remix.
+ *
+ * The use case: a first/last shot whose motion is right but whose faces
+ * drift is rebuilt with the same recipe and seed, its frames retouched
+ * (faces swapped back) and pinned on the frames they were grabbed from.
  *
  * The end anchor is what holds the set in place over a whole segment (Rushes
  * pilot: without it the HQ mode cut away at frame 2 and reinvented the
@@ -20,6 +28,9 @@ import {
 } from './ltx25-shared';
 import type { WorkflowManifest } from './types';
 
+/** Pictures in between: each costs one more latent frame of tokens. */
+const MAX_KEYFRAMES = 12;
+
 const FIRST = '2';
 const LAST = '3';
 
@@ -38,6 +49,24 @@ export const ltx25Flf: WorkflowManifest = {
   graph,
   saveNodeId: LTX25_NODE,
   fields: [
+    {
+      // Draws the two image fields and their strengths below at its ends.
+      kind: 'keyframes',
+      key: 'keyframes',
+      label: 'wf.ltx25.timeline',
+      hint: 'wf.ltx25.timelineHint',
+      target: { nodeId: LTX25_NODE, input: 'keyframes' },
+      ends: {
+        first: 'image',
+        last: 'lastImage',
+        firstStrength: 'firstStrength',
+        lastStrength: 'lastStrength',
+      },
+      durationKey: 'duration',
+      fpsKey: 'fps',
+      tileFramesKey: 'tileFrames',
+      maxKeys: MAX_KEYFRAMES,
+    },
     {
       kind: 'image',
       key: 'image',

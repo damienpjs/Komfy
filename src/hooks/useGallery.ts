@@ -164,5 +164,8 @@ export function useGallery() {
       client.viewUrl(image.filename, image.subfolder, image.root, image.mtime),
     frameUrl: (image: GalleryImage, seconds: number) =>
       client.frameUrl(image.path, seconds),
+    /** A video's first frame as a small JPEG (komfy-listing), versioned like viewUrl. */
+    thumbUrl: (image: GalleryImage, height: number) =>
+      client.thumbUrl(image.path, height, image.mtime),
   };
 }

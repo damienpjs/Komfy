@@ -53,7 +53,7 @@ Server side:
     [yijunwang2/krea2-anypaint](https://huggingface.co/yijunwang2/krea2-anypaint),
     placed in `models/loras/krea2/`;
   - Video (LTX 2.5, Apple Silicon only: text, image, image + voice,
-    first-last frame, x2 video upscale): the bundled
+    keyframes from a first to a last image, x2 video upscale): the bundled
     [`server/komfy-ltx-mlx`](./server/komfy-ltx-mlx) nodes plus
     [ltx-2-mlx](https://github.com/dgrauet/ltx-2-mlx) 0.18+ and an LTX 2.5
     MLX pack (`dgrauet/ltx-2.5-mlx-q8` on 64 GB), see step 5 below;

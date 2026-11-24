@@ -66,6 +66,7 @@ import { ImageViewer, type Rect, type Size } from './ImageViewer';
 import { OutputDirPicker } from './OutputDirPicker';
 import { RemixSheet, type RemixSheetState } from './RemixSheet';
 import { RenameDialog, type RenameTarget } from './RenameDialog';
+import { VIDEO_THUMB_HEIGHT, VideoThumb } from './VideoThumb';
 import {
   listDirectory,
   type LoraEntry,
@@ -907,18 +908,13 @@ export function GalleryBrowser() {
         }
       >
         {image.isVideo ? (
-          // expo-image cannot decode a video frame; show a labelled
-          // placeholder with a play badge instead (thumbnail generation
-          // would mean downloading every clip).
-          <View style={styles.videoThumb}>
-            <Ionicons name="film-outline" size={26} color={colors.textMuted} />
-            <Text style={styles.videoThumbName} numberOfLines={1}>
-              {image.filename}
-            </Text>
-            <View style={styles.playBadge}>
-              <Ionicons name="play" size={12} color={colors.text} />
-            </View>
-          </View>
+          // expo-image cannot decode a video: the server sends the first
+          // frame as a small JPEG instead of the phone downloading the clip.
+          <VideoThumb
+            uri={gallery.thumbUrl(image, VIDEO_THUMB_HEIGHT)}
+            filename={image.filename}
+            recyclingKey={image.path}
+          />
         ) : (
           <Image
             source={{ uri: gallery.viewUrl(image) }}
@@ -1396,32 +1392,6 @@ const useStyles = makeStyles((colors) => ({
   thumb: {
     width: '100%',
     height: '100%',
-  },
-  videoThumb: {
-    width: '100%',
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    padding: spacing.xs,
-    backgroundColor: colors.bgElevated,
-  },
-  videoThumbName: {
-    color: colors.textMuted,
-    fontFamily: typography.mono,
-    fontSize: typography.sizes.xs,
-    textAlign: 'center',
-  },
-  playBadge: {
-    position: 'absolute',
-    bottom: 4,
-    left: 4,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(6, 4, 9, 0.6)',
   },
   cellSelected: {
     borderWidth: 2,

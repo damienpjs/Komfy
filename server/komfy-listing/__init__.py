@@ -734,6 +734,243 @@ async def komfy_frame(request):
     return web.Response(body=png, content_type="image/png", headers=headers)
 
 
+def thumbnail(path, height):
+    """The clip's first frame, `height` px high, as JPEG bytes: a gallery or
+    picker tile. Decodes one frame (no seek, no count), so a grid of dozens
+    of clips stays cheap."""
+    import av
+
+    with av.open(path) as container:
+        stream = _video_stream(container)
+        for frame in container.decode(stream):
+            width = max(2, int(round(frame.width * height / frame.height / 2)) * 2)
+            rgb = frame.reformat(width=width, height=height, format="rgb24").to_ndarray()
+            break
+        else:
+            raise ValueError("no decodable frame")
+    buf = io.BytesIO()
+    Image.fromarray(rgb).save(buf, format="JPEG", quality=82)
+    return buf.getvalue()
+
+
+@PromptServer.instance.routes.get("/komfy/thumb")
+async def komfy_thumb(request):
+    """GET /komfy/thumb?path=output/sub/clip.mp4&height=320 → image/jpeg: the
+    clip's first frame, for the video tiles of the gallery and the video
+    picker (the app versions the URL with the file's mtime). Errors are 400
+    like /komfy/frame."""
+    target, err = _video_target(request.query.get("path", ""))
+    if err:
+        return web.json_response({"error": err}, status=400)
+    try:
+        height = int(request.query.get("height", "320"))
+        assert 16 <= height <= 720
+    except (ValueError, AssertionError):
+        return web.json_response({"error": "expected height 16..720"}, status=400)
+    try:
+        jpeg = await asyncio.to_thread(thumbnail, target, height)
+    except Exception as e:
+        return web.json_response({"error": f"could not decode the clip: {e}"}, status=400)
+    return web.Response(body=jpeg, content_type="image/jpeg")
+
+
+def _video_target(rel):
+    """`output/sub/clip.mp4` → (absolute path, None) or (None, error)."""
+    root, sub = _split_root(rel)
+    base = _roots().get(root)
+    if base is None:
+        return None, "unknown root"
+    target, err = _safe_target(os.path.realpath(base), sub)
+    if err or not os.path.isfile(target):
+        return None, err or "file not found"
+    return target, None
+
+
+def _annotated_target(name):
+    """Annotated filename of a form image (`a.png` = input folder,
+    `sub/a.png [output]` = a gallery picture sent by "Use in") → (absolute
+    path, None) or (None, error)."""
+    root = "input"
+    for candidate in ("input", "output"):
+        suffix = f" [{candidate}]"
+        if name.endswith(suffix):
+            name, root = name[: -len(suffix)], candidate
+            break
+    return _video_target(f"{root}/{name}")
+
+
+def _video_stream(container):
+    if not container.streams.video:
+        raise ValueError("no video stream in this file")
+    stream = container.streams.video[0]
+    stream.thread_type = "AUTO"
+    return stream
+
+
+def _small_size(width, height, long_side):
+    """Thumbnail size keeping the ratio, even sides (swscale likes them)."""
+    scale = long_side / max(width, height)
+    return max(2, int(round(width * scale / 2)) * 2), max(2, int(round(height * scale / 2)) * 2)
+
+
+def _count_frames(path):
+    """Exact decoded frame count (container metadata can be off by one)."""
+    import av
+
+    with av.open(path) as container:
+        return sum(1 for _ in container.decode(_video_stream(container)))
+
+
+def filmstrip(path, count, height):
+    """`count` frames evenly spread over the clip (first and last included),
+    `height` px high, side by side in one JPEG. Decodes in order (no seek:
+    exact frames) and keeps only the picked frames, so a long clip costs
+    decode time, not memory. Returns (jpeg, frame count, fps, width, height
+    of the source)."""
+    import av
+
+    total = _count_frames(path)
+    if total == 0:
+        raise ValueError("no decodable frame")
+    count = max(1, min(count, total))
+    picks = [round(i * (total - 1) / max(1, count - 1)) for i in range(count)]
+    wanted = set(picks)
+    kept = {}
+    with av.open(path) as container:
+        stream = _video_stream(container)
+        rate = stream.average_rate or stream.guessed_rate
+        src_w, src_h = stream.codec_context.width, stream.codec_context.height
+        tile_w = max(2, int(round(src_w * height / src_h / 2)) * 2)
+        for index, frame in enumerate(container.decode(stream)):
+            if index in wanted:
+                kept[index] = frame.reformat(width=tile_w, height=height, format="rgb24").to_ndarray()
+    sheet = Image.new("RGB", (tile_w * count, height))
+    for slot, index in enumerate(picks):
+        if index in kept:
+            sheet.paste(Image.fromarray(kept[index]), (slot * tile_w, 0))
+    buf = io.BytesIO()
+    sheet.save(buf, format="JPEG", quality=80)
+    return buf.getvalue(), total, float(rate) if rate else None, src_w, src_h
+
+
+def match_frame(video, image_path):
+    """Index of the clip frame closest to a picture (mean absolute gray-level
+    difference on small thumbnails). Built for a frame grabbed from this clip
+    and retouched (a face swapped): the untouched rest of the picture still
+    matches its own frame almost pixel for pixel. Returns (index, distance in
+    0..1, runner-up distance, frame count, fps)."""
+    import av
+    import numpy as np
+
+    with av.open(video) as container:
+        stream = _video_stream(container)
+        rate = stream.average_rate or stream.guessed_rate
+        w, h = _small_size(stream.codec_context.width, stream.codec_context.height, 96)
+        with Image.open(image_path) as img:
+            from PIL import ImageOps
+
+            probe = np.asarray(
+                ImageOps.exif_transpose(img).convert("L").resize((w, h), Image.BILINEAR),
+                dtype=np.float32,
+            )
+        distances = []
+        for frame in container.decode(stream):
+            gray = frame.reformat(width=w, height=h, format="gray").to_ndarray().astype(np.float32)
+            distances.append(float(np.abs(gray - probe).mean()) / 255.0)
+    if not distances:
+        raise ValueError("no decodable frame")
+    best = int(np.argmin(distances))
+    # The best frame outside the best one's neighbourhood: a static shot has
+    # near-twins around the match, which say nothing about ambiguity.
+    far = [d for i, d in enumerate(distances) if abs(i - best) > 4]
+    runner_up = min(far) if far else None
+    return best, distances[best], runner_up, len(distances), float(rate) if rate else None
+
+
+@PromptServer.instance.routes.get("/komfy/filmstrip")
+async def komfy_filmstrip(request):
+    """GET /komfy/filmstrip?path=output/sub/clip.mp4&count=12&height=96 →
+    image/jpeg: `count` frames of the clip side by side (the keyframe
+    timeline's background). Headers carry the frame count, frame rate and
+    source size. Errors are 400 like /komfy/frame."""
+    target, err = _video_target(request.query.get("path", ""))
+    if err:
+        return web.json_response({"error": err}, status=400)
+    try:
+        count = int(request.query.get("count", "12"))
+        height = int(request.query.get("height", "96"))
+        assert 1 <= count <= 48 and 16 <= height <= 360
+    except (ValueError, AssertionError):
+        return web.json_response({"error": "expected count 1..48 and height 16..360"}, status=400)
+    try:
+        jpeg, frames, fps, width, src_h = await asyncio.to_thread(filmstrip, target, count, height)
+    except Exception as e:
+        return web.json_response({"error": f"could not decode the clip: {e}"}, status=400)
+    headers = {"X-Komfy-Frames": str(frames), "X-Komfy-Frame-Size": f"{width}x{src_h}"}
+    if fps:
+        headers["X-Komfy-Fps"] = f"{fps:g}"
+    return web.Response(body=jpeg, content_type="image/jpeg", headers=headers)
+
+
+@PromptServer.instance.routes.get("/komfy/video-info")
+async def komfy_video_info(request):
+    """GET /komfy/video-info?path=output/sub/clip.mp4 → {frames, fps, width,
+    height, mtime}: the exact decoded frame count (what keyframe numbers refer to),
+    read by decoding the clip, since container metadata can be off by one."""
+    target, err = _video_target(request.query.get("path", ""))
+    if err:
+        return web.json_response({"error": err}, status=400)
+
+    def work():
+        import av
+
+        with av.open(target) as container:
+            stream = _video_stream(container)
+            rate = stream.average_rate or stream.guessed_rate
+            frames = sum(1 for _ in container.decode(stream))
+            return {
+                "frames": frames,
+                "fps": float(rate) if rate else None,
+                "width": stream.codec_context.width,
+                "height": stream.codec_context.height,
+                # Versions the app's filmstrip and frame URLs: a clip
+                # regenerated at the same path must not show cached frames.
+                "mtime": int(os.path.getmtime(target)),
+            }
+
+    try:
+        info = await asyncio.to_thread(work)
+    except Exception as e:
+        return web.json_response({"error": f"could not decode the clip: {e}"}, status=400)
+    return web.json_response(info)
+
+
+@PromptServer.instance.routes.get("/komfy/frame-match")
+async def komfy_frame_match(request):
+    """GET /komfy/frame-match?video=output/sub/clip.mp4&image=a.png →
+    {frame, distance, runnerUp, frames, fps}: where a picture taken from the
+    clip (then retouched) sits in it. `image` is a form value: an input-folder
+    name, or `sub/a.png [output]`. `distance` is 0 for an identical frame; a
+    `runnerUp` close to it means the shot barely moves around the match."""
+    video, err = _video_target(request.query.get("video", ""))
+    if err:
+        return web.json_response({"error": f"video: {err}"}, status=400)
+    image, err = _annotated_target(request.query.get("image", ""))
+    if err:
+        return web.json_response({"error": f"image: {err}"}, status=400)
+    try:
+        index, distance, runner_up, frames, fps = await asyncio.to_thread(match_frame, video, image)
+    except Exception as e:
+        return web.json_response({"error": f"could not match the frame: {e}"}, status=400)
+    return web.json_response({
+        "frame": index,
+        "distance": round(distance, 5),
+        "runnerUp": None if runner_up is None else round(runner_up, 5),
+        "frames": frames,
+        "fps": fps,
+    })
+
+
 @PromptServer.instance.routes.get("/komfy/recipe")
 async def komfy_recipe(request):
     """GET /komfy/recipe?path=output/sub/clip.mp4 → {"prompt": graph|null}.

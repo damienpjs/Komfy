@@ -27,7 +27,9 @@ function isPerPhoto(field: WorkflowField): boolean {
     field.kind === 'image' ||
     field.kind === 'mask' ||
     field.kind === 'audio' ||
-    field.kind === 'video'
+    field.kind === 'video' ||
+    // Keyframes are pictures placed on one shot's frames.
+    field.kind === 'keyframes'
   );
 }
 
