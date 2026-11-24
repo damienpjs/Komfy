@@ -210,9 +210,52 @@ export interface ComfyClient {
    * on the server from the file itself, at its native size, never stored
    * there. 404 when the extension is older than the route.
    */
-  frameUrl(path: string, seconds: number): string;
+  frameUrl(path: string, seconds: number, version?: number): string;
+  /**
+   * `count` frames of a clip side by side in one JPEG, `height` px high
+   * (komfy-listing GET /komfy/filmstrip): the keyframe timeline's background.
+   */
+  filmstripUrl(path: string, count: number, height: number, version?: number): string;
+  /**
+   * A clip's first frame as a small JPEG, `height` px high (komfy-listing
+   * GET /komfy/thumb): the video tiles of the gallery and the video picker.
+   * `version` (the mtime) busts expo-image's disk cache like viewUrl's.
+   */
+  thumbUrl(path: string, height: number, version?: number): string;
+  /**
+   * Exact decoded frame count, frame rate and size of a clip (GET
+   * /komfy/video-info): what the viewer's frame numbers refer to.
+   */
+  getVideoInfo(path: string): Promise<VideoInfo>;
+  /**
+   * Where a picture taken from a clip (then retouched) sits in it (GET
+   * /komfy/frame-match). `image` is a form image value: an input-folder name
+   * or an annotated output (`sub/a.png [output]`).
+   */
+  matchFrame(video: string, image: string): Promise<FrameMatch>;
   /** Real-time WebSocket URL. */
   wsUrl(clientId: string): string;
+}
+
+/** A clip as decoded on the server (GET /komfy/video-info). */
+export interface VideoInfo {
+  frames: number;
+  fps: number | null;
+  width: number;
+  height: number;
+  /** File mtime (epoch s): versions the clip's frame URLs. */
+  mtime?: number;
+}
+
+/** GET /komfy/frame-match: the best frame and how sure the match is. */
+export interface FrameMatch {
+  frame: number;
+  /** Mean gray-level difference, 0..1 (0 = identical frame). */
+  distance: number;
+  /** Best distance away from the match: close to `distance` = ambiguous. */
+  runnerUp: number | null;
+  frames: number;
+  fps: number | null;
 }
 
 export function createClient(baseUrl: string): ComfyClient {
@@ -256,6 +299,15 @@ export function createClient(baseUrl: string): ComfyClient {
       request<{ path: string; mtime: number; dir?: boolean }[]>(
         base,
         '/komfy/files',
+      ),
+
+    getVideoInfo: (path) =>
+      request<VideoInfo>(base, `/komfy/video-info?path=${encodeURIComponent(path)}`),
+
+    matchFrame: (video, image) =>
+      request<FrameMatch>(
+        base,
+        `/komfy/frame-match?video=${encodeURIComponent(video)}&image=${encodeURIComponent(image)}`,
       ),
 
     getVideoRecipe: (path) =>
@@ -375,8 +427,17 @@ export function createClient(baseUrl: string): ComfyClient {
       `${base}/view?filename=${encodeURIComponent(filename)}&subfolder=${encodeURIComponent(subfolder)}&type=${encodeURIComponent(type)}` +
       (version != null ? `&v=${encodeURIComponent(String(version))}` : ''),
 
-    frameUrl: (path, seconds) =>
-      `${base}/komfy/frame?path=${encodeURIComponent(path)}&t=${seconds.toFixed(6)}`,
+    frameUrl: (path, seconds, version) =>
+      `${base}/komfy/frame?path=${encodeURIComponent(path)}&t=${seconds.toFixed(6)}` +
+      (version != null ? `&v=${version}` : ''),
+
+    filmstripUrl: (path, count, height, version) =>
+      `${base}/komfy/filmstrip?path=${encodeURIComponent(path)}&count=${count}&height=${height}` +
+      (version != null ? `&v=${version}` : ''),
+
+    thumbUrl: (path, height, version) =>
+      `${base}/komfy/thumb?path=${encodeURIComponent(path)}&height=${height}` +
+      (version != null ? `&v=${version}` : ''),
 
     wsUrl: (clientId) =>
       `${base.replace(/^http/, 'ws')}/ws?clientId=${encodeURIComponent(clientId)}`,

@@ -16,7 +16,9 @@ history, gallery, remix) and delegates the generation itself to the
 `KomfyLTX25MLX` covers four Komfy workflows, always on the distilled plan:
 no image = text to video, `first_image` = image to video, `first_image` +
 `last_image` = first/last frame (`--image PATH 0 S --image PATH last S`),
-`first_image` + `voice` = talking video (`a2v --distilled`, the clip length
+`first_image` + `last_image` + `keyframes` = keyframes in between (one more
+`--image PATH FRAME S guide` each, plus optional Prompt Relay `--segment`s,
+cf. keyframes.py), `first_image` + `voice` = talking video (`a2v --distilled`, the clip length
 following the voice plus `silence_after`, the LoRAs fused through
 a2v_lora.py), with an optional `last_image` end anchor as well. LoRAs:
 `lora_name` plus the optional `extra_loras` JSON list, all fused together.
@@ -45,6 +47,7 @@ restart ComfyUI.
 """
 
 import glob
+import hashlib
 import json
 import math
 import mimetypes
@@ -60,12 +63,13 @@ import threading
 import wave
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageOps
 
 import comfy.model_management as mm
 import comfy.utils
 import folder_paths
 
+from . import keyframes as kf
 from .reference_sheet import build_sheet, tensor_to_uint8
 
 HOME = os.path.expanduser("~")
@@ -440,6 +444,39 @@ def _resolve_loras(lora_name, lora_strength, extra_loras):
     return resolved
 
 
+def _keyframe_source(name):
+    """Annotated filename of a keyframe image (`a.png` in the input folder,
+    `sub/a.png [output]` for a gallery picture sent by "Use in") → absolute
+    path, kept inside its root folder."""
+    roots = {
+        "input": folder_paths.get_input_directory(),
+        "output": folder_paths.get_output_directory(),
+        "temp": folder_paths.get_temp_directory(),
+    }
+    root = "input"
+    for candidate in roots:
+        suffix = f" [{candidate}]"
+        if name.endswith(suffix):
+            name, root = name[: -len(suffix)], candidate
+            break
+    base = os.path.realpath(roots[root])
+    path = os.path.realpath(os.path.join(base, name))
+    if not path.startswith(base + os.sep):
+        raise ValueError(f"Keyframe image outside the {root} folder: {name}")
+    if not os.path.isfile(path):
+        raise ValueError(f"Keyframe image not found in the {root} folder: {name}")
+    return path
+
+
+def _keyframe_png(path, folder, n):
+    """The keyframe as an upright RGB PNG (LoadImage applies the EXIF
+    rotation, the CLI would not)."""
+    with Image.open(path) as img:
+        out = os.path.join(folder, f"key-{n}.png")
+        ImageOps.exif_transpose(img).convert("RGB").save(out)
+    return out
+
+
 def _extract_frame(video, index, png, env):
     ffmpeg = shutil.which("ffmpeg", path=env["PATH"])
     if not ffmpeg:
@@ -534,6 +571,13 @@ class KomfyLTX25MLX:
                     "default": True,
                     "tooltip": "With a voice: append a sentence describing the articulation to the prompt",
                 }),
+                # Keyframes between the first and the last image, as JSON (cf.
+                # keyframes.py): {"opening": str, "keys": [{"image", "frame",
+                # "strength", "prompt"}]}. Empty = the plain first/last render.
+                "keyframes": ("STRING", {
+                    "default": "",
+                    "tooltip": "Keyframes in between: JSON {opening, keys: [{image, frame, strength, prompt}]}",
+                }),
                 "silence_after": ("FLOAT", {
                     "default": 0.0, "min": 0.0, "max": 10.0, "step": 0.5,
                     "tooltip": "With a voice: seconds of silence added after it, lengthening the clip "
@@ -548,13 +592,35 @@ class KomfyLTX25MLX:
     OUTPUT_NODE = True
     CATEGORY = "Komfy/LTX MLX"
 
+    @classmethod
+    def IS_CHANGED(cls, keyframes="", **_):
+        """Keyframe pictures are files named in a string, not LoadImage nodes
+        (whose own IS_CHANGED hashes their file): without this, a picture
+        regenerated at the same path would let ComfyUI serve the old clip
+        from its cache. Size and mtime of each file are enough."""
+        try:
+            timeline = kf.parse(keyframes)
+        except ValueError:
+            return keyframes
+        if timeline is None:
+            return ""
+        digest = hashlib.sha256()
+        for key in timeline[1]:
+            digest.update(key.image.encode())
+            try:
+                st = os.stat(_keyframe_source(key.image))
+                digest.update(f"{st.st_size}:{st.st_mtime_ns}".encode())
+            except (OSError, ValueError):
+                pass  # generate() reports the missing file
+        return digest.hexdigest()
+
     def generate(self, model_pack, prompt, width, height, fit_to_image,
                  duration, frame_rate, seed, first_strength, last_strength, lora_name,
                  lora_strength, audio, low_ram, tile_frames, save_last_frame, filename_prefix,
                  first_image=None, last_image=None, ref_1=None, ref_2=None, ref_3=None,
                  ingredients_lora=NO_LORA, ingredients_strength=1.0, reference_strength=1.0,
                  voice=None, voice_normalize=True, lip_sync_hint=True, silence_after=0.0,
-                 extra_loras="", komfy_graph=None):
+                 extra_loras="", keyframes="", komfy_graph=None):
         pack = _resolve_pack(model_pack)
         binary = _binary()
         if not prompt.strip():
@@ -583,6 +649,23 @@ class KomfyLTX25MLX:
                     f"The voice lasts {voice_seconds:.1f} s"
                     + (f" plus {silence_after:g} s of silence" if silence_after > 0 else "")
                     + f": keep the total under {VOICE_MAX_SECONDS:g} s")
+
+        timeline = kf.parse(keyframes)
+        keys, relay, key_paths = [], [], []
+        if timeline is not None:
+            opening, keys = timeline
+            if first_image is None or refs or voice is not None:
+                raise ValueError("Keyframes need a first image (and no voice or references)")
+            if duration <= 0:
+                raise ValueError("Keyframes sit on frame numbers: set a duration (not 0)")
+            frames = _frames_for(duration, frame_rate)
+            kf.check(keys, frames, last_image is not None)
+            relay = kf.segments(opening, keys, frames)
+            if relay and tile_frames > 1:
+                # The CLI's Prompt Relay is not compatible with modality tiling.
+                raise ValueError("Keyframe prompts do not work with temporal tiles: set tiles to 1")
+            # Resolved now: a missing picture fails before the models unload.
+            key_paths = [_keyframe_source(k.image) for k in keys]
 
         # The distilled plan samples stage 1 at half resolution, whose sides
         # must stay multiples of 32: full size in multiples of 64.
@@ -645,6 +728,10 @@ class KomfyLTX25MLX:
                 cmd += ["--image", _save_png(first_image[0], tmpdir, "first.png"), "0", f"{first_strength:g}"]
             if last_image is not None:
                 cmd += ["--image", _save_png(last_image[0], tmpdir, "last.png"), "last", f"{last_strength:g}"]
+            for n, (key, path) in enumerate(zip(keys, key_paths), 1):
+                cmd += ["--image", _keyframe_png(path, tmpdir, n), str(key.frame), f"{key.strength:g}", "guide"]
+            for text, length in relay:
+                cmd += ["--segment", text, str(length)]
             if refs:
                 ingredients = folder_paths.get_full_path("loras", ingredients_lora.strip())
                 if not ingredients:

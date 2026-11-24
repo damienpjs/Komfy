@@ -1,7 +1,8 @@
 /**
  * LTX 2.5: x2 video upscale, through MLX (KomfyLTX25UpscaleMLX,
- * server/komfy-ltx-mlx). The clip comes from the gallery (a LoadVideo fed
- * an annotated `[output]` path: no upload), the node runs `ltx-2-mlx
+ * server/komfy-ltx-mlx). The clip comes from the server (a LoadVideo fed
+ * an annotated `[output]` path: no upload) or from Photos (imported into
+ * input/komfy-video), the node runs `ltx-2-mlx
  * ic-lora --single-stage` with the Pixel-Spatial-Upscaler x2 IC-LoRA, the
  * source as video conditioning and an optional identity LoRA, then muxes the
  * source's audio back. Size, frame count and frame rate follow the source.

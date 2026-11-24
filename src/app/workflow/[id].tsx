@@ -29,6 +29,7 @@ import type { PromptErrorResponse } from '../../api/types';
 import { AudioInputField } from '../../components/AudioInputField';
 import { EmotionMixer } from '../../components/EmotionMixer';
 import { ImageInputField } from '../../components/ImageInputField';
+import { KeyframesField } from '../../components/KeyframesField';
 import { VideoInputField } from '../../components/VideoInputField';
 import { MaskInputField } from '../../components/MaskInputField';
 import { LoraField } from '../../components/LoraField';
@@ -71,6 +72,7 @@ import { memoryWarnings } from '../../workflows/preflight';
 import type { SourceSeeds } from '../../workflows/match';
 import { pickVariantFile, variantOf } from '../../workflows/modelVariant';
 import { initialOutpaintValue } from '../../workflows/outpaint';
+import { emptyKeyframes, ownedKeys } from '../../workflows/keyframes';
 import { NEUTRAL_MIX } from '../../workflows/emotions';
 import { legacyLoras, parseLoraList } from '../../workflows/nodeLoras';
 import { entryOf } from '../../workflows/catalog';
@@ -201,6 +203,7 @@ function initialValues(
       values[field.key] = { ...field.default, inverted: false, custom: false };
     if (field.kind === 'outpaint')
       values[field.key] = initialOutpaintValue(field.defaultBudget);
+    if (field.kind === 'keyframes') values[field.key] = emptyKeyframes();
     if (field.kind === 'zones')
       values[field.key] = {
         zones: [
@@ -380,6 +383,12 @@ export default function WorkflowLaunchScreen() {
     ...advancedFields,
   ];
   const firstAdvancedKey = advancedFields[0]?.key;
+  // Fields a keyframes timeline draws at its ends (first/last image and their
+  // strengths): skipped in the list, owned key → timeline key.
+  const timelineOwner = new Map<string, string>();
+  for (const f of manifest.fields) {
+    if (f.kind === 'keyframes') for (const k of ownedKeys(f)) timelineOwner.set(k, f.key);
+  }
   const showAdvanced =
     advancedOpen || advancedFields.some((f) => !!errors[f.key]);
   // Standard / GGUF switches: their exact-file picker lives in the advanced
@@ -528,7 +537,7 @@ export default function WorkflowLaunchScreen() {
   };
 
   const scrollToField = (key: string) => {
-    const y = fieldY.current[key];
+    const y = fieldY.current[key] ?? fieldY.current[timelineOwner.get(key) ?? ''];
     if (y != null) scrollRef.current?.scrollTo({ y: Math.max(0, y - 12), animated: true });
   };
 
@@ -673,7 +682,8 @@ export default function WorkflowLaunchScreen() {
           // (e.g. the distilled strengths appear only when the toggle is On).
           if (
             (field.advanced && !showAdvanced) ||
-            !isFieldShown(field, values)
+            !isFieldShown(field, values) ||
+            timelineOwner.has(field.key)
           ) {
             return advancedHeader;
           }
@@ -701,6 +711,15 @@ export default function WorkflowLaunchScreen() {
                 }
                 onDragChange={setZoneDrag}
                 scroller={zoneScroller}
+              />
+            )}
+
+            {field.kind === 'keyframes' && (
+              <KeyframesField
+                field={field}
+                values={values}
+                errors={errors}
+                onChange={setValue}
               />
             )}
 

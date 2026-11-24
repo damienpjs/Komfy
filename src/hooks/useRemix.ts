@@ -17,6 +17,7 @@ import { queryClient } from '../api/queryClient';
 import type { PromptGraph } from '../api/types';
 import { useSettings } from '../store/settings';
 import { parsePngText } from '../utils/pngMetadata';
+import { adoptSourceClip } from '../workflows/keyframes';
 import { matchGraph, type SourceSeeds } from '../workflows/match';
 import { allWorkflows } from '../workflows/registry';
 import { withRandomSeeds } from '../workflows/requeue';
@@ -150,6 +151,18 @@ export function useRemix() {
         const outcome = matchGraph(graph, allWorkflows());
         if (outcome.status === 'unknown-workflow') {
           return { status: 'unknown-workflow', graph };
+        }
+        // A clip remixed into a keyframes timeline lines it: its frames are
+        // the ones being rebuilt.
+        if (image.isVideo && image.root === 'output') {
+          return {
+            ...outcome,
+            values: adoptSourceClip(
+              allWorkflows().find((w) => w.id === outcome.manifestId),
+              outcome.values,
+              image.path,
+            ),
+          };
         }
         return outcome;
       },

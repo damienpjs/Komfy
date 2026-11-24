@@ -402,10 +402,12 @@ export interface EmotionsField extends FieldBase {
 }
 
 /**
- * Video input taken from the server's own outputs, never uploaded: the
- * value is an annotated filename (`sub/clip.mp4 [output]`, cf.
- * utils/annotated) that core LoadVideo resolves in the output folder, so a
- * clip goes from one workflow to the next without a round trip to the phone.
+ * Video input: any clip of the server (output or input folder, picked in
+ * the media picker) or one imported from Photos into input/komfy-video. The
+ * value is a loader filename, annotated for the output folder
+ * (`sub/clip.mp4 [output]`, cf. utils/annotated), that core LoadVideo
+ * resolves: a render goes on to the next workflow with no round trip to the
+ * phone.
  */
 export interface VideoField extends FieldBase {
   kind: 'video';
@@ -626,6 +628,70 @@ export interface OutpaintField extends FieldBase {
   defaultBudget: number;
 }
 
+/** One keyframe between the first and the last image (cf. KeyframesField). */
+export interface KeyframeValue {
+  /**
+   * Form-only identity (the sheet and async lookups follow a keyframe by it
+   * while the list re-sorts). Never sent to the node.
+   */
+  id: string;
+  /** Server-side filename: an upload, or an annotated output (`sub/a.png [output]`). */
+  image: string;
+  /**
+   * Pixel frame of the clip, 0-based: the number the viewer's frame grabber
+   * shows. At least KEYFRAME_MIN_GAP frames from every other image.
+   */
+  frame: number;
+  /** Anchor strength, 0..1. */
+  strength: number;
+  /** What happens from this keyframe to the next image ('' = the main prompt alone). */
+  prompt: string;
+}
+
+/** Value of a keyframes field. */
+export interface KeyframesValue {
+  /** What happens from the first image to the first keyframe ('' = none). */
+  opening: string;
+  /** Sorted by frame. */
+  keys: KeyframeValue[];
+  /**
+   * Clip the keyframes were taken from (`output/sub/clip.mp4`): the timeline
+   * draws its frames and places a picked picture on the frame it came from.
+   * Travels in the graph (the node ignores it) so a remix brings it back.
+   */
+  source: string | null;
+}
+
+/**
+ * Keyframes timeline (LTX 2.5 first/last frame): extra pictures pinned on
+ * frame numbers between the two end images, one render passing through all
+ * of them, with an optional prompt per stretch. Patched as one JSON string
+ * into the node's `keyframes` input (cf. server/komfy-ltx-mlx/keyframes.py),
+ * left out of the graph when there are none, so a plain first/last render
+ * keeps the graph it always had.
+ *
+ * The timeline also shows the two end images: the fields named by
+ * `ends` are drawn inside it instead of on their own (they stay ordinary
+ * image and number fields for patching, remix, presets and "Use in").
+ */
+export interface KeyframesField extends FieldBase {
+  kind: 'keyframes';
+  /** STRING input receiving the JSON. */
+  target: PatchTarget;
+  ends: {
+    first: string;
+    last: string;
+    firstStrength: string;
+    lastStrength: string;
+  };
+  /** Number fields setting the clip length (frame numbers depend on them). */
+  durationKey: string;
+  fpsKey: string;
+  /** Temporal tiles number field: stretch prompts need it at 1. */
+  tileFramesKey?: string;
+  maxKeys: number;
+}
+
 export type WorkflowField =
   | TextField
   | NumberField
@@ -641,7 +707,8 @@ export type WorkflowField =
   | MaskField
   | LorasField
   | ZonesField
-  | OutpaintField;
+  | OutpaintField
+  | KeyframesField;
 
 /** What one run of a workflow produces: the launch bar counts in it. */
 export type OutputKind = 'image' | 'video' | 'voice';
@@ -697,6 +764,7 @@ export type FieldValues = Record<
   | ZonesValue
   | ModelSourceValue
   | OutpaintValue
+  | KeyframesValue
 >;
 
 /** Whether a field is shown (and validated) given the current form values. */

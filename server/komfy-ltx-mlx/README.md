@@ -36,6 +36,7 @@ quality now comes from the x2 video upscale.
 | `fit_to_image` | With a first image, derive the short side from the image ratio (no crop) |
 | `duration` | Seconds, snapped to 8k+1 frames; `0` = predicted from the prompt |
 | `first_image` / `last_image` | Optional; first → `--image P 0 S`, last → `--image P last S` |
+| `keyframes` | Optional JSON: images pinned on frames in between, with optional per-stretch prompts (see below). Empty = the plain render |
 | `lora_name` | Any file in `models/loras` (e.g. a character LoRA), or `None` |
 | `extra_loras` | Optional JSON list of more LoRAs fused with `lora_name`, in order: `[{"name": "x.safetensors", "strength": 1.0}]` (one `--lora` each). Empty = `lora_name` alone |
 | `low_ram` / `tile_frames` | Memory levers for long or large clips |
@@ -57,6 +58,40 @@ quality now comes from the x2 video upscale.
 | `lora_name` / `lora_strength` | Optional identity LoRA (the character LoRA of the take) |
 | `upscaler_lora` / `upscaler_strength` | The Pixel-Spatial-Upscaler x2 IC-LoRA (found by name when left out) and its strength (1.0) |
 | `low_ram` | Memory lever |
+
+### Keyframes
+
+`keyframes` (with a `first_image`, no voice or references, a duration > 0)
+pins more images on frame numbers of the clip, one render passing through
+all of them:
+
+```json
+{"opening": "what happens from the first image on",
+ "keys": [{"image": "a.png", "frame": 48, "strength": 1.0,
+           "prompt": "what happens from this keyframe on"}]}
+```
+
+`image` is a ComfyUI annotated filename (`a.png` in the input folder,
+`sub/a.png [output]` in the output folder), opened upright and passed as
+`--image PATH FRAME STRENGTH guide` (a keyframe at any pixel frame).
+`frame` is a 0-based pixel frame of the output, the number the Komfy
+viewer's frame grabber reports, so a shot rebuilt with the same duration
+and frame rate puts each retouched frame back where it was grabbed.
+Two images (first, keys, last) stay at least 8 frames apart: the VAE packs
+8 pixel frames into one latent frame. An extra `source` key (the clip the
+frames came from, for the app) is ignored.
+
+The prompts are optional. With at least one, each stretch (first image to
+the next keyframe, keyframe to keyframe, last keyframe to the end) becomes
+a Prompt Relay `--segment TEXT LEN`, LEN in latent frames: the main prompt
+applies everywhere, a stretch prompt only to its stretch. The segments must
+cover the whole clip and the CLI refuses an empty one, so a stretch without
+a prompt gets a neutral continuity sentence. Prompt Relay does not work with
+modality tiling: the node refuses stretch prompts with `tile_frames` > 1.
+The parsing, checks and segment lengths live in `keyframes.py` (pure
+functions). Not measured on renders yet: each keyframe adds one latent
+frame of tokens, and a retouch that does not match its frame shows as a
+snap on that frame (lower its strength).
 
 ### Voice to video (a2v)
 

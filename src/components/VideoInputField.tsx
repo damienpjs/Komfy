@@ -1,9 +1,9 @@
 /**
- * Form input video field: a clip picked among the server's own outputs (the
- * most recent videos of the gallery), never uploaded. The value is an
- * annotated filename (`sub/clip.mp4 [output]`, cf. utils/annotated) that
- * core LoadVideo resolves in the output folder. "Use in" from the viewer
- * fills it directly.
+ * Form input video field: any clip of the server (output or input folder,
+ * through the media picker), or one imported from Photos into
+ * input/komfy-video. The value is a loader filename, annotated for the
+ * output folder (`sub/clip.mp4 [output]`, cf. utils/annotated), that core
+ * LoadVideo resolves. "Use in" from the viewer fills it directly.
  *
  * Once picked, the clip's size and length are read from a muted player and,
  * with `upscaleEstimate`, turned into the x2 output size and a rough time
@@ -12,20 +12,15 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FlatList, Modal, Pressable, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Pressable, Text, View } from 'react-native';
 import { createClient } from '../api/client';
-import { useGallery } from '../hooks/useGallery';
 import { useSettings } from '../store/settings';
 import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
 import { makeStyles, useTheme } from '../theme/theme';
-import { outputRef, parseAnnotated } from '../utils/annotated';
-import { formatAgo } from '../utils/format';
-
-/** Videos offered in the picker, most recent first. */
-const RECENT_LIMIT = 40;
+import { listingPath, loaderValue, parseAnnotated } from '../utils/annotated';
+import { MediaPickerSheet } from './MediaPickerSheet';
 
 /**
  * Measured on an M3 Max with free memory: 38 min to upscale 4.4 s from
@@ -87,12 +82,15 @@ export function VideoInputField({ value, onChange, upscaleEstimate }: Props) {
           </View>
         </View>
       )}
-      <RecentVideosSheet
+      <MediaPickerSheet
         visible={picking}
+        kind="video"
+        title={t('mediaPicker.chooseVideo')}
+        current={value !== '' ? listingPath(value) : null}
         onClose={() => setPicking(false)}
-        onPick={(v) => {
+        onPick={([path]) => {
           setPicking(false);
-          onChange(v);
+          if (path) onChange(loaderValue(path));
         }}
       />
     </>
@@ -145,77 +143,6 @@ function VideoSummary({ value, upscaleEstimate }: { value: string; upscaleEstima
         <Text style={[styles.meta, long && { color: colors.warning }]}>{meta}</Text>
       </View>
     </>
-  );
-}
-
-/** The most recent output videos, newest first. */
-function RecentVideosSheet({
-  visible,
-  onClose,
-  onPick,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  onPick: (value: string) => void;
-}) {
-  const styles = useStyles();
-  const { colors } = useTheme();
-  const { t } = useTranslation();
-  const insets = useSafeAreaInsets();
-  const { images } = useGallery();
-  const videos = useMemo(
-    () =>
-      images
-        .filter((i) => i.isVideo && i.root === 'output')
-        .sort((a, b) => (b.mtime ?? 0) - (a.mtime ?? 0))
-        .slice(0, RECENT_LIMIT),
-    [images],
-  );
-
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable
-        style={styles.scrim}
-        onPress={onClose}
-        accessibilityRole="button"
-        accessibilityLabel={t('common.close')}
-      />
-      <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.sm }]}>
-        <View style={styles.grab} />
-        <Text style={styles.sheetTitle} accessibilityRole="header">
-          {t('mediaInput.recentVideos')}
-        </Text>
-        <FlatList
-          data={videos}
-          keyExtractor={(item) => item.path}
-          style={styles.list}
-          ListEmptyComponent={<Text style={styles.empty}>{t('mediaInput.noVideo')}</Text>}
-          renderItem={({ item, index }) => (
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => onPick(outputRef(item.subfolder, item.filename))}
-              style={({ pressed }) => [
-                styles.row,
-                index > 0 && styles.rowSeparated,
-                pressed && { backgroundColor: colors.surfacePressed },
-              ]}
-            >
-              <Ionicons name="film-outline" size={20} color={colors.textMuted} />
-              <View style={styles.texts}>
-                <Text style={styles.rowName} numberOfLines={1}>
-                  {item.filename}
-                </Text>
-                <Text style={styles.meta} numberOfLines={1}>
-                  {[item.subfolder, item.mtime ? formatAgo(item.mtime * 1000, t) : '']
-                    .filter(Boolean)
-                    .join(' · ')}
-                </Text>
-              </View>
-            </Pressable>
-          )}
-        />
-      </View>
-    </Modal>
   );
 }
 
@@ -280,56 +207,5 @@ const useStyles = makeStyles((colors) => ({
     justifyContent: 'center',
     borderColor: colors.border,
     borderWidth: 1,
-  },
-  scrim: {
-    flex: 1,
-    backgroundColor: colors.overlay,
-  },
-  sheet: {
-    maxHeight: '70%',
-    backgroundColor: colors.bgElevated,
-    borderTopLeftRadius: radii.lg,
-    borderTopRightRadius: radii.lg,
-    paddingTop: spacing.sm,
-  },
-  grab: {
-    alignSelf: 'center',
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.border,
-    marginBottom: spacing.sm,
-  },
-  sheetTitle: {
-    color: colors.text,
-    fontFamily: typography.uiSemiBold,
-    fontSize: typography.sizes.md,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.sm,
-  },
-  list: {
-    paddingHorizontal: spacing.lg,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    minHeight: MIN_TOUCH_TARGET,
-    paddingVertical: spacing.sm,
-  },
-  rowSeparated: {
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  rowName: {
-    color: colors.text,
-    fontFamily: typography.ui,
-    fontSize: typography.sizes.sm,
-  },
-  empty: {
-    color: colors.textMuted,
-    fontFamily: typography.ui,
-    fontSize: typography.sizes.sm,
-    paddingVertical: spacing.lg,
   },
 }));

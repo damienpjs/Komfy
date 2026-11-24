@@ -59,6 +59,33 @@ Routes:
   when untagged, as the encoders that wrote it assumed. Errors are `400`
   with `{"error"}`, never `404`, which the app reads as "extension older
   than the route". Used by the viewer's "save frame" button.
+- `GET /komfy/filmstrip?path=output/sub/clip.mp4&count=12&height=96`:
+  `count` frames (1 to 48) spread evenly over the clip, first and last
+  included, `height` px high (16 to 360), side by side in one JPEG. The
+  clip is decoded in order (exact frames, no seek), keeping only the picked
+  frames, so a long clip costs decode time, not memory. Headers:
+  `X-Komfy-Frames`, `X-Komfy-Fps`, `X-Komfy-Frame-Size`. The background of
+  the keyframes timeline.
+- `GET /komfy/thumb?path=output/sub/clip.mp4&height=480`: the clip's first
+  frame, `height` px high (16 to 720), as JPEG. Decodes a single frame
+  (about 15 ms for a 576×768 clip, 14 KB at 320 px), so a grid of dozens
+  of clips stays cheap. The video tiles of the gallery and of the in-app
+  picker; the app versions the URL with the file's mtime. Same `400`
+  errors as above.
+- `GET /komfy/video-info?path=output/sub/clip.mp4`: `{frames, fps, width,
+  height, mtime}`, `frames` counted by decoding the clip (what the viewer's
+  frame numbers refer to), since container metadata can be off by one.
+  `mtime` versions the app's filmstrip and frame URLs (`&v=`, ignored by
+  the server) so a clip regenerated at the same path is not served cached.
+- `GET /komfy/frame-match?video=output/sub/clip.mp4&image=a.png`:
+  `{frame, distance, runnerUp, frames, fps}`, the frame of the clip closest
+  to a picture (mean absolute gray-level difference on 96 px thumbnails,
+  `distance` in 0..1). `image` is a form value: an input-folder name or
+  `sub/a.png [output]`. Built for a frame grabbed from the clip then
+  retouched (a face swapped): the untouched rest still matches its own
+  frame. Measured: a frame grabbed at 37 with its face painted over came
+  back as 37, in 0.13 s for a 121-frame clip. `runnerUp` is the best distance more than 4 frames away: close
+  to `distance`, the shot barely moves there. Same `400` errors as above.
 
 `503` on all routes except the upload when the output folder is
 unavailable.

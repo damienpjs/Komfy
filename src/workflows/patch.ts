@@ -17,12 +17,20 @@ import {
 import { isHeif } from '../utils/media';
 import { formatMix, isEmotionMix, NEUTRAL_MIX } from './emotions';
 import { isNodeLoras, patchNodeLoras } from './nodeLoras';
+import {
+  clipFrames,
+  hasStretchPrompts,
+  keyProblems,
+  serializeKeyframes,
+  sortKeys,
+} from './keyframes';
 import { GGUF_UNET_LOADER } from './requirements';
 import { DEFAULT_GUIDE_SIZE, isFieldShown } from './types';
 import type {
   DimensionsValue,
   FieldValues,
   ChainLorasField,
+  KeyframesValue,
   LoraSelection,
   ModelField,
   ModelSourceField,
@@ -269,6 +277,41 @@ export function validate(
         // A server whose node predates the list ignores the input it does not
         // declare: every LoRA after the first would be dropped without a word.
         errors[field.key] = i18n.t('lora.serverOutdated');
+      }
+    }
+    if (field.kind === 'keyframes') {
+      const v = value as KeyframesValue | undefined;
+      const keys = sortKeys(v?.keys ?? []);
+      if (v && keys.length > 0) {
+        const frames = clipFrames(
+          parseNumber(values[field.durationKey]),
+          parseNumber(values[field.fpsKey]),
+        );
+        const problems = frames == null ? [] : keyProblems(keys, frames);
+        const bad = problems.findIndex((p) => p != null);
+        if (frames == null) {
+          errors[field.key] = i18n.t('keyframes.needsDuration');
+        } else if (keys.length > field.maxKeys) {
+          errors[field.key] = i18n.t('keyframes.tooMany', { count: field.maxKeys });
+        } else if (bad >= 0) {
+          errors[field.key] = i18n.t(`keyframes.problem.${problems[bad]}`, {
+            n: bad + 1,
+            frame: keys[bad].frame,
+            last: frames - 1,
+          });
+        } else if (
+          field.tileFramesKey &&
+          hasStretchPrompts(v) &&
+          parseNumber(values[field.tileFramesKey]) > 1
+        ) {
+          errors[field.key] = i18n.t('keyframes.promptsNeedOneTile');
+        } else if (
+          !nodeAcceptsInput(manifest, nodeInfo, field.target.nodeId, field.target.input)
+        ) {
+          // A node older than the timeline would drop the input silently and
+          // render a plain first/last clip.
+          errors[field.key] = i18n.t('keyframes.serverOutdated');
+        }
       }
     }
     if (field.kind === 'number') {
@@ -886,6 +929,14 @@ export function patchGraph(
       case 'outpaint':
         insertOutpaint(graph, field, value as OutpaintValue);
         break;
+      case 'keyframes': {
+        const node = graph[field.target.nodeId];
+        if (!node) break;
+        const json = serializeKeyframes(value as KeyframesValue | undefined);
+        if (json) node.inputs[field.target.input] = json;
+        else delete node.inputs[field.target.input];
+        break;
+      }
       case 'select': {
         const index =
           typeof value === 'number' ? value : field.defaultIndex;

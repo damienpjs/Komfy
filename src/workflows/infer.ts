@@ -227,6 +227,9 @@ const KIND_RANK: Record<WorkflowField['kind'], number> = {
   // Embedded workflows only for now: ranked with the other source media.
   audio: 0,
   video: 0,
+  // Embedded workflows only (the LTX keyframes timeline): ranked with the
+  // images it lays out.
+  keyframes: 0,
   text: 1,
   // Embedded workflows only (the IndexTTS voice): right after the line it colours.
   emotions: 1,

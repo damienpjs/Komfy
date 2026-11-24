@@ -39,3 +39,24 @@ export function outputRef(subfolder: string, filename: string): string {
 export function inputRef(subfolder: string, name: string): string {
   return subfolder ? `${subfolder}/${name}` : name;
 }
+
+/**
+ * Gallery listing path (`output/sub/clip.mp4`, komfy-listing) of a loader
+ * value, annotated or plain (input).
+ */
+export function listingPath(value: string): string {
+  const r = parseAnnotated(value);
+  return `${r.type}/${r.subfolder ? `${r.subfolder}/` : ''}${r.filename}`;
+}
+
+/**
+ * Loader value of a gallery listing path: `output/sub/a.png` →
+ * `sub/a.png [output]`, `input/sub/a.png` → `sub/a.png` (the loaders'
+ * default folder).
+ */
+export function loaderValue(path: string): string {
+  const slash = path.indexOf('/');
+  const root = path.slice(0, slash);
+  const rel = path.slice(slash + 1);
+  return root === 'input' ? rel : `${rel} [${root}]`;
+}
