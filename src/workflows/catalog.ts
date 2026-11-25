@@ -103,19 +103,7 @@ export const CATALOG: CatalogSection[] = [
           { manifestId: 'ltx25-flf', mode: 'catalog.modes.firstLast', icon: 'flf' },
         ],
       },
-      {
-        // Two engines, one entry: IndexTTS for the emotion mix (no French),
-        // XTTS for French and 16 other languages. Same voices, same output.
-        key: 'voice',
-        name: 'catalog.entries.voice.name',
-        description: 'catalog.entries.voice.description',
-        icon: 'voice',
-        engine: 'INDEXTTS · XTTS',
-        members: [
-          { manifestId: 'indextts-voice', mode: 'catalog.modes.emotions', icon: 'voice' },
-          { manifestId: 'xtts-voice', mode: 'catalog.modes.multilingual', icon: 'voice' },
-        ],
-      },
+      single('voice', 'voxcpm-voice', 'voice', 'VOXCPM 2'),
       single('videoUpscale', 'ltx25-upscale', 'videoUpscale', 'LTX 2.5'),
     ],
   },

@@ -47,7 +47,6 @@ function coveredInputs(fields: WorkflowField[]): Set<string> {
       case 'seed':
       case 'image':
       case 'audio':
-      case 'emotions':
       case 'video':
       case 'mask':
       case 'model':
