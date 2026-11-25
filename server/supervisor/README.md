@@ -42,6 +42,15 @@ Each install script resolves `node` and the repo path, fills the template in
 this folder, and registers/loads the service. Uninstall instructions are in the
 header of each script.
 
+On macOS the LaunchAgent sets `ProcessType` to `Interactive`. Without that key
+launchd throttles the job's CPU and I/O, and ComfyUI inherits the limits from
+the supervisor that spawns it: `ps -o pri= -p <ComfyUI pid>` shows 20 where a
+shell shows 31, and a VoxCPM render with a converted tone clip took 109 s
+against 95 s once the key was in. An agent installed before the key existed
+keeps the old behaviour until `install-macos.sh` is run again. The reload restarts the
+supervisor but not a running ComfyUI (it lives in its own process group), so
+turn ComfyUI off and on from the app afterwards.
+
 ## HTTP / WebSocket API
 
 | Method | Path | Auth | Result |

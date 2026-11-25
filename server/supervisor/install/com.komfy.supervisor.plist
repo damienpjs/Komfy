@@ -22,7 +22,8 @@
          `tailscale` CLI resolve (Homebrew arm64/x86 + the Tailscale.app CLI). -->
     <key>PATH</key>
     <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/Applications/Tailscale.app/Contents/MacOS</string>
-    <!-- Override ComfyUI paths here if they differ from the defaults, e.g.:
+    <!-- ComfyUI paths default to ~/Documents/ComfyUI (scripts/start-comfy.*).
+         To override them, uncomment and edit, e.g.:
     <key>BASE_DIR</key><string>/Users/you/Documents/ComfyUI</string>
     -->
   </dict>
@@ -31,6 +32,13 @@
   <true/>
   <key>KeepAlive</key>
   <true/>
+
+  <!-- Without ProcessType, launchd throttles the job's CPU and I/O (see
+       `man launchd.plist`) and ComfyUI, spawned by the supervisor, inherits
+       it (`ps -o pri=` shows 20 instead of a shell's 31). Interactive gives
+       the job the same limits as an app, that is none. -->
+  <key>ProcessType</key>
+  <string>Interactive</string>
 
   <key>StandardOutPath</key>
   <string>@HOME@/Library/Logs/komfy-supervisor.log</string>
