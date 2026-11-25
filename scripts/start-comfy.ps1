@@ -94,6 +94,11 @@ $env:PYTHONUNBUFFERED = "1"
 # perf negligeable (protobuf ne sert qu'au chargement des tokenizers).
 $env:PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION = "python"
 
+# CPU threads: ultralytics, imported by several node packs, sets
+# OMP_NUM_THREADS=1 when it is unset, which leaves every process ComfyUI
+# spawns running torch on one core. Set it first, to the processor count.
+if (-not $env:OMP_NUM_THREADS) { $env:OMP_NUM_THREADS = "$([Environment]::ProcessorCount)" }
+
 $comfyArgs = @(
   'main.py',
   '--listen', $ListenAddr,
