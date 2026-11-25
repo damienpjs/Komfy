@@ -19,9 +19,11 @@
   <key>EnvironmentVariables</key>
   <dict>
     <!-- LaunchAgents get a minimal PATH; add the usual spots so `node` and the
-         `tailscale` CLI resolve (Homebrew arm64/x86 + the Tailscale.app CLI). -->
+         `tailscale` CLI resolve (Homebrew arm64/x86 + the Tailscale.app CLI).
+         /usr/sbin holds `lsof`, which /stop needs to find a ComfyUI started
+         outside the supervisor. -->
     <key>PATH</key>
-    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/Applications/Tailscale.app/Contents/MacOS</string>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Applications/Tailscale.app/Contents/MacOS</string>
     <!-- ComfyUI paths default to ~/Documents/ComfyUI (scripts/start-comfy.*).
          To override them, uncomment and edit, e.g.:
     <key>BASE_DIR</key><string>/Users/you/Documents/ComfyUI</string>
