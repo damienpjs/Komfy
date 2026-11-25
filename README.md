@@ -57,16 +57,13 @@ Server side:
     [`server/komfy-ltx-mlx`](./server/komfy-ltx-mlx) nodes plus
     [ltx-2-mlx](https://github.com/dgrauet/ltx-2-mlx) 0.18+ and an LTX 2.5
     MLX pack (`dgrauet/ltx-2.5-mlx-q8` on 64 GB), see step 5 below;
-  - Voice (IndexTTS 2.5: a line said in a cloned voice, eight emotions
-    mixed, then fed to the talking video): the bundled
-    [`server/komfy-indextts`](./server/komfy-indextts) node plus
-    [IndexTTS](https://github.com/index-tts/index-tts) 2.5 in its own
-    virtualenv, see step 6 below;
-  - Voice in French and 16 other languages (XTTS v2, no emotion mix): the
-    bundled [`server/komfy-xtts`](./server/komfy-xtts) node plus
-    [coqui-tts](https://github.com/idiap/coqui-ai-TTS) in its own
-    virtualenv, see step 7 below. Either voice engine can be installed
-    alone: the app dims the mode whose engine is missing;
+  - Voice (VoxCPM2: a line said in a cloned voice, in French, English and
+    28 other languages, with an emotion or the tone of a clip, then fed to
+    the talking video): the bundled
+    [`server/komfy-voxcpm`](./server/komfy-voxcpm) node plus
+    [VoxCPM](https://github.com/OpenBMB/VoxCPM) in its own virtualenv, and
+    optionally [CosyVoice](https://github.com/FunAudioLLM/CosyVoice) for
+    tone clips from another voice, see step 6 below;
 - **Ollama** running locally (`127.0.0.1:11434`, never exposed on the
   tailnet) with a vision model tagged `gemma4-vision:latest` — only for the
   "→ Prompt" workflows. Any Gemma-class vision model works; alias yours
@@ -200,39 +197,37 @@ nothing below assumes a Mac.
    Details (pack discovery, env overrides, memory levers):
    [server/komfy-ltx-mlx/README.md](./server/komfy-ltx-mlx/README.md).
 
-6. **Voice with IndexTTS 2.5** (optional): **Generate a voice** in the
-   Video section says a line in a cloned voice, with a mix of eight
-   emotions. Install IndexTTS in its own virtualenv (about 5 GB of
-   checkpoints), put one or more voice samples in `models/voices`, symlink
-   the node and restart ComfyUI:
+6. **Voice with VoxCPM2** (optional): **Generate a voice** in the Video
+   section says a line in a cloned voice, in French, English or 28 other
+   languages (detected from the text). The tone comes from an emotion
+   (eight chips plus free words) or from a tone clip, a few seconds said the
+   way the line should sound, which VoxCPM2 continues with the new text.
+   Install VoxCPM2 in its own virtualenv (about 5 GB with the Whisper model
+   that transcribes tone clips), put one or more voice samples in
+   `models/voices`, symlink the node and restart ComfyUI:
 
    ```bash
-   git clone https://github.com/index-tts/index-tts ~/Documents/index-tts
-   (cd ~/Documents/index-tts && uv sync --extra webui)
-   (cd ~/Documents/index-tts && hf download IndexTeam/IndexTTS-2.5 --local-dir checkpoints)
+   mkdir -p ~/Documents/voxcpm && cd ~/Documents/voxcpm
+   uv venv -p 3.11 .venv
+   uv pip install -p .venv/bin/python voxcpm soundfile faster-whisper
+   HF_HUB_DISABLE_XET=1 .venv/bin/hf download openbmb/VoxCPM2 --local-dir checkpoints
+   HF_HUB_DISABLE_XET=1 .venv/bin/hf download Systran/faster-whisper-small --local-dir asr
    mkdir -p <comfy-data-dir>/models/voices
    cp my-voice-25s.wav <comfy-data-dir>/models/voices/me.wav
-   ln -s "<repo>/server/komfy-indextts" <comfy-data-dir>/custom_nodes/komfy-indextts
+   ln -s "<repo>/server/komfy-voxcpm" <comfy-data-dir>/custom_nodes/komfy-voxcpm
    ```
 
-   A sample is 10 to 25 s of one person speaking, no music (IndexTTS keeps
-   the first 15 s). A new sample can also be picked in the form and saved
-   under a name, which writes it to `models/voices`. The clip comes back as
-   an mp4 (its waveform over the speech, recipe embedded); "Use" in the
-   viewer sends it to **Image + voice** as the voice. Another checkout
-   location: set `KOMFY_INDEXTTS_DIR`. Details:
-   [server/komfy-indextts/README.md](./server/komfy-indextts/README.md).
-
-7. **Voice in French with XTTS v2** (optional): the **Multilingual** mode
-   of **Generate a voice** says the line in 17 languages, French included,
-   from the same `models/voices`. No emotion mix; a liveliness setting
-   instead. Runs on the CPU (about real time on an M3 Max) or on CUDA.
-   Install coqui-tts in its own virtualenv, copy the weights into
-   `~/Documents/xtts/checkpoints`, symlink the node and restart ComfyUI:
-   the exact commands (macOS, Linux, Windows) and the three version traps
-   are in [server/komfy-xtts/README.md](./server/komfy-xtts/README.md).
-   The XTTS v2 weights are licensed for non-commercial use only.
-   Another location: set `KOMFY_XTTS_DIR`.
+   A sample is 10 to 25 s of one person speaking, no music. A new sample can
+   also be picked in the form and saved under a name, which writes it to
+   `models/voices`. A tone clip spoken by someone else is first converted
+   into the chosen voice with CosyVoice3 (its own virtualenv, optional:
+   without it, only clips already in the chosen voice work). The clip comes
+   back as an mp4 (its waveform over the speech, recipe embedded); "Use" in
+   the viewer sends it to **Image + voice** as the voice, or back to
+   **Generate a voice** as the tone of the next line. About 15 s per line
+   on an M3 Max. Other locations: `KOMFY_VOXCPM_DIR`, `KOMFY_COSYVOICE_DIR`.
+   CosyVoice install and details:
+   [server/komfy-voxcpm/README.md](./server/komfy-voxcpm/README.md).
 
 ## App setup (development)
 
@@ -437,8 +432,7 @@ komfy/
 ├── server/komfy-listing/ # ComfyUI extension (recursive output+input listing, trash)
 ├── server/supervisor/    # standalone Node service: remote ComfyUI on/off + live console
 ├── server/komfy-ltx-mlx/ # ComfyUI node: LTX 2.5 video through the ltx-2-mlx CLI (Apple Silicon)
-├── server/komfy-indextts/ # ComfyUI node: voice cloning + emotions with IndexTTS 2.5 (own virtualenv)
-├── server/komfy-xtts/    # ComfyUI node: voice cloning in 17 languages (French) with XTTS v2 (own virtualenv)
+├── server/komfy-voxcpm/  # ComfyUI node: voice cloning in 30 languages, emotion or tone clip, with VoxCPM2 (own virtualenv)
 ├── scripts/              # start-comfy.sh/.ps1 + comfy.js (launch), expo-start.js (Metro on Tailscale), pair.js (QR), native-ios.js (npm run native)
 ├── plugins/              # Expo config plugins (withoutPushEntitlement — free Apple team builds)
 └── docs/architecture.png # architecture diagram (C4 container view)

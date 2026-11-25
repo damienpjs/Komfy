@@ -3,7 +3,8 @@
  * gallery item, prefilled. A still goes to the LTX image modes (animate,
  * make it talk, first frame), a clip to the x2 video upscale with its
  * prompt, identity LoRA and seed taken from its recipe, and a generated
- * voice (IndexTTS or XTTS) to the talking video as its voice.
+ * voice to the talking video as its voice, or back to the voice workflow as
+ * the tone clip of the next line (same voice: no conversion needed).
  *
  * The item travels as a loader value, not as a file: an output is passed
  * annotated (`sub/x.mp4 [output]`, cf. utils/annotated), which LoadImage and
@@ -16,6 +17,7 @@ import type { GalleryImage } from '../hooks/useGallery';
 import { inputRef, outputRef } from '../utils/annotated';
 import type { SourceSeeds } from './match';
 import type { FieldValues } from './types';
+import { NO_VOICE, VOXCPM_CLIP_MODE, VOXCPM_SAME_VOICE } from './voxcpm-voice';
 
 export interface UseInTarget {
   manifestId: string;
@@ -37,7 +39,7 @@ export function mediaRef(image: GalleryImage): string {
 const LTX_NODES = new Set(['KomfyLTX25MLX', 'KomfyLTX25UpscaleMLX']);
 
 /** A generated voice (an mp4 of the speech): it becomes a talking video. */
-const VOICE_NODES = new Set(['KomfyIndexTTS', 'KomfyXTTS']);
+const VOICE_NODES = new Set(['KomfyVoxCPM']);
 
 export function nextStepTargets(image: GalleryImage, recipe: PromptGraph | null): UseInTarget[] {
   const ref = mediaRef(image);
@@ -48,9 +50,24 @@ export function nextStepTargets(image: GalleryImage, recipe: PromptGraph | null)
       { manifestId: 'ltx25-flf', label: 'viewer.useFirstFrame', values: { image: ref } },
     ];
   }
-  // A voice clip: LoadAudio reads the mp4's audio track as the voice.
-  if (recipe && Object.values(recipe).some((n) => VOICE_NODES.has(n.class_type))) {
-    return [{ manifestId: 'ltx25-a2v', label: 'viewer.useVoice', values: { voice: ref } }];
+  // A voice clip: LoadAudio reads the mp4's audio track, as the voice of a
+  // talking video or as the tone clip of the next line. The tone clip keeps
+  // the take's own saved voice (none when it came from an uploaded sample),
+  // and its line as the clip's transcript: the node's `text` is exactly what
+  // the take says (the emotion's instruction is added inside the node), so
+  // the server skips the Whisper pass and its misheard numbers.
+  const voiceNode = recipe
+    ? Object.values(recipe).find((n) => VOICE_NODES.has(n.class_type))
+    : undefined;
+  if (voiceNode) {
+    const tone: FieldValues = { mode: VOXCPM_CLIP_MODE, tone: ref, toneFrom: VOXCPM_SAME_VOICE };
+    const { voice: savedVoice, text: said } = voiceNode.inputs;
+    if (typeof savedVoice === 'string' && savedVoice !== NO_VOICE) tone.voice = savedVoice;
+    if (typeof said === 'string' && said.trim() !== '') tone.toneText = said.trim();
+    return [
+      { manifestId: 'ltx25-a2v', label: 'viewer.useVoice', values: { voice: ref } },
+      { manifestId: 'voxcpm-voice', label: 'viewer.useTone', values: tone },
+    ];
   }
   const values: FieldValues = { video: ref };
   const seeds: SourceSeeds = {};

@@ -392,16 +392,6 @@ export interface AudioField extends FieldBase {
 }
 
 /**
- * Emotion mixer (IndexTTS voice): eight weights in 0..1, one per emotion
- * (cf. emotions.ts for the order and the presets), patched as a JSON list
- * into a STRING input. All zeros = neutral.
- */
-export interface EmotionsField extends FieldBase {
-  kind: 'emotions';
-  target: PatchTarget;
-}
-
-/**
  * Video input: any clip of the server (output or input folder, picked in
  * the media picker) or one imported from Photos into input/komfy-video. The
  * value is a loader filename, annotated for the output folder
@@ -702,7 +692,6 @@ export type WorkflowField =
   | DimensionsField
   | ImageField
   | AudioField
-  | EmotionsField
   | VideoField
   | MaskField
   | LorasField
@@ -758,8 +747,6 @@ export type FieldValues = Record<
   | number
   | 'random'
   | LoraSelection[]
-  /** An emotions field's mix (8 weights). */
-  | number[]
   | DimensionsValue
   | ZonesValue
   | ModelSourceValue

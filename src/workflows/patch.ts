@@ -15,7 +15,6 @@ import {
   restoreGeometry,
 } from './outpaint';
 import { isHeif } from '../utils/media';
-import { formatMix, isEmotionMix, NEUTRAL_MIX } from './emotions';
 import { isNodeLoras, patchNodeLoras } from './nodeLoras';
 import {
   clipFrames,
@@ -228,9 +227,6 @@ export function validate(
       ) {
         errors[field.key] = i18n.t('validation.modelRequired');
       }
-    }
-    if (field.kind === 'emotions' && value != null && !isEmotionMix(value)) {
-      errors[field.key] = i18n.t('validation.emotionMix');
     }
     if (field.kind === 'outpaint') {
       const v = value as OutpaintValue | undefined;
@@ -909,14 +905,6 @@ export function patchGraph(
         applyPatch(graph, field.heightTarget, dims.height);
         break;
       }
-      case 'emotions':
-        if (!graph[field.target.nodeId]) break;
-        applyPatch(
-          graph,
-          field.target,
-          formatMix(isEmotionMix(value) ? value : [...NEUTRAL_MIX]),
-        );
-        break;
       case 'loras': {
         const loras = Array.isArray(value) ? (value as LoraSelection[]) : [];
         if (isNodeLoras(field)) patchNodeLoras(graph, field, loras);

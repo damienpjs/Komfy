@@ -13,7 +13,6 @@
 import type { PromptGraph } from '../api/types';
 import { budgetForCanvas, clampSides, initialOutpaintValue } from './outpaint';
 import { applySelectOption } from './patch';
-import { parseMix } from './emotions';
 import { isNodeLoras, readNodeLoras } from './nodeLoras';
 import { parseKeyframes } from './keyframes';
 import { GGUF_UNET_LOADER } from './requirements';
@@ -674,13 +673,6 @@ function matchVariant(
         const eId = state.map.get(field.target.nodeId);
         const v = extracted[eId!]?.inputs[field.target.input];
         values[field.key] = typeof v === 'string' ? v : field.default;
-        break;
-      }
-      case 'emotions': {
-        const eId = state.map.get(field.target.nodeId);
-        values[field.key] = parseMix(
-          eId != null ? extracted[eId]?.inputs[field.target.input] : undefined,
-        );
         break;
       }
       case 'modelSource': {
