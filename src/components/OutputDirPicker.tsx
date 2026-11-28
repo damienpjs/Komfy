@@ -11,7 +11,7 @@
  */
 
 import { Ionicons } from '@expo/vector-icons';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   FlatList,
@@ -19,11 +19,12 @@ import {
   Modal,
   Platform,
   Pressable,
-  StyleSheet,
+  ScrollView,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useGallery } from '../hooks/useGallery';
 import { MIN_TOUCH_TARGET, radii, spacing, typography } from '../theme/tokens';
 import { makeStyles, useTheme } from '../theme/theme';
@@ -63,6 +64,8 @@ export function OutputDirPicker({
   const { colors } = useTheme();
   const { t } = useTranslation();
   const gallery = useGallery();
+  const insets = useSafeAreaInsets();
+  const crumbScroll = useRef<ScrollView>(null);
 
   // `'output'` scope works on output-relative paths (strip the `output/`
   // prefix); `'all'` scope keeps the full prefixed paths.
@@ -114,91 +117,92 @@ export function OutputDirPicker({
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>
+          <Text style={styles.headerTitle} accessibilityRole="header">
             {title ?? t('dirPicker.title')}
           </Text>
           <Pressable
             onPress={onClose}
             hitSlop={12}
+            accessibilityRole="button"
             style={({ pressed }) => pressed && { opacity: 0.6 }}
           >
-            <Text style={styles.cancel}>{t('common.cancel')}</Text>
+            <Text style={styles.headerBtn}>{t('common.cancel')}</Text>
           </Pressable>
         </View>
 
-        <View style={styles.breadcrumb}>
-          {dir !== '' && (
-            <Pressable
-              onPress={() => setDir(crumbs.slice(0, -1).join('/'))}
-              hitSlop={8}
-              style={({ pressed }) => [
-                styles.upBtn,
-                pressed && { backgroundColor: colors.surfacePressed },
-              ]}
-            >
-              <Ionicons name="chevron-back" size={18} color={colors.accent} />
-            </Pressable>
-          )}
-          <Pressable onPress={() => setDir('')} hitSlop={8}>
+        <ScrollView
+          ref={crumbScroll}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          // A deep path keeps its current folder (the end) in view.
+          onContentSizeChange={() => crumbScroll.current?.scrollToEnd({ animated: false })}
+          style={styles.crumbScroll}
+          contentContainerStyle={styles.crumbs}
+        >
+          <Pressable
+            onPress={() => setDir('')}
+            disabled={dir === ''}
+            style={styles.crumbHit}
+            accessibilityRole="button"
+          >
             <Text style={[styles.crumb, dir === '' && styles.crumbCurrent]}>
               {scope === 'all' ? t('gallery.root') : 'output'}
             </Text>
           </Pressable>
           {crumbs.map((crumb, i) => (
             <View key={`${crumb}-${i}`} style={styles.crumbGroup}>
-              <Text style={styles.crumbSep}>/</Text>
+              <Ionicons name="chevron-forward" size={14} color={colors.textDisabled} />
               <Pressable
                 onPress={() => setDir(crumbs.slice(0, i + 1).join('/'))}
-                hitSlop={8}
+                disabled={i === crumbs.length - 1}
+                style={styles.crumbHit}
+                accessibilityRole="button"
               >
                 <Text
-                  style={[
-                    styles.crumb,
-                    i === crumbs.length - 1 && styles.crumbCurrent,
-                  ]}
+                  style={[styles.crumb, i === crumbs.length - 1 && styles.crumbCurrent]}
+                  numberOfLines={1}
                 >
                   {crumb}
                 </Text>
               </Pressable>
             </View>
           ))}
-        </View>
+        </ScrollView>
 
         <FlatList
           data={dirs}
           keyExtractor={(e) => e.name}
+          style={styles.list}
           contentContainerStyle={styles.listContent}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
           keyboardShouldPersistTaps="handled"
-          renderItem={({ item }) => (
+          renderItem={({ item, index }) => (
             <Pressable
+              accessibilityRole="button"
               style={({ pressed }) => [
                 styles.row,
+                index === 0 && styles.rowFirst,
+                index === dirs.length - 1 && styles.rowLast,
+                index > 0 && styles.rowSeparated,
                 pressed && { backgroundColor: colors.surfacePressed },
               ]}
-              onPress={() =>
-                setDir(dir === '' ? item.name : `${dir}/${item.name}`)
-              }
+              onPress={() => setDir(dir === '' ? item.name : `${dir}/${item.name}`)}
             >
-              <Ionicons name="folder-outline" size={22} color={colors.warning} />
+              <Ionicons name="folder-outline" size={18} color={colors.textMuted} />
               <Text style={styles.rowName} numberOfLines={1}>
                 {item.name}
               </Text>
-              <Ionicons
-                name="chevron-forward"
-                size={16}
-                color={colors.textDisabled}
-              />
+              {item.kind === 'dir' && item.count > 0 && (
+                <Text style={styles.rowCount}>{item.count}</Text>
+              )}
+              <Ionicons name="chevron-forward" size={16} color={colors.textDisabled} />
             </Pressable>
           )}
-          ListEmptyComponent={
-            <Text style={styles.empty}>{t('dirPicker.noSubfolders')}</Text>
-          }
+          ListEmptyComponent={<Text style={styles.empty}>{t('dirPicker.noSubfolders')}</Text>}
         />
 
-        <View style={styles.footer}>
+        <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.sm }]}>
           <View style={styles.newSubRow}>
-            <Ionicons name="add-circle-outline" size={18} color={colors.textMuted} />
+            <Ionicons name="add" size={18} color={colors.textMuted} />
             <TextInput
               style={styles.newSubInput}
               value={newSub}
@@ -217,14 +221,18 @@ export function OutputDirPicker({
             ]}
             onPress={confirm}
             disabled={!validDest}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: !validDest }}
           >
-            <Text style={styles.confirmText}>
+            <Text style={styles.confirmText} numberOfLines={1}>
               {confirmVerb ?? t('dirPicker.confirmVerb')}{' '}
-              {scope === 'all'
-                ? validDest
-                  ? `${selection}/`
-                  : '…'
-                : `output/${selection === '' ? '' : `${selection}/`}`}
+              <Text style={styles.confirmPath}>
+                {scope === 'all'
+                  ? validDest
+                    ? `${selection}/`
+                    : '…'
+                  : `output/${selection === '' ? '' : `${selection}/`}`}
+              </Text>
             </Text>
           </Pressable>
         </View>
@@ -238,6 +246,7 @@ const useStyles = makeStyles((colors) => ({
     flex: 1,
     backgroundColor: colors.bg,
   },
+  // Header: the media picker sheet's (MediaPickerSheet).
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -249,84 +258,104 @@ const useStyles = makeStyles((colors) => ({
     borderBottomColor: colors.border,
   },
   headerTitle: {
+    flexShrink: 1,
     color: colors.text,
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.md,
   },
-  cancel: {
-    color: colors.textMuted,
-    fontFamily: typography.uiMedium,
+  headerBtn: {
+    color: colors.accent,
+    fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.md,
   },
-  breadcrumb: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+  // Breadcrumb: the Library's (GalleryBrowser).
+  crumbScroll: {
+    flexGrow: 0,
+    paddingLeft: spacing.md - 6,
+    paddingTop: spacing.xs,
   },
-  upBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: radii.sm,
+  crumbs: {
     alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: spacing.xs,
+    paddingRight: spacing.md,
   },
   crumbGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
+  },
+  crumbHit: {
+    minHeight: MIN_TOUCH_TARGET,
+    justifyContent: 'center',
+    paddingHorizontal: 6,
   },
   crumb: {
     color: colors.accent,
     fontFamily: typography.uiMedium,
-    fontSize: typography.sizes.sm,
+    fontSize: 15,
   },
   crumbCurrent: {
     color: colors.text,
+    fontFamily: typography.uiSemiBold,
   },
-  crumbSep: {
-    color: colors.textDisabled,
-    fontFamily: typography.ui,
-    fontSize: typography.sizes.sm,
+  // Folder list: one grouped card, like the Settings sections.
+  list: {
+    flex: 1,
   },
   listContent: {
     paddingHorizontal: spacing.md,
-    paddingBottom: spacing.md,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.lg,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    minHeight: MIN_TOUCH_TARGET + 4,
-    paddingHorizontal: spacing.xs,
+    gap: spacing.sm + 2,
+    minHeight: 52,
+    paddingHorizontal: spacing.md - 2,
+    backgroundColor: colors.surface,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: colors.border,
+  },
+  rowFirst: {
+    borderTopWidth: 1,
+    borderTopLeftRadius: radii.lg,
+    borderTopRightRadius: radii.lg,
+  },
+  rowLast: {
+    borderBottomWidth: 1,
+    borderBottomLeftRadius: radii.lg,
+    borderBottomRightRadius: radii.lg,
+  },
+  rowSeparated: {
+    borderTopWidth: 1,
   },
   rowName: {
     flex: 1,
     color: colors.text,
-    fontFamily: typography.uiMedium,
-    fontSize: typography.sizes.sm,
+    fontFamily: typography.uiSemiBold,
+    fontSize: 15,
   },
-  separator: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: colors.border,
-    marginLeft: 34,
+  rowCount: {
+    color: colors.textMuted,
+    fontFamily: typography.mono,
+    fontSize: typography.sizes.xs,
   },
   empty: {
-    color: colors.textDisabled,
+    color: colors.textMuted,
     fontFamily: typography.ui,
     fontSize: typography.sizes.sm,
     paddingVertical: spacing.md,
+    textAlign: 'center',
   },
   footer: {
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    padding: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
     gap: spacing.sm,
     backgroundColor: colors.bgElevated,
   },
+  // Field: the rename dialog's (RenameDialog).
   newSubRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -340,10 +369,12 @@ const useStyles = makeStyles((colors) => ({
   },
   newSubInput: {
     flex: 1,
+    minHeight: MIN_TOUCH_TARGET,
     color: colors.text,
     fontFamily: typography.mono,
     fontSize: typography.sizes.sm,
   },
+  // Filled button: the ink slab (MediaPickerSheet's add button).
   confirmBtn: {
     minHeight: MIN_TOUCH_TARGET,
     borderRadius: radii.md,
@@ -359,5 +390,8 @@ const useStyles = makeStyles((colors) => ({
     color: colors.onStrong,
     fontFamily: typography.uiSemiBold,
     fontSize: typography.sizes.sm,
+  },
+  confirmPath: {
+    fontFamily: typography.mono,
   },
 }));
