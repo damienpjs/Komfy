@@ -72,6 +72,20 @@ if [ "$(uname)" = "Darwin" ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# CPU threads (torch / OpenMP), every OS
+# ---------------------------------------------------------------------------
+# ultralytics, imported by several node packs (Impact Subpack, ReActor,
+# AdvancedLivePortrait, RMBG), sets OMP_NUM_THREADS=1 when it is unset, for
+# its own training loop. Every process ComfyUI spawns then runs torch on one
+# core: the VoxCPM node's CosyVoice3 conversion took 66 s instead of 17 s.
+# Setting it first, to the core count torch would pick anyway, keeps
+# ultralytics from lowering it. Export your own OMP_NUM_THREADS to override.
+if [ -z "${OMP_NUM_THREADS:-}" ]; then
+  OMP_NUM_THREADS="$(sysctl -n hw.physicalcpu 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)"
+  export OMP_NUM_THREADS
+fi
+
+# ---------------------------------------------------------------------------
 # Backend d'attention - LE reglage a mesurer
 # ---------------------------------------------------------------------------
 # Sur des sequences video longues (>50k tokens), l'attention represente

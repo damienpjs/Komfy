@@ -45,10 +45,12 @@ Timing on an M3 Max (2026-11-25): about 15 s per line with an emotion or a
 clip in the same voice (VoxCPM2 on the GPU, model load included), about 50 s
 when a clip from another voice is converted first (CosyVoice3 on the CPU).
 The first line after a big image or video render can take 20 s more, while
-the weights come back from disk. A ComfyUI started by a launchd job without
-`ProcessType` (macOS then throttles its CPU and disk) took 110 s for the
-converted clip. VoxCPM2 needs about 8 GB; ComfyUI runs one job at a time, so
-it never competes with an image or LTX render.
+the weights come back from disk. Those figures need the CPU threads that
+`scripts/start-comfy.*` sets: a node pack that imports ultralytics otherwise
+sets `OMP_NUM_THREADS=1` for the whole ComfyUI process, and the converted clip
+then took 95 s (CosyVoice3 on one core). When starting ComfyUI another way,
+export `OMP_NUM_THREADS` first. VoxCPM2 needs about 8 GB; ComfyUI runs one job
+at a time, so it never competes with an image or LTX render.
 
 ## Installed or not
 
